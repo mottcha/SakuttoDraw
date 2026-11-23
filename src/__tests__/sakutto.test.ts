@@ -1,15 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { IDBFactory } from 'fake-indexeddb';
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 import {
   bootstrapCleanCanvas,
   cancelPendingScenePersist,
+  clearIndexedDbFiles,
   DEFAULT_PINK,
+  FILES_DB_NAME,
+  flushPendingScenePersist,
+  loadInitialSceneData,
   LS_ELEMENTS_KEY,
   LS_PREFS_KEY,
   LS_STATE_KEY,
   loadPrefs,
   normalizeFormat,
   normalizeScale,
+  saveFilesToIndexedDb,
   savePrefs,
   scheduleScenePersist,
   shouldSkipAutoReset,
@@ -544,5 +550,73 @@ describe('quickAnnotator DOM sync, language switcher, and textAutoResize guard r
     expect(document.querySelector('[data-exq-ctx-layer-bar]')).toBeNull();
     expect(document.querySelector('li[data-testid="paste"] .exq-ctx-item-icon svg')).toBeTruthy();
     expect(document.querySelector('li[data-testid="selectAll"] .exq-ctx-item-icon svg')).toBeTruthy();
+  });
+
+  it('auto-heals broken v1 IndexedDB without files-store and preserves images across reload when autoResetOnOpen is OFF', async () => {
+    const fakeIdb = new IDBFactory();
+
+    // Simulate the legacy bug: version 1 DB created without files-store
+    await new Promise<void>((resolve, reject) => {
+      const req = fakeIdb.open(FILES_DB_NAME, 1);
+      req.onsuccess = () => {
+        req.result.close();
+        resolve();
+      };
+      req.onerror = () => reject(req.error);
+    });
+
+    // Clear on first open (autoResetOnOpen=true) must upgrade to v2 and create files-store
+    expect(await clearIndexedDbFiles(fakeIdb)).toBe(true);
+
+    // User turns off autoResetOnOpen, pastes an image, and reloads immediately
+    const prefs = loadPrefs(localStorage);
+    prefs.quickOpts.autoResetOnOpen = false;
+    savePrefs(prefs, localStorage);
+
+    const imgElement = { id: 'img-1', type: 'image', fileId: 'file-abc', isDeleted: false } as never;
+    const imgFile = {
+      id: 'file-abc',
+      dataURL: 'data:image/png;base64,iVBORw0KGgo=',
+      mimeType: 'image/png',
+      created: Date.now(),
+    } as never;
+
+    scheduleScenePersist([imgElement], { viewBackgroundColor: '#ffffff' }, { 'file-abc': imgFile }, {
+      delayMs: 250,
+      storage: localStorage,
+      idb: fakeIdb,
+    });
+    // Flush on pagehide/beforeunload before 250ms expires
+    flushPendingScenePersist();
+    expect(await saveFilesToIndexedDb({ 'file-abc': imgFile }, fakeIdb)).toBe(true);
+
+    // Simulate reload: bootstrapCleanCanvas + loadInitialSceneData
+    const boot = bootstrapCleanCanvas({ storage: localStorage, hash: '', idb: fakeIdb });
+    expect(boot.autoReset).toBe(false);
+
+    const initial = await loadInitialSceneData(localStorage, fakeIdb);
+    expect(initial.elements?.length).toBe(1);
+    expect(initial.files?.['file-abc']).toBeTruthy();
+    expect(initial.files?.['file-abc']?.dataURL).toBe('data:image/png;base64,iVBORw0KGgo=');
+  });
+
+  it('renders transparent background switch as OFF by default and toggles background=false when turned ON', () => {
+    applyLanguage('ja-JP');
+    document.body.innerHTML = `
+      <div class="dropdown-menu-container">
+        <button data-testid="image-export-button"></button>
+      </div>
+    `;
+    expect(syncMainMenu()).toBe(true);
+    const bgSwitch = document.querySelector<HTMLButtonElement>('[data-exq-exp-opt="background"]');
+    expect(bgSwitch).toBeTruthy();
+    // Default background=true (opaque) => transparent background switch is OFF
+    expect(bgSwitch?.classList.contains('exq-on')).toBe(false);
+    expect(bgSwitch?.getAttribute('aria-label')).toBe('背景の透明化');
+
+    // Click row to turn transparent background ON => exportOpts.background becomes false
+    bgSwitch?.parentElement?.click();
+    expect(runtime.prefs.exportOpts.background).toBe(false);
+    expect(bgSwitch?.classList.contains('exq-on')).toBe(true);
   });
 });

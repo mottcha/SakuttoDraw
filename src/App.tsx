@@ -15,6 +15,7 @@ import {
 } from './annotator/quickAnnotator';
 import {
   cancelPendingScenePersist,
+  flushPendingScenePersist,
   loadInitialSceneData,
   normalizeBoxSelectionMode,
   normalizeInputDevice,
@@ -65,7 +66,12 @@ export function App() {
   useEffect(() => {
     setLangChangeListener((nextLang) => setLang(nextLang));
     const cleanup = bootQuickAnnotator();
+    const onUnload = () => flushPendingScenePersist();
+    window.addEventListener('pagehide', onUnload);
+    window.addEventListener('beforeunload', onUnload);
     return () => {
+      window.removeEventListener('pagehide', onUnload);
+      window.removeEventListener('beforeunload', onUnload);
       setLangChangeListener(null);
       cleanup();
       cancelPendingScenePersist();

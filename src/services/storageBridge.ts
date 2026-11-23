@@ -190,10 +190,12 @@ export function savePrefs(
   });
 }
 
+export const FILES_DB_VERSION = 2;
+
 function openFilesDb(idb: IDBFactory): Promise<IDBDatabase | null> {
   return new Promise((resolve) => {
     try {
-      const req = idb.open(FILES_DB_NAME, 1);
+      const req = idb.open(FILES_DB_NAME, FILES_DB_VERSION);
       req.onupgradeneeded = () => {
         const db = req.result;
         if (!db.objectStoreNames.contains(FILES_STORE_NAME)) {
@@ -208,37 +210,30 @@ function openFilesDb(idb: IDBFactory): Promise<IDBDatabase | null> {
   });
 }
 
-export function clearIndexedDbFiles(
+export async function clearIndexedDbFiles(
   idb: IDBFactory | null = typeof indexedDB !== 'undefined' ? indexedDB : null,
 ): Promise<boolean> {
-  if (!idb || typeof idb.open !== 'function') return Promise.resolve(false);
+  if (!idb || typeof idb.open !== 'function') return false;
+  const db = await openFilesDb(idb);
+  if (!db) return false;
   return new Promise((resolve) => {
     try {
-      const req = idb.open(FILES_DB_NAME);
-      req.onerror = () => resolve(false);
-      req.onsuccess = () => {
-        const db = req.result;
-        try {
-          if (!db.objectStoreNames?.contains(FILES_STORE_NAME)) {
-            db.close();
-            return resolve(false);
-          }
-          const tx = db.transaction(FILES_STORE_NAME, 'readwrite');
-          tx.objectStore(FILES_STORE_NAME).clear();
-          tx.oncomplete = () => {
-            db.close();
-            resolve(true);
-          };
-          tx.onerror = () => {
-            db.close();
-            resolve(false);
-          };
-        } catch {
-          silently(() => db.close());
-          resolve(false);
-        }
+      if (!db.objectStoreNames?.contains(FILES_STORE_NAME)) {
+        db.close();
+        return resolve(false);
+      }
+      const tx = db.transaction(FILES_STORE_NAME, 'readwrite');
+      tx.objectStore(FILES_STORE_NAME).clear();
+      tx.oncomplete = () => {
+        db.close();
+        resolve(true);
+      };
+      tx.onerror = () => {
+        db.close();
+        resolve(false);
       };
     } catch {
+      silently(() => db.close());
       resolve(false);
     }
   });
@@ -462,12 +457,24 @@ export function persistSceneSnapshot(
 
 /* ================= Centralized Debounced Scene Persistence ================= */
 let pendingPersistTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingPersistTask: (() => void) | null = null;
 
 export function cancelPendingScenePersist(): void {
   if (pendingPersistTimer !== null) {
     clearTimeout(pendingPersistTimer);
     pendingPersistTimer = null;
   }
+  pendingPersistTask = null;
+}
+
+export function flushPendingScenePersist(): void {
+  if (pendingPersistTimer !== null) {
+    clearTimeout(pendingPersistTimer);
+    pendingPersistTimer = null;
+  }
+  const task = pendingPersistTask;
+  pendingPersistTask = null;
+  if (task) task();
 }
 
 export function scheduleScenePersist(
@@ -485,8 +492,13 @@ export function scheduleScenePersist(
   } = {},
 ): void {
   cancelPendingScenePersist();
+  pendingPersistTask = () => {
+    persistSceneSnapshot(elements, appState, files, storage, idb);
+  };
   pendingPersistTimer = setTimeout(() => {
     pendingPersistTimer = null;
-    persistSceneSnapshot(elements, appState, files, storage, idb);
+    const task = pendingPersistTask;
+    pendingPersistTask = null;
+    if (task) task();
   }, delayMs);
 }

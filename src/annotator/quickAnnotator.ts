@@ -817,7 +817,8 @@ function buildMainMenuExportBlock(): DocumentFragment {
     root.classList.toggle('exq-acc-open', runtime.expAccOpen);
     accBtn.setAttribute('aria-expanded', String(runtime.expAccOpen));
     for (const [key, sw] of switchMap) {
-      const on = !!runtime.prefs.exportOpts[key as keyof typeof runtime.prefs.exportOpts];
+      const rawOn = !!runtime.prefs.exportOpts[key as keyof typeof runtime.prefs.exportOpts];
+      const on = key === 'background' ? !rawOn : rawOn;
       sw.classList.toggle('exq-on', on);
       sw.setAttribute('aria-pressed', String(on));
     }
