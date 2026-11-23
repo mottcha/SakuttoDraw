@@ -289,7 +289,7 @@ body,
   min-width: 244px !important;
 }
 .dropdown-menu-container:has(.exq-extra-options-root) {
-  min-width: 256px !important;
+  min-width: 276px !important;
 }
 
 .exq-extra-options-root,

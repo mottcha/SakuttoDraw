@@ -23,6 +23,7 @@ export interface QuickOpts {
   defaultPenColor: string;
   textAutoResize: boolean;
   fastLoadSave: boolean;
+  modernContextMenu: boolean;
 }
 
 export interface Prefs {

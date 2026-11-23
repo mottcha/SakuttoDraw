@@ -68,6 +68,7 @@ export const QUICK_OPT_DEFS = [
   { key: 'autoResetOnOpen', msgKey: 'optAutoResetOnOpen' },
   { key: 'textAutoResize', msgKey: 'optTextAutoResize' },
   { key: 'fastLoadSave', msgKey: 'optFastLoadSave' },
+  { key: 'modernContextMenu', msgKey: 'optModernContextMenu' },
 ] as const;
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -1178,7 +1179,9 @@ function buildQuickOptionsAccordion(): HTMLElement {
     quickWrap.classList.toggle('exq-acc-open', runtime.accOpen);
     accBtn.setAttribute('aria-expanded', String(runtime.accOpen));
     for (const [key, sw] of switchMap) {
-      const on = !!runtime.prefs.quickOpts[key as 'autoResetOnOpen' | 'textAutoResize' | 'fastLoadSave'];
+      const on = !!runtime.prefs.quickOpts[
+        key as 'autoResetOnOpen' | 'textAutoResize' | 'fastLoadSave' | 'modernContextMenu'
+      ];
       sw.classList.toggle('exq-on', on);
       sw.setAttribute('aria-pressed', String(on));
     }
@@ -1582,42 +1585,44 @@ export function syncContextMenu(root: ParentNode = document): boolean {
   const ul = root.querySelector('.context-menu');
   if (!ul || contextMenuProcessed.has(ul)) return false;
 
-  const t = getMessages(runtime.prefs.lang);
-  ul.classList.add('exq-ctx-rich');
+  if (runtime.prefs.quickOpts.modernContextMenu) {
+    const t = getMessages(runtime.prefs.lang);
+    ul.classList.add('exq-ctx-rich');
 
-  const isEditableSelection = !!(
-    ul.querySelector('li[data-testid="cut"]') || ul.querySelector('li[data-testid="deleteSelectedElements"]')
-  );
-
-  if (isEditableSelection) {
-    const topFrag = document.createDocumentFragment();
-    topFrag.append(buildContextQuickBar(ul, t));
-    topFrag.append(el('hr', { class: 'context-menu-item-separator' }));
-    topFrag.append(buildContextLayerBar(ul, t));
-    topFrag.append(el('hr', { class: 'context-menu-item-separator' }));
-
-    ul.insertBefore(topFrag, ul.firstChild);
-  }
-
-  // Decorate remaining visible native items with unified line icons
-  for (const child of Array.from(ul.children)) {
-    if (child.tagName !== 'LI' || child.classList.contains('exq-ctx-widget-li')) continue;
-    if (isContextItemHidden(child)) continue;
-
-    const btn = child.querySelector<HTMLButtonElement>(':scope > button.context-menu-item');
-    if (!btn || btn.querySelector('.exq-ctx-item-icon')) continue;
-
-    const tid = child.getAttribute('data-testid') || '';
-    let iconName = CTX_ITEM_ICON_MAP[tid];
-    if (tid === 'toggleElementLock' && !isEditableSelection) {
-      iconName = 'unlock';
-    }
-    const iconSlot = el(
-      'span',
-      { class: 'exq-ctx-item-icon', 'aria-hidden': 'true' },
-      iconName ? svgIcon(iconName, 14, '0 0 24 24', 1.9) : null,
+    const isEditableSelection = !!(
+      ul.querySelector('li[data-testid="cut"]') || ul.querySelector('li[data-testid="deleteSelectedElements"]')
     );
-    btn.insertBefore(iconSlot, btn.firstChild);
+
+    if (isEditableSelection) {
+      const topFrag = document.createDocumentFragment();
+      topFrag.append(buildContextQuickBar(ul, t));
+      topFrag.append(el('hr', { class: 'context-menu-item-separator' }));
+      topFrag.append(buildContextLayerBar(ul, t));
+      topFrag.append(el('hr', { class: 'context-menu-item-separator' }));
+
+      ul.insertBefore(topFrag, ul.firstChild);
+    }
+
+    // Decorate remaining visible native items with unified line icons
+    for (const child of Array.from(ul.children)) {
+      if (child.tagName !== 'LI' || child.classList.contains('exq-ctx-widget-li')) continue;
+      if (isContextItemHidden(child)) continue;
+
+      const btn = child.querySelector<HTMLButtonElement>(':scope > button.context-menu-item');
+      if (!btn || btn.querySelector('.exq-ctx-item-icon')) continue;
+
+      const tid = child.getAttribute('data-testid') || '';
+      let iconName = CTX_ITEM_ICON_MAP[tid];
+      if (tid === 'toggleElementLock' && !isEditableSelection) {
+        iconName = 'unlock';
+      }
+      const iconSlot = el(
+        'span',
+        { class: 'exq-ctx-item-icon', 'aria-hidden': 'true' },
+        iconName ? svgIcon(iconName, 14, '0 0 24 24', 1.9) : null,
+      );
+      btn.insertBefore(iconSlot, btn.firstChild);
+    }
   }
 
   const children = Array.from(ul.children);

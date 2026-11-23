@@ -37,6 +37,7 @@ export const DEFAULT_PREFS: Prefs = {
     defaultPenColor: DEFAULT_PEN_COLOR,
     textAutoResize: true,
     fastLoadSave: true,
+    modernContextMenu: true,
   },
 };
 
@@ -154,7 +155,7 @@ export function loadPrefs(
         }
       }
       if (saved.quickOpts && typeof saved.quickOpts === 'object') {
-        for (const k of ['autoResetOnOpen', 'textAutoResize', 'fastLoadSave'] as const) {
+        for (const k of ['autoResetOnOpen', 'textAutoResize', 'fastLoadSave', 'modernContextMenu'] as const) {
           if (typeof saved.quickOpts[k] === 'boolean') base.quickOpts[k] = saved.quickOpts[k];
         }
         if (typeof saved.quickOpts.defaultPenColor === 'string') {

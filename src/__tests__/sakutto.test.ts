@@ -550,6 +550,20 @@ describe('quickAnnotator DOM sync, language switcher, and textAutoResize guard r
     expect(document.querySelector('[data-exq-ctx-layer-bar]')).toBeNull();
     expect(document.querySelector('li[data-testid="paste"] .exq-ctx-item-icon svg')).toBeTruthy();
     expect(document.querySelector('li[data-testid="selectAll"] .exq-ctx-item-icon svg')).toBeTruthy();
+
+    // When modernContextMenu is OFF, skip rich redesign and keep native layout
+    runtime.prefs.quickOpts.modernContextMenu = false;
+    document.body.innerHTML = `
+      <ul class="context-menu">
+        <li data-testid="cut"><button class="context-menu-item">切り取り</button></li>
+        <li data-testid="cropEditor"><button class="context-menu-item">画像を切り抜き</button></li>
+      </ul>
+    `;
+    expect(syncContextMenu()).toBe(true);
+    expect(document.querySelector('.context-menu')?.classList.contains('exq-ctx-rich')).toBe(false);
+    expect(document.querySelector('[data-exq-ctx-quick-bar]')).toBeNull();
+    expect(document.querySelector('[data-exq-ctx-layer-bar]')).toBeNull();
+    expect(document.querySelector('.exq-ctx-item-icon')).toBeNull();
   });
 
   it('auto-heals broken v1 IndexedDB without files-store and preserves images across reload when autoResetOnOpen is OFF', async () => {
