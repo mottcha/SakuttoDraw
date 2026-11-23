@@ -1,0 +1,7 @@
+node_modules/
+dist/
+public/fonts/
+src/generated/
+.DS_Store
+*.local
+coverage/
