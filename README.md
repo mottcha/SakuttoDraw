@@ -10,7 +10,9 @@
 </p>
 
 <p align="center">
-  <a href="https://mottcha.github.io/SakuttoDraw/"><kbd><strong>&nbsp;&nbsp;Web アプリを開く (GitHub Pages)&nbsp;&nbsp;</strong></kbd></a>
+  <a href="https://mottcha.github.io/SakuttoDraw/">
+    <img src="docs/images/launch-button.svg" alt="Open SakuttoDraw" width="216" height="42" />
+  </a>
 </p>
 
 ---
