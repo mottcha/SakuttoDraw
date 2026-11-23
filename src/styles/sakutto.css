@@ -439,6 +439,10 @@ body,
   min-width: 344px;
   max-width: min(344px, calc(100vw - 24px)) !important;
 }
+.excalidraw.excalidraw--mobile .excalidraw-main-menu-preferences-submenu {
+  width: min(320px, calc(100vw - 24px));
+  min-width: 0;
+}
 .exq-pref-panel {
   display: flex;
   flex-direction: column;
@@ -450,12 +454,37 @@ body,
   flex-direction: column;
   gap: 4px;
 }
+.exq-pref-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
 .exq-pref-group-title {
   padding: 0 2px;
   font-size: 11px;
   font-weight: 600;
   color: var(--text-secondary-color, #686878);
   user-select: none;
+}
+.exq-pref-close-btn {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary-color, #686878);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+.exq-pref-close-btn:hover {
+  background: var(--button-hover-bg, rgba(105, 101, 219, 0.14));
+  color: var(--text-primary-color, #1b1b1f);
 }
 .exq-pref-card-grid {
   display: grid;

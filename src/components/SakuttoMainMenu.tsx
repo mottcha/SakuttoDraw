@@ -174,6 +174,38 @@ function PreferencesVisualPanel({
 }) {
   const t = getMessages(lang);
 
+  const closePreferencesMenu = () => {
+    runtime.api?.updateScene({
+      appState: { openMenu: null },
+      captureUpdate: CaptureUpdateAction.NEVER,
+    });
+    if (typeof document !== 'undefined') {
+      document.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }),
+      );
+    }
+  };
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const onPointerDownOutside = (e: PointerEvent) => {
+      const target = e.target;
+      if (!(target instanceof Element)) return;
+      if (
+        target.closest('.excalidraw-main-menu-preferences-submenu') ||
+        target.closest('.main-menu') ||
+        target.closest('.main-menu-trigger')
+      ) {
+        return;
+      }
+      closePreferencesMenu();
+    };
+    document.addEventListener('pointerdown', onPointerDownOutside, true);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDownOutside, true);
+    };
+  }, []);
+
   const setBoxSelectionMode = (mode: BoxSelectionPref) => {
     runtime.prefs.boxSelectionMode = mode;
     savePrefs(runtime.prefs);
@@ -216,7 +248,25 @@ function PreferencesVisualPanel({
       onPointerDown={(e) => e.stopPropagation()}
     >
       <div className="exq-pref-group">
-        <div className="exq-pref-group-title">{t.prefBoxSelectionTitle}</div>
+        <div className="exq-pref-group-header">
+          <div className="exq-pref-group-title">{t.prefBoxSelectionTitle}</div>
+          <button
+            type="button"
+            className="exq-pref-close-btn"
+            data-exq-pref-close="1"
+            aria-label="Close"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              closePreferencesMenu();
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
         <div className="exq-pref-card-grid" role="radiogroup" aria-label={t.prefBoxSelectionTitle}>
           <button
             type="button"
