@@ -1,7 +1,25 @@
-# SakuttoDraw
+<p align="center">
+  <img src="public/pwa-192x192.png" alt="SakuttoDraw" width="84" height="84" />
+</p>
 
-Excalidraw をベースに、スクリーンショットへの素早い注釈付けと画像書き出しに用途を絞ったローカル完結の Web アプリ（PWA）です。  
-リアルタイム共同編集やクラウド共有機能を持たず、描画・画像書き出しをすべてブラウザ内で完結させます。
+<h1 align="center">SakuttoDraw</h1>
+
+<p align="center">
+  Excalidraw をベースに、スクリーンショットへの素早い注釈付けと画像書き出しに用途を絞ったローカル完結の Web アプリ（PWA）です。<br />
+  リアルタイム共同編集やクラウド共有機能を持たず、描画・画像書き出しをすべてブラウザ内で完結させます。
+</p>
+
+<p align="center">
+  <a href="https://mottcha.github.io/SakuttoDraw/"><kbd><strong>&nbsp;&nbsp;Web アプリを開く (GitHub Pages)&nbsp;&nbsp;</strong></kbd></a>
+</p>
+
+---
+
+<p align="center">
+  <img src="docs/images/screenshot.png" alt="SakuttoDraw" width="860" />
+</p>
+
+---
 
 ## 主な機能
 
@@ -16,6 +34,8 @@ Excalidraw をベースに、スクリーンショットへの素早い注釈付
 - **多言語 UI**  
   English / 日本語 / 简体中文 / 繁體中文 / 한국어 に対応しており、左メニュー下部の言語セレクターから切り替えられます。
 
+---
+
 ## 開発・ビルド
 
 ```bash
@@ -26,6 +46,8 @@ npm run build    # 本番ビルド (dist/)
 ```
 
 `main` ブランチへのプッシュで `.github/workflows/deploy.yml` により GitHub Pages へデプロイされます。
+
+---
 
 ## ライセンス・クレジット
 
