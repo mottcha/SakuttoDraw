@@ -9,6 +9,14 @@ body,
   overflow: hidden;
 }
 
+/* Inherit Excalidraw UI font across all custom buttons/controls (browser UA resets button font-family) */
+.excalidraw [class*="exq-"] button,
+.excalidraw button[class*="exq-"],
+.excalidraw select[class*="exq-"],
+.context-menu.exq-ctx-rich button {
+  font-family: inherit;
+}
+
 /* === 1. Hide unwanted Excalidraw UI (locale-independent) === */
 /* Welcome screen, corner hints ("ショートカットとヘルプ" etc.), toolbar bottom hint, and selection/pen sub-popovers */
 .welcome-screen-center,
