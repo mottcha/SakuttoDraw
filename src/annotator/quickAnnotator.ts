@@ -1496,26 +1496,41 @@ function buildContextQuickBar(ul: Element, t: ReturnType<typeof getMessages>): H
   return el('li', { class: 'exq-ctx-widget-li', 'data-exq-ctx-quick-bar': '1' }, bar);
 }
 
+function dispatchLayerShortcut(testId: (typeof CTX_LAYER_BAR_ITEMS)[number]['testId']): void {
+  const isMac =
+    typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/i.test(navigator.platform || navigator.userAgent || '');
+  const isFront = testId === 'bringForward' || testId === 'bringToFront';
+  const isEdge = testId === 'sendToBack' || testId === 'bringToFront';
+  const code = isFront ? 'BracketRight' : 'BracketLeft';
+  const key = isFront ? ']' : '[';
+  silently(() => {
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key,
+        code,
+        ctrlKey: !isMac,
+        metaKey: isMac,
+        shiftKey: isEdge && !isMac,
+        altKey: isEdge && isMac,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  });
+}
+
 function buildContextLayerBar(
   ul: Element,
-  root: ParentNode,
   t: ReturnType<typeof getMessages>,
-): HTMLLIElement | null {
+): HTMLLIElement {
   const nativeMap = new Map<string, HTMLButtonElement | null>();
-  let hasAnyNative = false;
   for (const def of CTX_LAYER_BAR_ITEMS) {
     const nativeLi = ul.querySelector<HTMLElement>(`li[data-testid="${def.testId}"]`);
     const nativeBtn = nativeLi?.querySelector<HTMLButtonElement>('button') ?? null;
     if (nativeLi) {
       nativeLi.classList.add('exq-ctx-proxied-hidden');
-      if (nativeBtn) hasAnyNative = true;
     }
     nativeMap.set(def.testId, nativeBtn);
-  }
-
-  const zBtns = root.querySelectorAll<HTMLElement>('.zIndexButton');
-  if (!hasAnyNative && zBtns.length < 4) {
-    return null;
   }
 
   const group = el('div', { class: 'exq-ctx-layer-btns', role: 'group', 'aria-label': t.ctxLayer });
@@ -1539,11 +1554,16 @@ function buildContextLayerBar(
       const nativeBtn = nativeMap.get(def.testId);
       if (nativeBtn) {
         nativeBtn.click();
-      } else {
-        const liveZBtns = document.querySelectorAll<HTMLElement>('.zIndexButton');
-        liveZBtns[def.zIdx]?.click();
-        sendEscape();
+        return;
       }
+      const liveZBtns = document.querySelectorAll<HTMLElement>('.zIndexButton');
+      if (liveZBtns[def.zIdx]) {
+        liveZBtns[def.zIdx].click();
+        sendEscape();
+        return;
+      }
+      sendEscape();
+      dispatchLayerShortcut(def.testId);
     });
     group.append(btn);
   }
@@ -1572,12 +1592,8 @@ export function syncContextMenu(root: ParentNode = document): boolean {
     const topFrag = document.createDocumentFragment();
     topFrag.append(buildContextQuickBar(ul, t));
     topFrag.append(el('hr', { class: 'context-menu-item-separator' }));
-
-    const layerLi = buildContextLayerBar(ul, root, t);
-    if (layerLi) {
-      topFrag.append(layerLi);
-      topFrag.append(el('hr', { class: 'context-menu-item-separator' }));
-    }
+    topFrag.append(buildContextLayerBar(ul, t));
+    topFrag.append(el('hr', { class: 'context-menu-item-separator' }));
 
     ul.insertBefore(topFrag, ul.firstChild);
   }
