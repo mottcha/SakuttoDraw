@@ -1355,6 +1355,26 @@ function makeExtraT3Button(
     e.stopPropagation();
     if (item.id === 'lasso') {
       void activateLassoTool();
+    } else if (item.id === 'lock') {
+      if (runtime.api) {
+        const cur = runtime.api.getAppState().activeTool;
+        runtime.api.updateScene({
+          appState: {
+            activeTool: { ...cur, locked: !cur.locked },
+          },
+          captureUpdate: CaptureUpdateAction.NEVER,
+        });
+      } else {
+        clickNativeTool(item.testId);
+      }
+      sendEscape();
+      scheduleSync();
+    } else if (runtime.api && (item.id === 'eraser' || item.id === 'sticky')) {
+      runtime.api.setActiveTool({
+        type: item.id === 'sticky' ? ('stickynote' as never) : 'eraser',
+      });
+      sendEscape();
+      scheduleSync();
     } else {
       clickNativeTool(item.testId);
       sendEscape();
@@ -1365,7 +1385,9 @@ function makeExtraT3Button(
 }
 
 export function syncExtraToolsMenu(root: ParentNode = document): boolean {
-  const menu = root.querySelector('.dropdown-menu-container:has([data-testid="toolbar-image"])');
+  const menu = root.querySelector(
+    '.dropdown-menu-container:has([data-testid="toolbar-image"], [data-testid="toolbar-laser"])',
+  );
   if (!menu || extraMenuInjected.has(menu)) return false;
 
   const firstNative = menu.firstElementChild;
@@ -1737,7 +1759,9 @@ function buildRightBarWidget() {
 }
 
 export function syncTopRightBar(root: ParentNode = document): boolean {
-  const container = root.querySelector('.layer-ui__wrapper__top-right');
+  const container =
+    root.querySelector('.layer-ui__wrapper__top-right') ||
+    root.querySelector('.excalidraw-ui-top-right');
   if (!container) return false;
 
   let mounted = rightBarMounts.get(container);

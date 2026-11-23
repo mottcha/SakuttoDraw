@@ -65,20 +65,24 @@ body,
   display: none !important;
 }
 
-/* Extra tools menu: keep only T3 bar, Image, Frame, Laser, and Quick Settings */
-.dropdown-menu-container:has([data-testid="toolbar-image"]) > [data-testid="toolbar-lasso"],
-.dropdown-menu-container:has([data-testid="toolbar-image"]) > [data-testid="toolbar-stickynote"],
-.dropdown-menu-container:has([data-testid="toolbar-image"]) > [data-testid="toolbar-embeddable"],
-.dropdown-menu-container:has([data-testid="toolbar-image"]) > [data-testid="toolbar-autoshape"],
-.dropdown-menu-container:has([data-testid="toolbar-image"]) > [data-testid="toolbar-laser"] ~ *:not(.exq-extra-options-root) {
+/* Extra tools menu (desktop & mobile): keep only T3 bar, Image (desktop), Frame, Laser, Drawing Assist, and Quick Settings */
+.dropdown-menu-container:has([data-testid="toolbar-image"], [data-testid="toolbar-laser"]) > [data-testid="toolbar-lasso"],
+.dropdown-menu-container:has([data-testid="toolbar-image"], [data-testid="toolbar-laser"]) > [data-testid="toolbar-stickynote"],
+.dropdown-menu-container:has([data-testid="toolbar-image"], [data-testid="toolbar-laser"]) > [data-testid="toolbar-embeddable"],
+.dropdown-menu-container:has([data-testid="toolbar-image"], [data-testid="toolbar-laser"]) > [data-testid="toolbar-autoshape"],
+.dropdown-menu-container:has([data-testid="toolbar-image"], [data-testid="toolbar-laser"]) > [data-testid="toolbar-bucketfill"],
+.dropdown-menu-container:has([data-testid="toolbar-image"], [data-testid="toolbar-laser"]) > [data-testid="toolbar-laser"] ~ *:not(.exq-extra-options-root) {
   display: none !important;
 }
 
-/* Top-right native clutter */
+/* Top-right native clutter (desktop & mobile) */
 .layer-ui__wrapper__top-right .plus-banner,
 .layer-ui__wrapper__top-right .collab-button,
 .layer-ui__wrapper__top-right .sidebar-trigger__label-element,
-.layer-ui__wrapper__top-right [data-testid="sidebar-trigger"] {
+.layer-ui__wrapper__top-right [data-testid="sidebar-trigger"],
+.excalidraw-ui-top-right .default-sidebar-trigger,
+.excalidraw-ui-top-right .sidebar-trigger__label-element,
+.excalidraw-ui-top-right [data-testid="sidebar-trigger"] {
   display: none !important;
 }
 

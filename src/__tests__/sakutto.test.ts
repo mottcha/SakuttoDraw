@@ -633,4 +633,27 @@ describe('quickAnnotator DOM sync, language switcher, and textAutoResize guard r
     expect(runtime.prefs.exportOpts.background).toBe(false);
     expect(bgSwitch?.classList.contains('exq-on')).toBe(true);
   });
+
+  it('injects top-right Copy/Save bar and unified extra tools menu in mobile layout', () => {
+    applyLanguage('ja-JP');
+    document.body.innerHTML = `
+      <div class="excalidraw-ui-top-right">
+        <button class="default-sidebar-trigger" data-testid="sidebar-trigger"></button>
+      </div>
+      <div class="dropdown-menu-container">
+        <button data-testid="toolbar-frame"></button>
+        <button data-testid="toolbar-embeddable"></button>
+        <button data-testid="toolbar-autoshape"></button>
+        <button data-testid="toolbar-laser"></button>
+        <button data-testid="toolbar-bucketfill"></button>
+      </div>
+    `;
+
+    expect(syncTopRightBar()).toBe(true);
+    expect(syncExtraToolsMenu()).toBe(true);
+    expect(document.querySelector('.excalidraw-ui-top-right [data-exq-right-bar="1"]')).toBeTruthy();
+    expect(document.querySelector('[data-exq-t3-row="1"]')).toBeTruthy();
+    expect(document.querySelector('[data-exq-draw-assist="1"]')).toBeTruthy();
+    expect(document.querySelector('[data-exq-quick-settings="1"]')).toBeTruthy();
+  });
 });
