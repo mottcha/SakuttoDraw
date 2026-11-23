@@ -1,9 +1,18 @@
 import type { BinaryFileData, BinaryFiles, ExcalidrawInitialDataState } from '@excalidraw/excalidraw/types';
 import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types';
-import type { ExportFormat, ExportScale, Prefs, ThemeMode } from '../types/annotator';
+import type {
+  BoxSelectionPref,
+  ExportFormat,
+  ExportScale,
+  InputDevicePref,
+  Prefs,
+  ThemeMode,
+} from '../types/annotator';
 import { detectBrowserLang, normalizeAppLang } from '../i18n/messages';
 
 export const DEFAULT_PINK = '#c2255c';
+export const DEFAULT_PEN_COLOR = DEFAULT_PINK;
+export const PEN_COLOR_SWATCHES = ['#c2255c', '#1e1e1e', '#e03131', '#1971c2', '#2f9e44', '#f08c00'] as const;
 export const LS_ELEMENTS_KEY = 'excalidraw';
 export const LS_STATE_KEY = 'excalidraw-state';
 export const LS_PREFS_KEY = 'exq-annotator-prefs';
@@ -13,6 +22,8 @@ export const FILES_STORE_NAME = 'files-store';
 export const DEFAULT_PREFS: Prefs = {
   lang: 'en',
   themeMode: 'light',
+  boxSelectionMode: 'overlap',
+  inputDevice: 'trackpad',
   exportOpts: {
     onlySelected: true,
     background: true,
@@ -23,7 +34,7 @@ export const DEFAULT_PREFS: Prefs = {
   },
   quickOpts: {
     autoResetOnOpen: true,
-    defaultPink: true,
+    defaultPenColor: DEFAULT_PEN_COLOR,
     textAutoResize: true,
     fastLoadSave: true,
   },
@@ -51,6 +62,23 @@ export function normalizeThemeMode(value: unknown): ThemeMode {
   return 'light';
 }
 
+export function normalizeBoxSelectionMode(value: unknown): BoxSelectionPref {
+  return value === 'contain' ? 'contain' : 'overlap';
+}
+
+export function normalizeInputDevice(value: unknown): InputDevicePref {
+  return value === 'mouse' ? 'mouse' : 'trackpad';
+}
+
+export function normalizeHexColor(value: unknown, fallback = DEFAULT_PEN_COLOR): string {
+  if (typeof value !== 'string') return fallback;
+  const trimmed = value.trim().toLowerCase();
+  if (/^#[0-9a-f]{6}$/.test(trimmed) || /^#[0-9a-f]{3}$/.test(trimmed)) {
+    return trimmed;
+  }
+  return fallback;
+}
+
 export function resolveTheme(themeMode: ThemeMode): 'light' | 'dark' {
   if (themeMode === 'dark') return 'dark';
   if (themeMode === 'system') {
@@ -72,6 +100,8 @@ export function loadPrefs(
   const base: Prefs = {
     lang: detectBrowserLang(),
     themeMode: DEFAULT_PREFS.themeMode,
+    boxSelectionMode: DEFAULT_PREFS.boxSelectionMode,
+    inputDevice: DEFAULT_PREFS.inputDevice,
     exportOpts: { ...DEFAULT_PREFS.exportOpts },
     quickOpts: { ...DEFAULT_PREFS.quickOpts },
   };
@@ -82,6 +112,12 @@ export function loadPrefs(
     const st = silently(() => JSON.parse(rawState));
     if (st && typeof st === 'object') {
       if (st.theme === 'dark' || st.theme === 'light') base.themeMode = st.theme;
+      if (st.boxSelectionMode === 'contain' || st.boxSelectionMode === 'overlap') {
+        base.boxSelectionMode = st.boxSelectionMode;
+      }
+      if (st.inputDevice === 'mouse' || st.inputDevice === 'trackpad') {
+        base.inputDevice = st.inputDevice;
+      }
       if (typeof st.exportBackground === 'boolean') base.exportOpts.background = st.exportBackground;
       if (typeof st.exportWithDarkMode === 'boolean') base.exportOpts.darkMode = st.exportWithDarkMode;
       if (typeof st.exportEmbedScene === 'boolean') base.exportOpts.embedScene = st.exportEmbedScene;
@@ -100,6 +136,12 @@ export function loadPrefs(
       if (saved.themeMode === 'light' || saved.themeMode === 'dark' || saved.themeMode === 'system') {
         base.themeMode = saved.themeMode;
       }
+      if (saved.boxSelectionMode === 'contain' || saved.boxSelectionMode === 'overlap') {
+        base.boxSelectionMode = saved.boxSelectionMode;
+      }
+      if (saved.inputDevice === 'mouse' || saved.inputDevice === 'trackpad') {
+        base.inputDevice = saved.inputDevice;
+      }
       if (saved.exportOpts && typeof saved.exportOpts === 'object') {
         for (const k of ['onlySelected', 'background', 'darkMode', 'embedScene'] as const) {
           if (typeof saved.exportOpts[k] === 'boolean') base.exportOpts[k] = saved.exportOpts[k];
@@ -112,8 +154,16 @@ export function loadPrefs(
         }
       }
       if (saved.quickOpts && typeof saved.quickOpts === 'object') {
-        for (const k of ['autoResetOnOpen', 'defaultPink', 'textAutoResize', 'fastLoadSave'] as const) {
+        for (const k of ['autoResetOnOpen', 'textAutoResize', 'fastLoadSave'] as const) {
           if (typeof saved.quickOpts[k] === 'boolean') base.quickOpts[k] = saved.quickOpts[k];
+        }
+        if (typeof saved.quickOpts.defaultPenColor === 'string') {
+          base.quickOpts.defaultPenColor = normalizeHexColor(
+            saved.quickOpts.defaultPenColor,
+            DEFAULT_PEN_COLOR,
+          );
+        } else if (saved.quickOpts.defaultPink === false) {
+          base.quickOpts.defaultPenColor = '#1e1e1e';
         }
       }
     }
@@ -130,6 +180,8 @@ export function savePrefs(
   silently(() => {
     const raw = storage.getItem(LS_STATE_KEY);
     const st = raw ? JSON.parse(raw) : {};
+    st.boxSelectionMode = normalizeBoxSelectionMode(prefs.boxSelectionMode);
+    st.inputDevice = normalizeInputDevice(prefs.inputDevice);
     st.exportBackground = prefs.exportOpts.background;
     st.exportWithDarkMode = prefs.exportOpts.darkMode;
     st.exportEmbedScene = prefs.exportOpts.embedScene;
@@ -302,12 +354,13 @@ export function bootstrapCleanCanvas({
     autoReset = true;
   }
 
-  if (prefs.quickOpts.defaultPink) {
-    state.currentItemStrokeColor = DEFAULT_PINK;
-    pinkApplied = true;
-  }
+  const penColor = normalizeHexColor(prefs.quickOpts.defaultPenColor, DEFAULT_PEN_COLOR);
+  state.currentItemStrokeColor = penColor;
+  pinkApplied = penColor === DEFAULT_PINK;
 
   state.showWelcomeScreen = false;
+  state.boxSelectionMode = normalizeBoxSelectionMode(prefs.boxSelectionMode);
+  state.inputDevice = normalizeInputDevice(prefs.inputDevice);
   state.exportBackground = prefs.exportOpts.background;
   state.exportWithDarkMode = prefs.exportOpts.darkMode;
   state.exportEmbedScene = prefs.exportOpts.embedScene;
@@ -343,6 +396,7 @@ export async function loadInitialSceneData(
   }
 
   const files = elements.length > 0 ? await loadFilesFromIndexedDb(idb) : {};
+  const defaultPenColor = normalizeHexColor(prefs.quickOpts.defaultPenColor, DEFAULT_PEN_COLOR);
 
   return {
     elements,
@@ -355,9 +409,9 @@ export async function loadInitialSceneData(
       currentItemStrokeColor:
         typeof savedState.currentItemStrokeColor === 'string' && savedState.currentItemStrokeColor
           ? savedState.currentItemStrokeColor
-          : prefs.quickOpts.defaultPink
-            ? DEFAULT_PINK
-            : '#1e1e1e',
+          : defaultPenColor,
+      boxSelectionMode: normalizeBoxSelectionMode(prefs.boxSelectionMode),
+      inputDevice: normalizeInputDevice(prefs.inputDevice),
       exportBackground: prefs.exportOpts.background,
       exportWithDarkMode: prefs.exportOpts.darkMode,
       exportEmbedScene: prefs.exportOpts.embedScene,
@@ -386,7 +440,13 @@ export function persistSceneSnapshot(
       ...prev,
       viewBackgroundColor: appState.viewBackgroundColor ?? prev.viewBackgroundColor ?? '#ffffff',
       currentItemStrokeColor:
-        appState.currentItemStrokeColor ?? prev.currentItemStrokeColor ?? DEFAULT_PINK,
+        appState.currentItemStrokeColor ?? prev.currentItemStrokeColor ?? DEFAULT_PEN_COLOR,
+      boxSelectionMode: normalizeBoxSelectionMode(
+        appState.boxSelectionMode ?? prev.boxSelectionMode ?? DEFAULT_PREFS.boxSelectionMode,
+      ),
+      inputDevice: normalizeInputDevice(
+        appState.inputDevice ?? prev.inputDevice ?? DEFAULT_PREFS.inputDevice,
+      ),
       exportBackground: appState.exportBackground ?? prev.exportBackground ?? true,
       exportWithDarkMode: appState.exportWithDarkMode ?? prev.exportWithDarkMode ?? false,
       exportEmbedScene: appState.exportEmbedScene ?? prev.exportEmbedScene ?? false,

@@ -67,7 +67,12 @@ describe('i18n (en, ja-JP, zh-CN, zh-TW, ko-KR)', () => {
     for (const { code } of SUPPORTED_LANGS) {
       const m = getMessages(code);
       expect(m.quickSettings.length).toBeGreaterThan(0);
+      expect(m.drawAssist.length).toBeGreaterThan(0);
       expect(m.exportSettings.length).toBeGreaterThan(0);
+      expect(m.penColor.length).toBeGreaterThan(0);
+      expect(m.prefBoxSelectionTitle.length).toBeGreaterThan(0);
+      expect(m.prefScrollActionTitle.length).toBeGreaterThan(0);
+      expect(m.prefScreenModeTitle.length).toBeGreaterThan(0);
       expect(m.toastFontDownloaded('Test').length).toBeGreaterThan(0);
     }
   });
@@ -94,15 +99,25 @@ describe('storageBridge & debounced persistence race prevention', () => {
     expect(normalizeFormat('invalid')).toBe('png');
   });
 
-  it('bootstraps clean canvas and applies default pink stroke color', () => {
+  it('bootstraps clean canvas and applies default pink stroke color and overlap selection', () => {
     localStorage.setItem(LS_ELEMENTS_KEY, JSON.stringify([{ id: 'old-el' }]));
     const res = bootstrapCleanCanvas({ storage: localStorage, hash: '' });
     expect(res.skipped).toBe(false);
     expect(res.autoReset).toBe(true);
     expect(res.pinkApplied).toBe(true);
+    expect(res.prefs.boxSelectionMode).toBe('overlap');
+    expect(res.prefs.inputDevice).toBe('trackpad');
     expect(localStorage.getItem(LS_ELEMENTS_KEY)).toBe('[]');
     const st = JSON.parse(localStorage.getItem(LS_STATE_KEY) || '{}');
     expect(st.currentItemStrokeColor).toBe(DEFAULT_PINK);
+    expect(st.boxSelectionMode).toBe('overlap');
+    expect(st.inputDevice).toBe('trackpad');
+  });
+
+  it('migrates legacy defaultPink: false preference to #1e1e1e defaultPenColor', () => {
+    localStorage.setItem(LS_PREFS_KEY, JSON.stringify({ quickOpts: { defaultPink: false } }));
+    const prefs = loadPrefs(localStorage);
+    expect(prefs.quickOpts.defaultPenColor).toBe('#1e1e1e');
   });
 
   it('skips auto-reset when hash contains #json= or #addLibrary=', () => {
@@ -111,21 +126,27 @@ describe('storageBridge & debounced persistence race prevention', () => {
     expect(shouldSkipAutoReset('')).toBe(false);
   });
 
-  it('saves and reloads preferences including language and themeMode accurately', () => {
+  it('saves and reloads preferences including language, themeMode, boxSelectionMode, inputDevice, and pen color', () => {
     const prefs = loadPrefs(localStorage);
     prefs.lang = 'zh-TW';
     prefs.themeMode = 'system';
+    prefs.boxSelectionMode = 'contain';
+    prefs.inputDevice = 'mouse';
     prefs.exportOpts.format = 'svg';
     prefs.exportOpts.scale = 3;
     prefs.quickOpts.autoResetOnOpen = false;
+    prefs.quickOpts.defaultPenColor = '#1971c2';
     savePrefs(prefs, localStorage);
 
     const reloaded = loadPrefs(localStorage);
     expect(reloaded.lang).toBe('zh-TW');
     expect(reloaded.themeMode).toBe('system');
+    expect(reloaded.boxSelectionMode).toBe('contain');
+    expect(reloaded.inputDevice).toBe('mouse');
     expect(reloaded.exportOpts.format).toBe('svg');
     expect(reloaded.exportOpts.scale).toBe(3);
     expect(reloaded.quickOpts.autoResetOnOpen).toBe(false);
+    expect(reloaded.quickOpts.defaultPenColor).toBe('#1971c2');
     expect(localStorage.getItem(LS_PREFS_KEY)).toBeTruthy();
   });
 
@@ -461,7 +482,11 @@ describe('quickAnnotator DOM sync, language switcher, and textAutoResize guard r
     expect(syncExtraToolsMenu()).toBe(true);
     expect(syncContextMenu()).toBe(true);
 
+    expect(document.querySelector('[data-exq-pen-toggle="1"]')).toBeTruthy();
     expect(document.querySelector('[data-exq-bg-toggle="1"]')).toBeTruthy();
+    expect(document.querySelector('[data-exq-draw-assist="1"]')?.classList.contains('exq-acc-open')).toBe(false);
+    expect(document.querySelector('[data-exq-quick-settings="1"]')?.classList.contains('exq-acc-open')).toBe(false);
+    expect(document.querySelector('[data-exq-proxy="toolbar-lock"]')?.getAttribute('title')).toBe('作成後もツールを連続使用 (Q)');
     expect(document.querySelector('[data-exq-lang-select="1"]')).toBeNull();
     expect(document.querySelector('[data-exq-cjk-btn]')).toBeNull();
     expect(document.querySelector('.exq-toolbar-reset')?.getAttribute('title')).toBe('キャンバスをクリア');
@@ -472,5 +497,52 @@ describe('quickAnnotator DOM sync, language switcher, and textAutoResize guard r
     syncMainMenu();
     expect(document.querySelector('.exq-toolbar-reset')?.getAttribute('title')).toBe('Clear canvas');
     expect(document.querySelector('[data-exq-main-action="copy"]')?.textContent).toBe('Copy to clipboard');
+  });
+
+  it('enriches selected context menu with quick bar, 4-button layer bar, and row icons while keeping empty canvas compact', () => {
+    applyLanguage('ja-JP');
+    const cutClick = vi.fn();
+    const toFrontClick = vi.fn();
+    document.body.innerHTML = `
+      <ul class="context-menu">
+        <li data-testid="cut"><button class="context-menu-item">切り取り</button></li>
+        <li data-testid="copy"><button class="context-menu-item">コピー</button></li>
+        <li data-testid="paste"><button class="context-menu-item">貼り付け</button></li>
+        <li data-testid="sendToBack"><button class="context-menu-item">最背面</button></li>
+        <li data-testid="sendBackward"><button class="context-menu-item">背面</button></li>
+        <li data-testid="bringForward"><button class="context-menu-item">前面</button></li>
+        <li data-testid="bringToFront"><button class="context-menu-item">最前面</button></li>
+        <li data-testid="cropEditor"><button class="context-menu-item">画像を切り抜き</button></li>
+        <li data-testid="duplicateSelection"><button class="context-menu-item">複製</button></li>
+        <li data-testid="deleteSelectedElements"><button class="context-menu-item">削除</button></li>
+      </ul>
+    `;
+    document.querySelector('li[data-testid="cut"] button')?.addEventListener('click', cutClick);
+    document.querySelector('li[data-testid="bringToFront"] button')?.addEventListener('click', toFrontClick);
+
+    expect(syncContextMenu()).toBe(true);
+    expect(document.querySelector('.context-menu')?.classList.contains('exq-ctx-rich')).toBe(true);
+    expect(document.querySelectorAll('[data-exq-ctx-quick]').length).toBe(5);
+    expect(document.querySelectorAll('[data-exq-ctx-layer]').length).toBe(4);
+    expect(document.querySelector('li[data-testid="cut"]')?.classList.contains('exq-ctx-proxied-hidden')).toBe(true);
+    expect(document.querySelector('li[data-testid="cropEditor"] .exq-ctx-item-icon svg')).toBeTruthy();
+
+    document.querySelector<HTMLButtonElement>('[data-exq-ctx-quick="cut"]')?.click();
+    document.querySelector<HTMLButtonElement>('[data-exq-ctx-layer="bringToFront"]')?.click();
+    expect(cutClick).toHaveBeenCalledTimes(1);
+    expect(toFrontClick).toHaveBeenCalledTimes(1);
+
+    // Empty canvas menu: no quick bar or layer bar, only decorated rows
+    document.body.innerHTML = `
+      <ul class="context-menu">
+        <li data-testid="paste"><button class="context-menu-item">貼り付け</button></li>
+        <li data-testid="selectAll"><button class="context-menu-item">すべて選択</button></li>
+      </ul>
+    `;
+    expect(syncContextMenu()).toBe(true);
+    expect(document.querySelector('[data-exq-ctx-quick-bar]')).toBeNull();
+    expect(document.querySelector('[data-exq-ctx-layer-bar]')).toBeNull();
+    expect(document.querySelector('li[data-testid="paste"] .exq-ctx-item-icon svg')).toBeTruthy();
+    expect(document.querySelector('li[data-testid="selectAll"] .exq-ctx-item-icon svg')).toBeTruthy();
   });
 });

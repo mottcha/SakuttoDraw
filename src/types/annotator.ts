@@ -15,9 +15,12 @@ export interface ExportOpts {
   scale: ExportScale;
 }
 
+export type BoxSelectionPref = 'overlap' | 'contain';
+export type InputDevicePref = 'trackpad' | 'mouse';
+
 export interface QuickOpts {
   autoResetOnOpen: boolean;
-  defaultPink: boolean;
+  defaultPenColor: string;
   textAutoResize: boolean;
   fastLoadSave: boolean;
 }
@@ -25,6 +28,8 @@ export interface QuickOpts {
 export interface Prefs {
   lang: AppLang;
   themeMode: ThemeMode;
+  boxSelectionMode: BoxSelectionPref;
+  inputDevice: InputDevicePref;
   exportOpts: ExportOpts;
   quickOpts: QuickOpts;
 }

@@ -1,21 +1,26 @@
+import { CaptureUpdateAction } from '@excalidraw/excalidraw';
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 import type { AppLang, ExportFormat, ExportScale, Prefs } from '../types/annotator';
 import { getMessages } from '../i18n/messages';
 import {
   bootstrapCleanCanvas,
   clearIndexedDbFiles,
+  DEFAULT_PEN_COLOR,
   DEFAULT_PINK,
   DEFAULT_PREFS,
   LS_STATE_KEY,
   loadPrefs,
   normalizeFormat,
+  normalizeHexColor,
   normalizeScale,
+  PEN_COLOR_SWATCHES,
   savePrefs,
   shouldSkipAutoReset,
   silently,
 } from '../services/storageBridge';
 import {
   applyCanvasBackgroundWithApi,
+  applyPenColorWithApi,
   filterTargetElementsForExport,
   inlinePreSplitFontsIntoSvg,
   runDirectDiskSaveWithApi,
@@ -52,11 +57,17 @@ export const EXPORT_TOGGLE_DEFS = [
   { key: 'embedScene', id: 'exportEmbedSwitch', msgKey: 'exportEmbedScene' },
 ] as const;
 
+export const DRAW_ASSIST_DEFS = [
+  { key: 'objectsSnapMode', msgKey: 'assistSnapToObjects', shortcut: 'Alt+S' },
+  { key: 'gridMode', msgKey: 'assistShowGrid', shortcut: "Ctrl+'" },
+  { key: 'arrowBinding', msgKey: 'assistArrowBinding', shortcut: '' },
+  { key: 'midpointSnapping', msgKey: 'assistMidpointSnap', shortcut: '' },
+] as const;
+
 export const QUICK_OPT_DEFS = [
-  { key: 'autoResetOnOpen', msgKey: 'optAutoResetOnOpen', pinkDot: false },
-  { key: 'defaultPink', msgKey: 'optDefaultPink', pinkDot: true },
-  { key: 'textAutoResize', msgKey: 'optTextAutoResize', pinkDot: false },
-  { key: 'fastLoadSave', msgKey: 'optFastLoadSave', pinkDot: false },
+  { key: 'autoResetOnOpen', msgKey: 'optAutoResetOnOpen' },
+  { key: 'textAutoResize', msgKey: 'optTextAutoResize' },
+  { key: 'fastLoadSave', msgKey: 'optFastLoadSave' },
 ] as const;
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -101,6 +112,10 @@ const ICON_DEFS: Record<string, Array<[string, Record<string, string | number>]>
     ['line', { x1: 10, y1: 8, x2: 14, y2: 8 }],
     ['line', { x1: 18, y1: 16, x2: 22, y2: 16 }],
   ],
+  drawAssist: [
+    ['path', { d: 'M12 20h9' }],
+    ['path', { d: 'M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z' }],
+  ],
   caret: [['path', { d: 'm3 4.5 3 3 3-3' }]],
   copy: [
     ['rect', { x: 9, y: 9, width: 13, height: 13, rx: 2 }],
@@ -116,6 +131,106 @@ const ICON_DEFS: Record<string, Array<[string, Record<string, string | number>]>
     ['path', { d: 'M3 6h18' }],
     ['path', { d: 'M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6' }],
     ['path', { d: 'M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2' }],
+  ],
+  cut: [
+    ['circle', { cx: 6, cy: 6, r: 3 }],
+    ['circle', { cx: 6, cy: 18, r: 3 }],
+    ['line', { x1: 20, y1: 4, x2: 8.12, y2: 15.88 }],
+    ['line', { x1: 14.47, y1: 14.48, x2: 20, y2: 20 }],
+    ['line', { x1: 8.12, y1: 8.12, x2: 12, y2: 12 }],
+  ],
+  paste: [
+    ['rect', { x: 8, y: 2, width: 8, height: 4, rx: 1 }],
+    ['path', { d: 'M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2' }],
+  ],
+  dup: [
+    ['rect', { x: 8, y: 8, width: 13, height: 13, rx: 2 }],
+    ['path', { d: 'M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2' }],
+    ['line', { x1: 14.5, y1: 11.5, x2: 14.5, y2: 17.5 }],
+    ['line', { x1: 11.5, y1: 14.5, x2: 17.5, y2: 14.5 }],
+  ],
+  toBack: [
+    ['line', { x1: 5, y1: 19, x2: 19, y2: 19 }],
+    ['polyline', { points: '8 11 12 15 16 11' }],
+    ['line', { x1: 12, y1: 4, x2: 12, y2: 15 }],
+  ],
+  backward: [
+    ['polyline', { points: '8 13 12 17 16 13' }],
+    ['line', { x1: 12, y1: 6, x2: 12, y2: 17 }],
+  ],
+  forward: [
+    ['polyline', { points: '8 11 12 7 16 11' }],
+    ['line', { x1: 12, y1: 18, x2: 12, y2: 7 }],
+  ],
+  toFront: [
+    ['line', { x1: 5, y1: 5, x2: 19, y2: 5 }],
+    ['polyline', { points: '8 13 12 9 16 13' }],
+    ['line', { x1: 12, y1: 20, x2: 12, y2: 9 }],
+  ],
+  crop: [
+    ['path', { d: 'M6 2v14a2 2 0 0 0 2 2h14' }],
+    ['path', { d: 'M18 22V8a2 2 0 0 0-2-2H2' }],
+  ],
+  flipH: [
+    ['line', { x1: 12, y1: 3, x2: 12, y2: 21, 'stroke-dasharray': '2.5 2.5' }],
+    ['polygon', { points: '8 7 3 12 8 17 8 7' }],
+    ['polygon', { points: '16 7 21 12 16 17 16 7', fill: 'currentColor', 'fill-opacity': '0.18' }],
+  ],
+  flipV: [
+    ['line', { x1: 3, y1: 12, x2: 21, y2: 12, 'stroke-dasharray': '2.5 2.5' }],
+    ['polygon', { points: '7 8 12 3 17 8 7 8' }],
+    ['polygon', { points: '7 16 12 21 17 16 7 16', fill: 'currentColor', 'fill-opacity': '0.18' }],
+  ],
+  link: [
+    ['path', { d: 'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71' }],
+    ['path', { d: 'M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71' }],
+  ],
+  copyLink: [
+    ['path', { d: 'M10 13a5 5 0 0 0 7.54.54l2-2' }],
+    ['path', { d: 'M14 11a5 5 0 0 0-7.54-.54l-2 2a5 5 0 0 0 7.07 7.07l1-1' }],
+    ['rect', { x: 14, y: 14, width: 7, height: 7, rx: 1.5 }],
+  ],
+  unlock: [
+    ['rect', { x: 5, y: 11, width: 14, height: 10, rx: 2 }],
+    ['path', { d: 'M8 11V7a4 4 0 0 1 7.6-1.7' }],
+  ],
+  selectAll: [
+    ['rect', { x: 3, y: 3, width: 18, height: 18, rx: 2, 'stroke-dasharray': '3 2.5' }],
+    ['rect', { x: 8, y: 8, width: 8, height: 8, rx: 1, fill: 'currentColor', 'fill-opacity': '0.18' }],
+  ],
+  group: [
+    ['rect', { x: 3, y: 3, width: 7, height: 7, rx: 1 }],
+    ['rect', { x: 14, y: 14, width: 7, height: 7, rx: 1 }],
+    ['path', { d: 'M10 6.5h4.5a3 3 0 0 1 3 3V14' }],
+    ['path', { d: 'M14 17.5H9.5a3 3 0 0 1-3-3V10' }],
+  ],
+  ungroup: [
+    ['rect', { x: 3, y: 3, width: 7, height: 7, rx: 1 }],
+    ['rect', { x: 14, y: 14, width: 7, height: 7, rx: 1 }],
+    ['line', { x1: 14, y1: 6, x2: 20, y2: 6, 'stroke-dasharray': '2 2' }],
+    ['line', { x1: 4, y1: 18, x2: 10, y2: 18, 'stroke-dasharray': '2 2' }],
+  ],
+  wrap: [
+    ['line', { x1: 3, y1: 6, x2: 21, y2: 6 }],
+    ['path', { d: 'M3 12h15a3 3 0 1 1 0 6h-4' }],
+    ['polyline', { points: '16 16 14 18 16 20' }],
+    ['line', { x1: 3, y1: 18, x2: 10, y2: 18 }],
+  ],
+  editLine: [
+    ['circle', { cx: 5, cy: 19, r: 2.5 }],
+    ['circle', { cx: 19, cy: 5, r: 2.5 }],
+    ['line', { x1: 7, y1: 17, x2: 17, y2: 7 }],
+  ],
+  frame: [
+    ['line', { x1: 22, y1: 6, x2: 2, y2: 6 }],
+    ['line', { x1: 22, y1: 18, x2: 2, y2: 18 }],
+    ['line', { x1: 6, y1: 2, x2: 6, y2: 22 }],
+    ['line', { x1: 18, y1: 2, x2: 18, y2: 22 }],
+  ],
+  frameRemove: [
+    ['rect', { x: 3, y: 3, width: 14, height: 14, rx: 2, 'stroke-dasharray': '3 2' }],
+    ['path', { d: 'M13 13l8 8' }],
+    ['path', { d: 'M21 15v6h-6' }],
   ],
 };
 
@@ -163,8 +278,10 @@ export const runtime: {
   prefs: Prefs;
   lastShapeOther: 'arrow' | 'line' | 'diamond';
   isBusy: boolean;
+  drawAssistAccOpen: boolean;
   accOpen: boolean;
   expAccOpen: boolean;
+  penPaletteOpen: boolean;
   bgPaletteOpen: boolean;
   lastCanvasBg: string | null;
   primarySelIconSig: string;
@@ -174,13 +291,17 @@ export const runtime: {
   prefs: {
     lang: DEFAULT_PREFS.lang,
     themeMode: DEFAULT_PREFS.themeMode,
+    boxSelectionMode: DEFAULT_PREFS.boxSelectionMode,
+    inputDevice: DEFAULT_PREFS.inputDevice,
     exportOpts: { ...DEFAULT_PREFS.exportOpts },
     quickOpts: { ...DEFAULT_PREFS.quickOpts },
   },
   lastShapeOther: 'arrow',
   isBusy: false,
+  drawAssistAccOpen: false,
   accOpen: false,
   expAccOpen: false,
+  penPaletteOpen: false,
   bgPaletteOpen: false,
   lastCanvasBg: null,
   primarySelIconSig: '',
@@ -354,7 +475,7 @@ function openFilePickerForFastLoad(): void {
     await runDirectFileLoadWithApi(runtime.api, file, {
       lang: runtime.prefs.lang,
       showToast,
-      defaultPink: runtime.prefs.quickOpts.defaultPink,
+      defaultPenColor: runtime.prefs.quickOpts.defaultPenColor,
     });
   });
   document.body?.append(input);
@@ -855,6 +976,36 @@ export async function applyCanvasBackground(hex: string): Promise<boolean> {
   return true;
 }
 
+export function getCurrentPenColor(): string {
+  return normalizeHexColor(runtime.prefs.quickOpts.defaultPenColor, DEFAULT_PEN_COLOR);
+}
+
+export async function applyPenColor(hex: string): Promise<boolean> {
+  if (runtime.isBusy) return false;
+  const normalized = normalizeHexColor(hex, DEFAULT_PEN_COLOR);
+  runtime.prefs.quickOpts.defaultPenColor = normalized;
+  savePrefs(runtime.prefs);
+
+  if (runtime.api) {
+    const res = await applyPenColorWithApi(runtime.api, normalized, {
+      lang: runtime.prefs.lang,
+      showToast,
+    });
+    return res.ok;
+  }
+
+  if (typeof localStorage !== 'undefined') {
+    silently(() => {
+      const raw = localStorage.getItem(LS_STATE_KEY);
+      const st = raw ? JSON.parse(raw) : {};
+      st.currentItemStrokeColor = normalized;
+      localStorage.setItem(LS_STATE_KEY, JSON.stringify(st));
+    });
+  }
+  showToast(getMessages(runtime.prefs.lang).toastPenColorChanged);
+  return true;
+}
+
 export async function activateLassoTool(): Promise<boolean> {
   if (runtime.api) {
     runtime.api.setActiveTool({ type: 'lasso' });
@@ -872,13 +1023,131 @@ export async function activateLassoTool(): Promise<boolean> {
   return false;
 }
 
-/* ================= Extra Tools Menu Injection (T3 Row + Quick Settings) ================= */
+/* ================= Extra Tools Menu Injection (T3 Row + Drawing Assist + Quick Settings) ================= */
+function getDrawAssistValue(key: (typeof DRAW_ASSIST_DEFS)[number]['key']): boolean {
+  const st = silently(() => runtime.api?.getAppState());
+  if (!st) {
+    return key === 'arrowBinding' || key === 'midpointSnapping';
+  }
+  if (key === 'objectsSnapMode') return Boolean(st.objectsSnapModeEnabled);
+  if (key === 'gridMode') return Boolean(st.gridModeEnabled);
+  if (key === 'arrowBinding') return st.bindingPreference !== 'disabled';
+  return Boolean(st.isMidpointSnappingEnabled);
+}
+
+function toggleDrawAssistOption(key: (typeof DRAW_ASSIST_DEFS)[number]['key']): boolean {
+  const next = !getDrawAssistValue(key);
+  if (runtime.api) {
+    if (key === 'objectsSnapMode') {
+      runtime.api.updateScene({
+        appState: { objectsSnapModeEnabled: next, gridModeEnabled: false },
+        captureUpdate: CaptureUpdateAction.EVENTUALLY,
+      });
+    } else if (key === 'gridMode') {
+      runtime.api.updateScene({
+        appState: { gridModeEnabled: next, objectsSnapModeEnabled: false },
+        captureUpdate: CaptureUpdateAction.EVENTUALLY,
+      });
+    } else if (key === 'arrowBinding') {
+      runtime.api.updateScene({
+        appState: {
+          bindingPreference: next ? 'enabled' : 'disabled',
+          isBindingEnabled: next,
+        },
+        captureUpdate: CaptureUpdateAction.NEVER,
+      });
+    } else {
+      runtime.api.updateScene({
+        appState: { isMidpointSnappingEnabled: next },
+        captureUpdate: CaptureUpdateAction.NEVER,
+      });
+    }
+  }
+  return next;
+}
+
 function buildQuickOptionsAccordion(): HTMLElement {
   const t = getMessages(runtime.prefs.lang);
-  const root = el('div', { class: 'exq-extra-options-root' + (runtime.accOpen ? ' exq-acc-open' : '') });
+  const root = el('div', { class: 'exq-extra-options-root' });
   root.addEventListener('click', (e) => e.stopPropagation());
 
   const sep = el('div', { class: 'exq-extra-sep', 'aria-hidden': 'true' });
+
+  /* --- 1. Drawing Assist Accordion (default collapsed) --- */
+  const assistWrap = el('div', {
+    class: 'exq-acc-section' + (runtime.drawAssistAccOpen ? ' exq-acc-open' : ''),
+    'data-exq-draw-assist': '1',
+  });
+  const assistChev = el('span', { class: 'exq-acc-chev' }, svgIcon('caret', 12, '0 0 12 12', 1.8));
+  const assistBtn = el(
+    'button',
+    {
+      type: 'button',
+      class: 'exq-acc-flat-btn',
+      'data-exq-assist-toggle': '1',
+      'aria-expanded': String(runtime.drawAssistAccOpen),
+    },
+    svgIcon('drawAssist', 14),
+    el('span', null, t.drawAssist),
+    assistChev,
+  );
+  const assistNest = el('div', { class: 'exq-acc-nest' });
+  const assistSwitchMap = new Map<(typeof DRAW_ASSIST_DEFS)[number]['key'], HTMLButtonElement>();
+
+  const refreshAssist = () => {
+    assistWrap.classList.toggle('exq-acc-open', runtime.drawAssistAccOpen);
+    assistBtn.setAttribute('aria-expanded', String(runtime.drawAssistAccOpen));
+    for (const [key, sw] of assistSwitchMap) {
+      const on = getDrawAssistValue(key);
+      sw.classList.toggle('exq-on', on);
+      sw.setAttribute('aria-pressed', String(on));
+    }
+  };
+
+  assistBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    runtime.drawAssistAccOpen = !runtime.drawAssistAccOpen;
+    refreshAssist();
+  });
+
+  for (const def of DRAW_ASSIST_DEFS) {
+    const label = t[def.msgKey];
+    const sw = el('button', {
+      type: 'button',
+      class: 'exq-switch',
+      'data-exq-assist-opt': def.key,
+      'aria-label': label,
+    });
+    const rightGroup = el(
+      'span',
+      { class: 'exq-opt-right' },
+      def.shortcut ? el('span', { class: 'exq-opt-shortcut', 'aria-hidden': 'true' }, def.shortcut) : null,
+      sw,
+    );
+    const row = el(
+      'div',
+      { class: 'exq-opt-row', role: 'menuitemcheckbox' },
+      el('span', { class: 'exq-opt-label' }, label),
+      rightGroup,
+    );
+    row.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const nextVal = toggleDrawAssistOption(def.key);
+      refreshAssist();
+      showToast(`${label}: ${nextVal ? 'ON' : 'OFF'}`);
+    });
+    assistSwitchMap.set(def.key, sw);
+    assistNest.append(row);
+  }
+  assistWrap.append(assistBtn, assistNest);
+
+  /* --- 2. Quick Settings Accordion (default collapsed) --- */
+  const quickWrap = el('div', {
+    class: 'exq-acc-section' + (runtime.accOpen ? ' exq-acc-open' : ''),
+    'data-exq-quick-settings': '1',
+  });
   const chev = el('span', { class: 'exq-acc-chev' }, svgIcon('caret', 12, '0 0 12 12', 1.8));
   const accBtn = el(
     'button',
@@ -896,18 +1165,29 @@ function buildQuickOptionsAccordion(): HTMLElement {
   const nest = el('div', { class: 'exq-acc-nest' });
   const switchMap = new Map<string, HTMLButtonElement>();
 
+  const penSwatch = el('span', { class: 'exq-bg-swatch', 'aria-hidden': 'true' });
+  const penPalette = el('div', { class: 'exq-bg-palette' });
+  const penChipMap = new Map<string, HTMLButtonElement>();
+
   const bgSwatch = el('span', { class: 'exq-bg-swatch', 'aria-hidden': 'true' });
   const bgPalette = el('div', { class: 'exq-bg-palette' });
   const bgChipMap = new Map<string, HTMLButtonElement>();
 
-  const refresh = () => {
-    root.classList.toggle('exq-acc-open', runtime.accOpen);
+  const refreshQuick = () => {
+    quickWrap.classList.toggle('exq-acc-open', runtime.accOpen);
     accBtn.setAttribute('aria-expanded', String(runtime.accOpen));
     for (const [key, sw] of switchMap) {
-      const on = !!runtime.prefs.quickOpts[key as keyof typeof runtime.prefs.quickOpts];
+      const on = !!runtime.prefs.quickOpts[key as 'autoResetOnOpen' | 'textAutoResize' | 'fastLoadSave'];
       sw.classList.toggle('exq-on', on);
       sw.setAttribute('aria-pressed', String(on));
     }
+    const curPen = getCurrentPenColor();
+    penSwatch.style.background = curPen;
+    penPalette.classList.toggle('exq-open', runtime.penPaletteOpen);
+    for (const [hex, chip] of penChipMap) {
+      chip.classList.toggle('exq-active', curPen === hex);
+    }
+
     const curBg = getCurrentCanvasBg();
     bgSwatch.style.background = curBg;
     bgPalette.classList.toggle('exq-open', runtime.bgPaletteOpen);
@@ -920,17 +1200,12 @@ function buildQuickOptionsAccordion(): HTMLElement {
     e.preventDefault();
     e.stopPropagation();
     runtime.accOpen = !runtime.accOpen;
-    refresh();
+    refreshQuick();
   });
 
   for (const def of QUICK_OPT_DEFS) {
     const label = t[def.msgKey];
-    const labelNode = el(
-      'span',
-      { class: 'exq-opt-label' },
-      def.pinkDot ? el('span', { class: 'exq-pink-dot', 'aria-hidden': 'true' }) : null,
-      label,
-    );
+    const labelNode = el('span', { class: 'exq-opt-label' }, label);
     const sw = el('button', {
       type: 'button',
       class: 'exq-switch',
@@ -943,17 +1218,47 @@ function buildQuickOptionsAccordion(): HTMLElement {
       e.stopPropagation();
       const nextVal = !runtime.prefs.quickOpts[def.key];
       runtime.prefs.quickOpts[def.key] = nextVal;
-      if (def.key === 'defaultPink' && nextVal && runtime.api) {
-        runtime.api.updateScene({
-          appState: { currentItemStrokeColor: DEFAULT_PINK },
-        });
-      }
       savePrefs(runtime.prefs);
-      refresh();
+      refreshQuick();
       showToast(`${label}: ${nextVal ? 'ON' : 'OFF'}`);
     });
     switchMap.set(def.key, sw);
     nest.append(row);
+  }
+
+  // Single-row Pen Color control (default pink #c2255c)
+  const penRow = el(
+    'button',
+    { type: 'button', class: 'exq-bg-row', 'data-exq-pen-toggle': '1' },
+    el('span', null, t.penColor),
+    penSwatch,
+  );
+  penRow.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    runtime.penPaletteOpen = !runtime.penPaletteOpen;
+    if (runtime.penPaletteOpen) runtime.bgPaletteOpen = false;
+    refreshQuick();
+  });
+
+  for (const hex of PEN_COLOR_SWATCHES) {
+    const chip = el('button', {
+      type: 'button',
+      class: 'exq-bg-chip',
+      'data-exq-pen-color': hex,
+      title: hex,
+      'aria-label': `${t.penColorLabel} ${hex}`,
+    });
+    chip.style.background = hex;
+    chip.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      runtime.penPaletteOpen = false;
+      await applyPenColor(hex);
+      refreshQuick();
+    });
+    penChipMap.set(hex, chip);
+    penPalette.append(chip);
   }
 
   // Single-row Canvas Background control
@@ -967,7 +1272,8 @@ function buildQuickOptionsAccordion(): HTMLElement {
     e.preventDefault();
     e.stopPropagation();
     runtime.bgPaletteOpen = !runtime.bgPaletteOpen;
-    refresh();
+    if (runtime.bgPaletteOpen) runtime.penPaletteOpen = false;
+    refreshQuick();
   });
 
   for (const hex of CANVAS_BG_SWATCHES) {
@@ -984,7 +1290,7 @@ function buildQuickOptionsAccordion(): HTMLElement {
       e.stopPropagation();
       runtime.bgPaletteOpen = false;
       await applyCanvasBackground(hex);
-      refresh();
+      refreshQuick();
     });
     bgChipMap.set(hex, chip);
     bgPalette.append(chip);
@@ -992,12 +1298,16 @@ function buildQuickOptionsAccordion(): HTMLElement {
 
   nest.append(
     el('div', { class: 'exq-extra-sep', 'aria-hidden': 'true' }),
+    penRow,
+    penPalette,
     bgRow,
     bgPalette,
   );
+  quickWrap.append(accBtn, nest);
 
-  refresh();
-  root.append(sep, accBtn, nest);
+  refreshAssist();
+  refreshQuick();
+  root.append(sep, assistWrap, quickWrap);
   return root;
 }
 
@@ -1073,7 +1383,7 @@ export function syncExtraToolsMenu(root: ParentNode = document): boolean {
   return true;
 }
 
-/* ================= Context Menu Cleanup & CM-1 Layer Actions ================= */
+/* ================= Context Menu Cleanup & Rich UI (Design 1) ================= */
 const CTX_HIDDEN_TESTIDS = new Set([
   'wrapSelectionInFrame',
   'copyAsPng',
@@ -1095,8 +1405,50 @@ const CTX_HIDDEN_TESTIDS = new Set([
   'stats',
 ]);
 
+const CTX_QUICK_BAR_ITEMS = [
+  { testId: 'cut', icon: 'cut', msgKey: 'ctxCut', shortcut: 'Ctrl+X', danger: false },
+  { testId: 'copy', icon: 'copy', msgKey: 'ctxCopy', shortcut: 'Ctrl+C', danger: false },
+  { testId: 'paste', icon: 'paste', msgKey: 'ctxPaste', shortcut: 'Ctrl+V', danger: false },
+  { testId: 'duplicateSelection', icon: 'dup', msgKey: 'ctxDuplicate', shortcut: 'Ctrl+D', danger: false },
+  { testId: 'deleteSelectedElements', icon: 'reset', msgKey: 'ctxDelete', shortcut: 'Delete', danger: true },
+] as const;
+
+const CTX_LAYER_BAR_ITEMS = [
+  { testId: 'sendToBack', zIdx: 0, icon: 'toBack', msgKey: 'ctxSendToBack', shortcut: 'Ctrl+Shift+[' },
+  { testId: 'sendBackward', zIdx: 1, icon: 'backward', msgKey: 'ctxSendBackward', shortcut: 'Ctrl+[' },
+  { testId: 'bringForward', zIdx: 2, icon: 'forward', msgKey: 'ctxBringForward', shortcut: 'Ctrl+]' },
+  { testId: 'bringToFront', zIdx: 3, icon: 'toFront', msgKey: 'ctxBringToFront', shortcut: 'Ctrl+Shift+]' },
+] as const;
+
+const CTX_ITEM_ICON_MAP: Record<string, string> = {
+  cut: 'cut',
+  copy: 'copy',
+  paste: 'paste',
+  duplicateSelection: 'dup',
+  deleteSelectedElements: 'reset',
+  cropEditor: 'crop',
+  flipHorizontal: 'flipH',
+  flipVertical: 'flipV',
+  hyperlink: 'link',
+  copyElementLink: 'copyLink',
+  toggleElementLock: 'lock',
+  unlockAllElements: 'unlock',
+  selectAll: 'selectAll',
+  group: 'group',
+  ungroup: 'ungroup',
+  toggleWrap: 'wrap',
+  autoResize: 'wrap',
+  unbindText: 'wrap',
+  bindText: 'wrap',
+  toggleLinearEditor: 'editLine',
+  togglePolygon: 'editLine',
+  selectAllElementsInFrame: 'frame',
+  removeAllElementsFromFrame: 'frameRemove',
+};
+
 function isContextItemHidden(node: Element): boolean {
   if (node.tagName === 'HR') return node.classList.contains('exq-ctx-hr-hidden');
+  if (node.classList.contains('exq-ctx-proxied-hidden')) return true;
   const tid = node.getAttribute('data-testid');
   if (tid && CTX_HIDDEN_TESTIDS.has(tid)) return true;
   if (typeof getComputedStyle === 'function') {
@@ -1105,21 +1457,104 @@ function isContextItemHidden(node: Element): boolean {
   return false;
 }
 
-function makeContextLayerItem(label: string, shortcut: string, zIndexButtonIdx: number, testId: string): HTMLLIElement {
-  const btn = el(
-    'button',
-    { type: 'button', class: 'context-menu-item' },
-    el('div', { class: 'context-menu-item__label' }, label),
-    el('kbd', { class: 'context-menu-item__shortcut' }, shortcut),
+function buildContextQuickBar(ul: Element, t: ReturnType<typeof getMessages>): HTMLLIElement {
+  const bar = el('div', { class: 'exq-ctx-quick-bar', role: 'group' });
+
+  for (const def of CTX_QUICK_BAR_ITEMS) {
+    const nativeLi = ul.querySelector<HTMLElement>(`li[data-testid="${def.testId}"]`);
+    const nativeBtn = nativeLi?.querySelector<HTMLButtonElement>('button') ?? null;
+    if (nativeLi) {
+      nativeLi.classList.add('exq-ctx-proxied-hidden');
+    }
+
+    const label = t[def.msgKey];
+    const title = `${label} (${def.shortcut})`;
+    const btn = el(
+      'button',
+      {
+        type: 'button',
+        class: 'exq-ctx-quick-btn' + (def.danger ? ' exq-ctx-quick-btn--danger' : ''),
+        'data-exq-ctx-quick': def.testId,
+        title,
+        'aria-label': title,
+      },
+      svgIcon(def.icon, 15, '0 0 24 24', 1.9),
+      el('span', { class: 'exq-ctx-quick-label' }, label),
+    );
+    if (!nativeBtn) {
+      btn.disabled = true;
+    } else {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        nativeBtn.click();
+      });
+    }
+    bar.append(btn);
+  }
+
+  return el('li', { class: 'exq-ctx-widget-li', 'data-exq-ctx-quick-bar': '1' }, bar);
+}
+
+function buildContextLayerBar(
+  ul: Element,
+  root: ParentNode,
+  t: ReturnType<typeof getMessages>,
+): HTMLLIElement | null {
+  const nativeMap = new Map<string, HTMLButtonElement | null>();
+  let hasAnyNative = false;
+  for (const def of CTX_LAYER_BAR_ITEMS) {
+    const nativeLi = ul.querySelector<HTMLElement>(`li[data-testid="${def.testId}"]`);
+    const nativeBtn = nativeLi?.querySelector<HTMLButtonElement>('button') ?? null;
+    if (nativeLi) {
+      nativeLi.classList.add('exq-ctx-proxied-hidden');
+      if (nativeBtn) hasAnyNative = true;
+    }
+    nativeMap.set(def.testId, nativeBtn);
+  }
+
+  const zBtns = root.querySelectorAll<HTMLElement>('.zIndexButton');
+  if (!hasAnyNative && zBtns.length < 4) {
+    return null;
+  }
+
+  const group = el('div', { class: 'exq-ctx-layer-btns', role: 'group', 'aria-label': t.ctxLayer });
+  for (const def of CTX_LAYER_BAR_ITEMS) {
+    const label = t[def.msgKey];
+    const title = `${label} (${def.shortcut})`;
+    const btn = el(
+      'button',
+      {
+        type: 'button',
+        class: 'exq-ctx-layer-btn',
+        'data-exq-ctx-layer': def.testId,
+        title,
+        'aria-label': title,
+      },
+      svgIcon(def.icon, 14, '0 0 24 24', 2),
+    );
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const nativeBtn = nativeMap.get(def.testId);
+      if (nativeBtn) {
+        nativeBtn.click();
+      } else {
+        const liveZBtns = document.querySelectorAll<HTMLElement>('.zIndexButton');
+        liveZBtns[def.zIdx]?.click();
+        sendEscape();
+      }
+    });
+    group.append(btn);
+  }
+
+  const row = el(
+    'div',
+    { class: 'exq-ctx-layer-bar' },
+    el('span', { class: 'exq-ctx-layer-title' }, t.ctxLayer),
+    group,
   );
-  btn.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const zBtns = document.querySelectorAll<HTMLElement>('.zIndexButton');
-    zBtns[zIndexButtonIdx]?.click();
-    sendEscape();
-  });
-  return el('li', { 'data-testid': testId, class: 'exq-ctx-layer-item' }, btn);
+  return el('li', { class: 'exq-ctx-widget-li', 'data-exq-ctx-layer-bar': '1' }, row);
 }
 
 export function syncContextMenu(root: ParentNode = document): boolean {
@@ -1127,32 +1562,45 @@ export function syncContextMenu(root: ParentNode = document): boolean {
   if (!ul || contextMenuProcessed.has(ul)) return false;
 
   const t = getMessages(runtime.prefs.lang);
-  const isSelectedMenu = !!(
+  ul.classList.add('exq-ctx-rich');
+
+  const isEditableSelection = !!(
     ul.querySelector('li[data-testid="cut"]') || ul.querySelector('li[data-testid="deleteSelectedElements"]')
   );
-  if (isSelectedMenu) {
-    const hasFront = !!ul.querySelector('li[data-testid="bringToFront"]');
-    const hasBack = !!ul.querySelector('li[data-testid="sendToBack"]');
-    const zBtns = root.querySelectorAll('.zIndexButton');
-    if ((!hasFront || !hasBack) && zBtns.length >= 4) {
-      const frag = document.createDocumentFragment();
-      frag.append(el('hr', { class: 'context-menu-item-separator' }));
-      if (!hasFront) frag.append(makeContextLayerItem(t.ctxBringToFront, 'Ctrl+Shift+]', 3, 'exq-bringToFront'));
-      if (!hasBack) frag.append(makeContextLayerItem(t.ctxSendToBack, 'Ctrl+Shift+[', 0, 'exq-sendToBack'));
-      frag.append(el('hr', { class: 'context-menu-item-separator' }));
 
-      const anchor =
-        ul.querySelector('li[data-testid="flipVertical"]') ||
-        ul.querySelector('li[data-testid="flipHorizontal"]') ||
-        ul.querySelector('li[data-testid="duplicateSelection"]');
-      if (anchor && anchor.getAttribute('data-testid') === 'duplicateSelection') {
-        ul.insertBefore(frag, anchor);
-      } else if (anchor && anchor.nextSibling) {
-        ul.insertBefore(frag, anchor.nextSibling);
-      } else {
-        ul.append(frag);
-      }
+  if (isEditableSelection) {
+    const topFrag = document.createDocumentFragment();
+    topFrag.append(buildContextQuickBar(ul, t));
+    topFrag.append(el('hr', { class: 'context-menu-item-separator' }));
+
+    const layerLi = buildContextLayerBar(ul, root, t);
+    if (layerLi) {
+      topFrag.append(layerLi);
+      topFrag.append(el('hr', { class: 'context-menu-item-separator' }));
     }
+
+    ul.insertBefore(topFrag, ul.firstChild);
+  }
+
+  // Decorate remaining visible native items with unified line icons
+  for (const child of Array.from(ul.children)) {
+    if (child.tagName !== 'LI' || child.classList.contains('exq-ctx-widget-li')) continue;
+    if (isContextItemHidden(child)) continue;
+
+    const btn = child.querySelector<HTMLButtonElement>(':scope > button.context-menu-item');
+    if (!btn || btn.querySelector('.exq-ctx-item-icon')) continue;
+
+    const tid = child.getAttribute('data-testid') || '';
+    let iconName = CTX_ITEM_ICON_MAP[tid];
+    if (tid === 'toggleElementLock' && !isEditableSelection) {
+      iconName = 'unlock';
+    }
+    const iconSlot = el(
+      'span',
+      { class: 'exq-ctx-item-icon', 'aria-hidden': 'true' },
+      iconName ? svgIcon(iconName, 14, '0 0 24 24', 1.9) : null,
+    );
+    btn.insertBefore(iconSlot, btn.firstChild);
   }
 
   const children = Array.from(ul.children);

@@ -16,10 +16,12 @@ import { getMessages } from '../i18n/messages';
 import {
   cancelPendingScenePersist,
   clearIndexedDbFiles,
+  DEFAULT_PEN_COLOR,
   DEFAULT_PINK,
   LS_ELEMENTS_KEY,
   LS_STATE_KEY,
   normalizeFormat,
+  normalizeHexColor,
   normalizeScale,
   savePrefs,
   silently,
@@ -439,23 +441,21 @@ export async function runInstantResetWithApi(
   api.resetScene();
   silently(() => api.history?.clear());
 
-  let pinkApplied = false;
-  if (prefs.quickOpts.defaultPink) {
-    api.updateScene({
-      appState: {
-        currentItemStrokeColor: DEFAULT_PINK,
-      },
-      captureUpdate: CaptureUpdateAction.NEVER,
-    });
-    pinkApplied = true;
-  }
+  const penColor = normalizeHexColor(prefs.quickOpts.defaultPenColor, DEFAULT_PEN_COLOR);
+  api.updateScene({
+    appState: {
+      currentItemStrokeColor: penColor,
+    },
+    captureUpdate: CaptureUpdateAction.NEVER,
+  });
+  const pinkApplied = penColor === DEFAULT_PINK;
 
   if (storage) {
     silently(() => storage.setItem(LS_ELEMENTS_KEY, '[]'));
     silently(() => {
       const raw = storage.getItem(LS_STATE_KEY);
       const st = raw ? JSON.parse(raw) : {};
-      if (pinkApplied) st.currentItemStrokeColor = DEFAULT_PINK;
+      st.currentItemStrokeColor = penColor;
       storage.setItem(LS_STATE_KEY, JSON.stringify(st));
     });
   }
@@ -465,6 +465,44 @@ export async function runInstantResetWithApi(
 
   showToast?.(getMessages(prefs.lang).toastResetDone);
   return { ok: true, pinkApplied };
+}
+
+export async function applyPenColorWithApi(
+  api: ExcalidrawImperativeAPI | null,
+  hex: string,
+  {
+    lang = 'en',
+    showToast,
+    storage = typeof localStorage !== 'undefined' ? localStorage : null,
+  }: {
+    lang?: AppLang;
+    showToast?: (msg: string) => void;
+    storage?: Storage | null;
+  } = {},
+): Promise<{ ok: boolean; color: string }> {
+  const normalized = normalizeHexColor(hex, DEFAULT_PEN_COLOR);
+  if (!api) {
+    return { ok: false, color: normalized };
+  }
+
+  api.updateScene({
+    appState: {
+      currentItemStrokeColor: normalized,
+    },
+    captureUpdate: CaptureUpdateAction.NEVER,
+  });
+
+  if (storage) {
+    silently(() => {
+      const raw = storage.getItem(LS_STATE_KEY);
+      const st = raw ? JSON.parse(raw) : {};
+      st.currentItemStrokeColor = normalized;
+      storage.setItem(LS_STATE_KEY, JSON.stringify(st));
+    });
+  }
+
+  showToast?.(getMessages(lang).toastPenColorChanged);
+  return { ok: true, color: normalized };
 }
 
 export async function applyCanvasBackgroundWithApi(
@@ -533,11 +571,11 @@ export async function runDirectFileLoadWithApi(
   {
     lang = 'en',
     showToast,
-    defaultPink = false,
+    defaultPenColor,
   }: {
     lang?: AppLang;
     showToast?: (msg: string) => void;
-    defaultPink?: boolean;
+    defaultPenColor?: string;
   } = {},
 ): Promise<boolean> {
   if (!api) return false;
@@ -553,7 +591,7 @@ export async function runDirectFileLoadWithApi(
     const nextAppState = {
       ...currentAppState,
       ...loaded.appState,
-      ...(defaultPink ? { currentItemStrokeColor: DEFAULT_PINK } : {}),
+      ...(defaultPenColor ? { currentItemStrokeColor: normalizeHexColor(defaultPenColor, DEFAULT_PEN_COLOR) } : {}),
     };
     api.updateScene({
       elements: loaded.elements,

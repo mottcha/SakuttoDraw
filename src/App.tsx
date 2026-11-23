@@ -4,8 +4,8 @@ import type { AppState, BinaryFiles, ExcalidrawImperativeAPI } from '@excalidraw
 import type { OrderedExcalidrawElement } from '@excalidraw/excalidraw/element/types';
 import '@excalidraw/excalidraw/index.css';
 import './styles/sakutto.css';
-import type { AppLang, ThemeMode } from './types/annotator';
-import { SakuttoMainMenu } from './components/SakuttoMainMenu';
+import type { AppLang, BoxSelectionPref, InputDevicePref, ThemeMode } from './types/annotator';
+import { SakuttoMainMenu, type PreferencesLiveState } from './components/SakuttoMainMenu';
 import {
   attachExcalidrawAPI,
   bootQuickAnnotator,
@@ -16,6 +16,8 @@ import {
 import {
   cancelPendingScenePersist,
   loadInitialSceneData,
+  normalizeBoxSelectionMode,
+  normalizeInputDevice,
   savePrefs,
   scheduleScenePersist,
 } from './services/storageBridge';
@@ -32,12 +34,20 @@ export function App() {
     return {
       lang: runtime.prefs.lang,
       themeMode: runtime.prefs.themeMode,
+      boxSelectionMode: runtime.prefs.boxSelectionMode,
+      inputDevice: runtime.prefs.inputDevice,
       initialDataPromise: loadInitialSceneData(),
     };
   }, []);
 
   const [lang, setLang] = useState<AppLang>(initialBootstrap.lang);
   const [themeMode, setThemeMode] = useState<ThemeMode>(initialBootstrap.themeMode);
+  const [prefState, setPrefState] = useState<PreferencesLiveState>(() => ({
+    boxSelectionMode: initialBootstrap.boxSelectionMode,
+    inputDevice: initialBootstrap.inputDevice,
+    zenModeEnabled: false,
+    viewModeEnabled: false,
+  }));
   const [systemDark, setSystemDark] = useState<boolean>(() =>
     typeof window !== 'undefined' && typeof window.matchMedia === 'function'
       ? window.matchMedia('(prefers-color-scheme: dark)').matches
@@ -77,6 +87,28 @@ export function App() {
 
   const handleChange = useCallback(
     (elements: readonly OrderedExcalidrawElement[], appState: AppState, files: BinaryFiles) => {
+      const nextBox: BoxSelectionPref = normalizeBoxSelectionMode(appState.boxSelectionMode);
+      const nextDevice: InputDevicePref = normalizeInputDevice(appState.inputDevice);
+      const nextZen = Boolean(appState.zenModeEnabled);
+      const nextView = Boolean(appState.viewModeEnabled);
+
+      setPrefState((prev) => {
+        if (
+          prev.boxSelectionMode === nextBox &&
+          prev.inputDevice === nextDevice &&
+          prev.zenModeEnabled === nextZen &&
+          prev.viewModeEnabled === nextView
+        ) {
+          return prev;
+        }
+        return {
+          boxSelectionMode: nextBox,
+          inputDevice: nextDevice,
+          zenModeEnabled: nextZen,
+          viewModeEnabled: nextView,
+        };
+      });
+
       scheduleScenePersist(elements, appState as unknown as Record<string, unknown>, files);
     },
     [],
@@ -93,7 +125,7 @@ export function App() {
         onExcalidrawAPI={handleApi}
         onChange={handleChange}
       >
-        <SakuttoMainMenu lang={lang} themeMode={themeMode} />
+        <SakuttoMainMenu lang={lang} themeMode={themeMode} prefState={prefState} />
       </Excalidraw>
     </div>
   );
