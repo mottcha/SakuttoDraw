@@ -277,9 +277,11 @@ export async function runInstantExportWithApi(
   opts: ExportOpts,
   {
     lang = 'en',
+    preferJpFont,
     showToast,
   }: {
     lang?: AppLang;
+    preferJpFont?: boolean;
     showToast?: (msg: string) => void;
   } = {},
 ): Promise<{
@@ -371,6 +373,8 @@ export async function runInstantExportWithApi(
           skipInliningFonts: true,
         },
       });
+      const svgLang = preferJpFont ? 'ja-JP' : lang;
+      svgNode.setAttribute('lang', svgLang);
       await inlinePreSplitFontsIntoSvg(svgNode, elements);
       const svgText = svgNode.outerHTML;
       const blob = new Blob([svgText], { type: MIME_TYPES.svg });

@@ -764,6 +764,7 @@ The following fonts are self-hosted in this distribution:
 
 - Excalifont (fonts/Excalifont/) — Copyright (c) 2024 Excalidraw — SIL Open Font License 1.1
 - Xiaolai / 小赖字体 (fonts/Xiaolai/) — SIL Open Font License 1.1
+- KosefontP-JP / SetoFont (fonts/SetoJP/) — Copyright (c) 2003-2014 Nozomi Seto (瀬戸のぞみ), Copyright (c) 2020-2024 LXGW — SIL Open Font License 1.1
 - Virgil (fonts/Virgil/) — Copyright (c) Excalidraw — SIL Open Font License 1.1
 - Assistant (fonts/Assistant/) — Copyright 2016 The Assistant Project Authors — SIL Open Font License 1.1
 - Cascadia Code (fonts/Cascadia/) — Copyright (c) Microsoft Corporation — SIL Open Font License 1.1

@@ -17,6 +17,7 @@ import {
   normalizeFormat,
   normalizeScale,
   resolveDesktopUIMode,
+  resolvePreferJpFont,
   sakuttoGetFormFactor,
   saveFilesToIndexedDb,
   savePrefs,
@@ -40,7 +41,17 @@ import {
   isLanguageSetCached,
 } from '../annotator/cjkFontManager';
 import {
+  applyJapaneseGlyphOverride,
+  jpFontManifest,
+  parseUnicodeRangeToSet,
+  rangesIntersect,
+  resetJpGlyphOverrideStateForTests,
+  subtractUnicodeRange,
+  XIAOLAI_FALLBACK_FAMILY_ID,
+} from '../annotator/jpGlyphOverride';
+import {
   applyLanguage,
+  applyPreferJpFont,
   attachExcalidrawAPI,
   installTextAutoResizeGuard,
   runtime,
@@ -83,6 +94,7 @@ describe('i18n (en, ja-JP, zh-CN, zh-TW, ko-KR)', () => {
       expect(m.prefBoxSelectionTitle.length).toBeGreaterThan(0);
       expect(m.prefScrollActionTitle.length).toBeGreaterThan(0);
       expect(m.prefScreenModeTitle.length).toBeGreaterThan(0);
+      expect(m.prefPreferJpFont.length).toBeGreaterThan(0);
       expect(m.toastFontDownloaded('Test').length).toBeGreaterThan(0);
     }
   });
@@ -326,22 +338,28 @@ describe('cjkFontManager (Japanese / Korean / Chinese manual download & full-key
     localStorage.clear();
   });
 
-  it('classifies Xiaolai chunks into non-empty Japanese, Korean, and Chinese sets', () => {
-    expect(cjkFontManifest.sets.ja.files.length).toBeGreaterThan(100);
+  it('classifies SetoJP and Xiaolai chunks into non-empty Japanese, Korean, and Chinese sets', () => {
+    expect(cjkFontManifest.sets.ja.files.length).toBeGreaterThanOrEqual(40);
+    expect(cjkFontManifest.sets.ja.files.every((f) => f.startsWith('fonts/SetoJP/'))).toBe(true);
     expect(cjkFontManifest.sets.ko.files.length).toBeGreaterThan(45);
     expect(cjkFontManifest.sets.zh.files.length).toBeGreaterThan(140);
   });
 
-  it('protects shared Kanji chunks when deleting Chinese while Japanese remains installed', () => {
+  it('protects shared Xiaolai chunks when deleting Chinese while Korean remains installed', () => {
     const allZh = cjkFontManifest.sets.zh.files;
-    const allJaSet = new Set(cjkFontManifest.sets.ja.files);
-    const exclusiveZh = computeExclusiveFilesForDeletion('zh', ['ja', 'zh']);
+    const allKoSet = new Set(cjkFontManifest.sets.ko.files);
+    const exclusiveZh = computeExclusiveFilesForDeletion('zh', ['ko', 'zh']);
 
     expect(exclusiveZh.length).toBeLessThan(allZh.length);
     expect(exclusiveZh.length).toBeGreaterThan(0);
     for (const file of exclusiveZh) {
-      expect(allJaSet.has(file)).toBe(false);
+      expect(allKoSet.has(file)).toBe(false);
     }
+
+    // Deleting Japanese (SetoJP) removes only SetoJP files and never touches Chinese Xiaolai files
+    const exclusiveJa = computeExclusiveFilesForDeletion('ja', ['ja', 'zh']);
+    expect(exclusiveJa.length).toBe(cjkFontManifest.sets.ja.files.length);
+    expect(exclusiveJa.every((f) => f.startsWith('fonts/SetoJP/'))).toBe(true);
   });
 
   it('detects missing middle chunk via cache.keys() and handles download/delete cleanly', async () => {
@@ -701,3 +719,168 @@ describe('quickAnnotator DOM sync, language switcher, and textAutoResize guard r
     expect(loadPrefs(localStorage).stylesPanelMode).toBe('compact');
   });
 });
+
+describe('jpGlyphOverride (SetoJP Japanese glyphs, disjoint unicode-range, and preferJpFont preference)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    resetJpGlyphOverrideStateForTests();
+    runtime.prefs = loadPrefs(localStorage);
+  });
+
+  afterEach(() => {
+    resetJpGlyphOverrideStateForTests();
+  });
+
+  it('resolves preferJpFont default by language (ja-JP ON, others OFF) and honors explicit overrides', () => {
+    expect(resolvePreferJpFont({ lang: 'ja-JP', preferJpFont: null })).toBe(true);
+    expect(resolvePreferJpFont({ lang: 'en', preferJpFont: null })).toBe(false);
+    expect(resolvePreferJpFont({ lang: 'zh-CN', preferJpFont: null })).toBe(false);
+    expect(resolvePreferJpFont({ lang: 'zh-TW', preferJpFont: null })).toBe(false);
+    expect(resolvePreferJpFont({ lang: 'ko-KR', preferJpFont: null })).toBe(false);
+
+    // Explicit overrides win regardless of UI language
+    expect(resolvePreferJpFont({ lang: 'en', preferJpFont: true })).toBe(true);
+    expect(resolvePreferJpFont({ lang: 'ja-JP', preferJpFont: false })).toBe(false);
+
+    // Persists through savePrefs / loadPrefs via applyPreferJpFont
+    applyLanguage('en');
+    expect(resolvePreferJpFont(runtime.prefs)).toBe(false);
+    applyPreferJpFont(true);
+    expect(loadPrefs(localStorage).preferJpFont).toBe(true);
+    expect(resolvePreferJpFont(loadPrefs(localStorage))).toBe(true);
+  });
+
+  it('subtracts excluded codepoints accurately from CSS unicode-range descriptors', () => {
+    const exclude = new Set([0x7f6e, 0x76f4, 0x4e01]); // 置, 直, 丁
+    expect(subtractUnicodeRange('U+4e00-4e03,U+7f6e,U+76f4', exclude)).toBe('U+4e00,U+4e02-4e03');
+    expect(subtractUnicodeRange('U+7f6e,U+76f4', exclude)).toBeNull();
+    expect(subtractUnicodeRange('U+4e60', exclude)).toBe('U+4e60');
+  });
+
+  it('produces strictly disjoint unicode-ranges with zero overlap and restores original Xiaolai on disable', () => {
+    const mockXiaolaiFaces = [
+      {
+        urls: [new URL('http://localhost/fonts/Xiaolai/chunk-mixed.woff2')],
+        fontFace: { family: 'Xiaolai', unicodeRange: 'U+4e60,U+7f6e,U+76f4,U+8bbe' }, // 习, 置, 直, 设
+      },
+      {
+        urls: [new URL('http://localhost/fonts/Xiaolai/chunk-jp-only.woff2')],
+        fontFace: { family: 'Xiaolai', unicodeRange: 'U+3042,U+30a2' }, // あ, ア
+      },
+    ];
+    const mockRegistered = new Map<number, { metadata: { local?: boolean }; fontFaces: unknown[] }>([
+      [XIAOLAI_FALLBACK_FAMILY_ID, { metadata: {}, fontFaces: [...mockXiaolaiFaces] }],
+    ]);
+    const liveFaces = new Set<unknown>(mockXiaolaiFaces.map((f) => f.fontFace));
+    const mockFontFaceSet = {
+      add: vi.fn((f: unknown) => liveFaces.add(f)),
+      delete: vi.fn((f: unknown) => liveFaces.delete(f)),
+      has: vi.fn((f: unknown) => liveFaces.has(f)),
+    } as unknown as FontFaceSet;
+
+    const onRes = applyJapaneseGlyphOverride(true, {
+      registeredFonts: mockRegistered as never,
+      fontFaceSet: mockFontFaceSet,
+      baseUrl: 'http://localhost/',
+    });
+    expect(onRes.applied).toBe(true);
+    expect(onRes.jpFaceCount).toBe(jpFontManifest.chunks.length);
+    // chunk-jp-only was completely removed; chunk-mixed was trimmed to 习(U+4e60) and 设(U+8bbe)
+    expect(onRes.xiaolaiFaceCount).toBe(1);
+
+    const activeFaces = mockRegistered.get(XIAOLAI_FALLBACK_FAMILY_ID)!.fontFaces as Array<{
+      urls: Array<URL | string>;
+      fontFace: { family: string; unicodeRange: string };
+    }>;
+
+    // Verify 置 and 直 match ONLY a SetoJP chunk, never a Xiaolai chunk
+    const matchingOku = activeFaces.filter((f) => matchesUnicodeRange(f.fontFace.unicodeRange, '置'));
+    const matchingChoku = activeFaces.filter((f) => matchesUnicodeRange(f.fontFace.unicodeRange, '直'));
+    expect(matchingOku.length).toBe(1);
+    expect(String(matchingOku[0].urls[0])).toContain('/fonts/SetoJP/');
+    expect(matchingChoku.length).toBe(1);
+    expect(String(matchingChoku[0].urls[0])).toContain('/fonts/SetoJP/');
+
+    // Verify Simplified-Chinese-only 设(U+8BBE) still matches the trimmed Xiaolai chunk
+    const matchingSc = activeFaces.filter((f) => matchesUnicodeRange(f.fontFace.unicodeRange, '设'));
+    expect(matchingSc.length).toBe(1);
+    expect(String(matchingSc[0].urls[0])).toContain('/fonts/Xiaolai/');
+
+    // Verify zero overlap across all active faces
+    const seenCps = new Set<number>();
+    for (const face of activeFaces) {
+      const cps = parseUnicodeRangeToSet(face.fontFace.unicodeRange);
+      for (const cp of cps) {
+        expect(seenCps.has(cp)).toBe(false);
+        seenCps.add(cp);
+      }
+    }
+    expect(rangesIntersect(activeFaces[0].fontFace.unicodeRange, matchingOku[0].fontFace.unicodeRange)).toBe(false);
+
+    // Disable restores exact original snapshot
+    const offRes = applyJapaneseGlyphOverride(false, {
+      registeredFonts: mockRegistered as never,
+      fontFaceSet: mockFontFaceSet,
+      baseUrl: 'http://localhost/',
+    });
+    expect(offRes.applied).toBe(true);
+    expect(offRes.jpFaceCount).toBe(0);
+    expect(offRes.xiaolaiFaceCount).toBe(2);
+    expect(mockRegistered.get(XIAOLAI_FALLBACK_FAMILY_ID)!.fontFaces.length).toBe(2);
+  });
+
+  it('inlines only SetoJP chunks (no duplicate Xiaolai fetch) into exported SVG when JP override is enabled', async () => {
+    const mockRegistered = new Map<number, { metadata: { local?: boolean }; fontFaces: unknown[] }>([
+      [
+        5, // FONT_FAMILY.Excalifont
+        {
+          metadata: {},
+          fontFaces: [
+            {
+              urls: ['http://localhost/fonts/Excalifont/Excalifont-Regular.woff2'],
+              fontFace: { family: 'Excalifont', unicodeRange: 'U+0020-007E' },
+            },
+          ],
+        },
+      ],
+      [
+        XIAOLAI_FALLBACK_FAMILY_ID,
+        {
+          metadata: {},
+          fontFaces: [
+            {
+              urls: ['http://localhost/fonts/Xiaolai/Xiaolai-mixed.woff2'],
+              fontFace: { family: 'Xiaolai', unicodeRange: 'U+4e60,U+7f6e,U+8a2d' }, // 习, 置, 設
+            },
+          ],
+        },
+      ],
+    ]);
+
+    applyJapaneseGlyphOverride(true, {
+      registeredFonts: mockRegistered as never,
+      fontFaceSet: null,
+      baseUrl: 'http://localhost/',
+    });
+
+    const fetchedUrls: string[] = [];
+    const mockFetch = vi.fn(async (url: RequestInfo | URL) => {
+      fetchedUrls.push(String(url));
+      return new Response(new Uint8Array([0x77, 0x4f, 0x46, 0x32]), { status: 200 });
+    });
+
+    const svgNode = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    const elements = [{ id: 't1', type: 'text', fontFamily: 5, text: '設置', originalText: '設置', isDeleted: false }] as never;
+
+    const count = await inlinePreSplitFontsIntoSvg(svgNode, elements, {
+      fetchFn: mockFetch as unknown as typeof fetch,
+      registeredFonts: mockRegistered as never,
+    });
+
+    expect(count).toBeGreaterThanOrEqual(1);
+    expect(fetchedUrls.length).toBe(count);
+    expect(fetchedUrls.every((u) => u.includes('/fonts/SetoJP/'))).toBe(true);
+    expect(fetchedUrls.some((u) => u.includes('/fonts/Xiaolai/'))).toBe(false);
+  });
+});
+

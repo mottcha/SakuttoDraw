@@ -534,8 +534,8 @@ body,
 .exq-pref-fonts {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  padding: 3px 6px 6px;
+  gap: 8px;
+  padding: 4px 6px 6px;
 }
 .exq-font-section-title {
   padding: 2px 2px 0;

@@ -27,6 +27,7 @@ export const DEFAULT_PREFS: Prefs = {
   boxSelectionMode: 'overlap',
   inputDevice: 'trackpad',
   stylesPanelMode: 'auto',
+  preferJpFont: null,
   exportOpts: {
     onlySelected: true,
     background: true,
@@ -51,6 +52,13 @@ export const silently = <T>(fn: () => T): T | undefined => {
     return undefined;
   }
 };
+
+export function resolvePreferJpFont(prefs: Pick<Prefs, 'lang' | 'preferJpFont'>): boolean {
+  if (typeof prefs.preferJpFont === 'boolean') {
+    return prefs.preferJpFont;
+  }
+  return prefs.lang === 'ja-JP';
+}
 
 export function normalizeScale(value: unknown): ExportScale {
   const num = Number(value);
@@ -157,6 +165,7 @@ export function loadPrefs(
     boxSelectionMode: DEFAULT_PREFS.boxSelectionMode,
     inputDevice: DEFAULT_PREFS.inputDevice,
     stylesPanelMode: DEFAULT_PREFS.stylesPanelMode,
+    preferJpFont: DEFAULT_PREFS.preferJpFont,
     exportOpts: { ...DEFAULT_PREFS.exportOpts },
     quickOpts: { ...DEFAULT_PREFS.quickOpts },
   };
@@ -199,6 +208,9 @@ export function loadPrefs(
       }
       if (saved.stylesPanelMode === 'auto' || saved.stylesPanelMode === 'compact' || saved.stylesPanelMode === 'full') {
         base.stylesPanelMode = saved.stylesPanelMode;
+      }
+      if (typeof saved.preferJpFont === 'boolean' || saved.preferJpFont === null) {
+        base.preferJpFont = saved.preferJpFont;
       }
       if (saved.exportOpts && typeof saved.exportOpts === 'object') {
         for (const k of ['onlySelected', 'background', 'darkMode', 'embedScene'] as const) {

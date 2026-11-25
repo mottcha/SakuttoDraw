@@ -23,20 +23,6 @@ function parseUnicodeRange(rangeStr) {
   return cps;
 }
 
-function buildJisCodePointSet() {
-  const td = new TextDecoder('euc-jp');
-  const jisSet = new Set();
-  for (let ku = 1; ku <= 84; ku++) {
-    for (let ten = 1; ten <= 94; ten++) {
-      const ch = td.decode(new Uint8Array([ku + 0xa0, ten + 0xa0]));
-      if (ch && ch !== '\uFFFD' && ch.length === 1) {
-        jisSet.add(ch.codePointAt(0));
-      }
-    }
-  }
-  return jisSet;
-}
-
 export function syncExcalidrawAssets(projectRoot = rootDir) {
   const prodDir = path.join(
     projectRoot,
@@ -54,8 +40,41 @@ export function syncExcalidrawAssets(projectRoot = rootDir) {
     throw new Error(`Excalidraw fonts directory not found: ${srcFontsDir}`);
   }
 
+  const srcSetoJpDir = path.join(projectRoot, 'assets', 'fonts', 'SetoJP');
+  const destSetoJpDir = path.join(destFontsDir, 'SetoJP');
+  const setoJpManifestSrc = path.join(srcSetoJpDir, 'manifest.json');
+
+  if (!fs.existsSync(srcSetoJpDir) || !fs.existsSync(setoJpManifestSrc)) {
+    throw new Error(`SetoJP font assets or manifest not found: ${setoJpManifestSrc}`);
+  }
+
   fs.mkdirSync(path.dirname(destFontsDir), { recursive: true });
   fs.cpSync(srcFontsDir, destFontsDir, { recursive: true, force: true });
+
+  fs.rmSync(destSetoJpDir, { recursive: true, force: true });
+  fs.mkdirSync(destSetoJpDir, { recursive: true });
+  const rawJpManifest = JSON.parse(fs.readFileSync(setoJpManifestSrc, 'utf8'));
+  const jpChunks = Array.isArray(rawJpManifest.chunks) ? rawJpManifest.chunks : [];
+  if (jpChunks.length === 0) {
+    throw new Error(`Unexpected empty SetoJP font manifest: ${setoJpManifestSrc}`);
+  }
+
+  const normalizedJpChunks = [];
+  for (const chunk of jpChunks) {
+    const relPath = String(chunk.file || '').replace(/^\.?\/+/, '');
+    const fileName = path.basename(relPath);
+    const srcFile = path.join(srcSetoJpDir, fileName);
+    if (!fs.existsSync(srcFile)) {
+      throw new Error(`Missing SetoJP font chunk file: ${srcFile}`);
+    }
+    fs.copyFileSync(srcFile, path.join(destSetoJpDir, fileName));
+    const size = fs.statSync(srcFile).size;
+    normalizedJpChunks.push({
+      file: `fonts/SetoJP/${fileName}`,
+      unicodeRange: String(chunk.unicodeRange || ''),
+      bytes: size,
+    });
+  }
 
   // Scan chunk-*.js without relying on minified array variable names (e.g. "Vo")
   const jsFiles = fs
@@ -81,13 +100,21 @@ export function syncExcalidrawAssets(projectRoot = rootDir) {
     throw new Error('Failed to locate Xiaolai font chunk definitions in @excalidraw/excalidraw');
   }
 
-  const jisSet = buildJisCodePointSet();
   const sets = {
     ja: { label: '日本語', files: [], totalBytes: 0 },
     ko: { label: '한국어', files: [], totalBytes: 0 },
     zh: { label: '中文', files: [], totalBytes: 0 },
   };
   const seenFiles = { ja: new Set(), ko: new Set(), zh: new Set() };
+
+  // Japanese offline font pack uses the compact, Japanese-glyph SetoJP chunks
+  for (const chunk of normalizedJpChunks) {
+    if (!seenFiles.ja.has(chunk.file)) {
+      seenFiles.ja.add(chunk.file);
+      sets.ja.files.push(chunk.file);
+      sets.ja.totalBytes += chunk.bytes;
+    }
+  }
 
   const descriptorRe = /\{\s*uri\s*:\s*([A-Za-z_$][\w$]*)\s*,\s*descriptors\s*:\s*\{\s*unicodeRange\s*:\s*"([^"]+)"\s*\}\s*\}/g;
   for (const m of matchedChunkContent.matchAll(descriptorRe)) {
@@ -98,12 +125,6 @@ export function syncExcalidrawAssets(projectRoot = rootDir) {
     const size = fs.statSync(fullPath).size;
     const cps = parseUnicodeRange(m[2]);
 
-    const hasJa = cps.some(
-      (cp) =>
-        jisSet.has(cp) ||
-        (cp >= 0x3040 && cp <= 0x30ff) ||
-        (cp >= 0x3000 && cp <= 0x303f),
-    );
     const hasKo = cps.some(
       (cp) =>
         (cp >= 0xac00 && cp <= 0xd7af) ||
@@ -119,11 +140,6 @@ export function syncExcalidrawAssets(projectRoot = rootDir) {
         (cp >= 0x3000 && cp <= 0x303f),
     );
 
-    if (hasJa && !seenFiles.ja.has(relPath)) {
-      seenFiles.ja.add(relPath);
-      sets.ja.files.push(relPath);
-      sets.ja.totalBytes += size;
-    }
     if (hasKo && !seenFiles.ko.has(relPath)) {
       seenFiles.ko.add(relPath);
       sets.ko.files.push(relPath);
@@ -147,10 +163,25 @@ export function syncExcalidrawAssets(projectRoot = rootDir) {
   const manifestPath = path.join(generatedDir, 'cjkFontManifest.json');
   fs.writeFileSync(manifestPath, JSON.stringify({ sets }, null, 2), 'utf8');
 
-  console.log(
-    `[sync-excalidraw-assets] Synced fonts to public/fonts and generated cjkFontManifest.json (ja=${sets.ja.files.length}, ko=${sets.ko.files.length}, zh=${sets.zh.files.length})`,
+  const jpManifestPath = path.join(generatedDir, 'jpFontManifest.json');
+  fs.writeFileSync(
+    jpManifestPath,
+    JSON.stringify(
+      {
+        source: rawJpManifest.source || 'KosefontP-JP',
+        totalBytes: sets.ja.totalBytes,
+        chunks: normalizedJpChunks,
+      },
+      null,
+      2,
+    ),
+    'utf8',
   );
-  return { sets };
+
+  console.log(
+    `[sync-excalidraw-assets] Synced fonts (incl. SetoJP) to public/fonts and generated manifests (ja=${sets.ja.files.length}, ko=${sets.ko.files.length}, zh=${sets.zh.files.length})`,
+  );
+  return { sets, jpChunks: normalizedJpChunks };
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

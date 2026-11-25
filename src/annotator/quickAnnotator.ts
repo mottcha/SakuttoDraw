@@ -14,6 +14,7 @@ import {
   normalizeHexColor,
   normalizeScale,
   PEN_COLOR_SWATCHES,
+  resolvePreferJpFont,
   savePrefs,
   shouldSkipAutoReset,
   silently,
@@ -28,6 +29,10 @@ import {
   runInstantExportWithApi,
   runInstantResetWithApi,
 } from './apiActions';
+import {
+  applyJapaneseGlyphOverride,
+  refreshSceneHandDrawnTextFonts,
+} from './jpGlyphOverride';
 
 export const SHAPE_OTHER_ITEMS = [
   { id: 'arrow', testId: 'toolbar-arrow', msgKey: 'toolArrow', shortcut: 'A' },
@@ -295,6 +300,7 @@ export const runtime: {
     boxSelectionMode: DEFAULT_PREFS.boxSelectionMode,
     inputDevice: DEFAULT_PREFS.inputDevice,
     stylesPanelMode: DEFAULT_PREFS.stylesPanelMode,
+    preferJpFont: DEFAULT_PREFS.preferJpFont,
     exportOpts: { ...DEFAULT_PREFS.exportOpts },
     quickOpts: { ...DEFAULT_PREFS.quickOpts },
   },
@@ -342,8 +348,17 @@ export function applyLanguage(nextLang: AppLang): void {
   if (typeof document !== 'undefined' && document.documentElement) {
     document.documentElement.lang = nextLang;
   }
+  applyJapaneseGlyphOverride(resolvePreferJpFont(runtime.prefs));
+  void refreshSceneHandDrawnTextFonts(runtime.api);
   runtime.onLangChange?.(nextLang);
   scheduleSync();
+}
+
+export function applyPreferJpFont(enabled: boolean): void {
+  runtime.prefs.preferJpFont = enabled;
+  savePrefs(runtime.prefs);
+  applyJapaneseGlyphOverride(enabled);
+  void refreshSceneHandDrawnTextFonts(runtime.api);
 }
 
 export function showToast(message: string): void {
@@ -1684,6 +1699,7 @@ export async function runInstantExport(
     closeFloatingPopovers(null);
     return await runInstantExportWithApi(runtime.api, mode, runtime.prefs.exportOpts, {
       lang: runtime.prefs.lang,
+      preferJpFont: resolvePreferJpFont(runtime.prefs),
       showToast,
     });
   } finally {

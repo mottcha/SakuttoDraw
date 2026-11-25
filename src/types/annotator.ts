@@ -33,6 +33,7 @@ export interface Prefs {
   boxSelectionMode: BoxSelectionPref;
   inputDevice: InputDevicePref;
   stylesPanelMode: StylesPanelPref;
+  preferJpFont: boolean | null;
   exportOpts: ExportOpts;
   quickOpts: QuickOpts;
 }
@@ -48,6 +49,18 @@ export interface CjkFontSetMeta {
 
 export interface CjkFontManifest {
   sets: Record<CjkLang, CjkFontSetMeta>;
+}
+
+export interface JpFontChunkMeta {
+  file: string;
+  unicodeRange: string;
+  bytes: number;
+}
+
+export interface JpFontManifest {
+  source: string;
+  totalBytes: number;
+  chunks: JpFontChunkMeta[];
 }
 
 export type { ExcalidrawImperativeAPI };

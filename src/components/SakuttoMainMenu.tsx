@@ -18,8 +18,8 @@ import {
   formatBytesToMB,
   isLanguageSetCached,
 } from '../annotator/cjkFontManager';
-import { applyLanguage, runtime, showToast } from '../annotator/quickAnnotator';
-import { savePrefs } from '../services/storageBridge';
+import { applyLanguage, applyPreferJpFont, runtime, showToast } from '../annotator/quickAnnotator';
+import { resolvePreferJpFont, savePrefs } from '../services/storageBridge';
 
 export interface PreferencesLiveState {
   boxSelectionMode: BoxSelectionPref;
@@ -92,7 +92,36 @@ async function toggleLanguageFontCache(cjkLang: CjkLang, uiLang: AppLang): Promi
   }
 }
 
-function PrefIcon({ name }: { name: 'overlap' | 'contain' | 'pan' | 'zoom' | 'zen' | 'view' | 'dl' | 'trash' }) {
+function PrefIcon({
+  name,
+}: {
+  name: 'overlap' | 'contain' | 'pan' | 'zoom' | 'zen' | 'view' | 'kanjiJp' | 'kanjiZh' | 'dl' | 'trash';
+}) {
+  if (name === 'kanjiJp') {
+    return (
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <line x1="6" y1="5.2" x2="18.5" y2="5.2" />
+        <line x1="12.5" y1="2.8" x2="12.5" y2="8.2" />
+        <rect x="9.5" y="8.2" width="8.2" height="8.5" rx="0.8" />
+        <line x1="9.8" y1="11.2" x2="17.4" y2="11.2" />
+        <line x1="9.8" y1="14" x2="17.4" y2="14" />
+        <path d="M5.5 9.2 V20.2 H19.5" strokeWidth="2.1" />
+      </svg>
+    );
+  }
+  if (name === 'kanjiZh') {
+    return (
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <line x1="5.5" y1="5.2" x2="18.5" y2="5.2" />
+        <line x1="12" y1="2.8" x2="12" y2="8.2" />
+        <rect x="7" y="8.2" width="10" height="11.8" rx="0.8" />
+        <line x1="7.2" y1="11.2" x2="16.8" y2="11.2" />
+        <line x1="7.2" y1="14.2" x2="16.8" y2="14.2" />
+        <line x1="7.2" y1="17.1" x2="16.8" y2="17.1" />
+        <line x1="4" y1="20.2" x2="20" y2="20.2" strokeWidth="2.1" />
+      </svg>
+    );
+  }
   if (name === 'overlap') {
     return (
       <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
@@ -424,6 +453,15 @@ function CjkFontCacheSection({ lang }: { lang: AppLang }) {
   }, []);
 
   const t = getMessages(lang);
+  const preferJpActive = resolvePreferJpFont({
+    lang,
+    preferJpFont: runtime.prefs.preferJpFont,
+  });
+
+  const selectPreferJpFont = (enabled: boolean) => {
+    applyPreferJpFont(enabled);
+    setTick((n) => n + 1);
+  };
 
   return (
     <>
@@ -434,53 +472,90 @@ function CjkFontCacheSection({ lang }: { lang: AppLang }) {
         onClick={(e) => e.stopPropagation()}
         onPointerDown={(e) => e.stopPropagation()}
       >
-        <div className="exq-font-section-title">{t.offlineFontsTitle}</div>
-        <div className="exq-font-chip-grid">
-          {CJK_LANG_ORDER.map((cjkLang) => {
-            const meta = cjkFontManifest.sets[cjkLang];
-            const sizeLabel = formatBytesToMB(meta.totalBytes);
-            const status = cjkUiStore.statuses[cjkLang];
-            const label = t.cjkLangName[cjkLang];
-            const actionHint =
-              status === 'downloading'
-                ? `${cjkUiStore.progress[cjkLang]}%`
-                : status === 'installed'
-                  ? t.fontDelete
-                  : sizeLabel;
-            const titleText =
-              status === 'installed'
-                ? `${label} (${sizeLabel}) — ${t.fontDelete}`
-                : `${label} (${sizeLabel}) — ${t.fontDownload}`;
+        <div className="exq-pref-group" data-exq-prefer-jp-group="1">
+          <div className="exq-pref-group-title">{t.prefPreferJpFont}</div>
+          <div className="exq-pref-card-grid" role="radiogroup" aria-label={t.prefPreferJpFont}>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={preferJpActive}
+              className={`exq-pref-card${preferJpActive ? ' exq-active' : ''}`}
+              data-exq-prefer-jp-card="jp"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                selectPreferJpFont(true);
+              }}
+            >
+              <PrefIcon name="kanjiJp" />
+              <span>{t.cjkLangName.ja}</span>
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={!preferJpActive}
+              className={`exq-pref-card${!preferJpActive ? ' exq-active' : ''}`}
+              data-exq-prefer-jp-card="zh"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                selectPreferJpFont(false);
+              }}
+            >
+              <PrefIcon name="kanjiZh" />
+              <span>{t.cjkLangName.zh}</span>
+            </button>
+          </div>
+        </div>
+        <div className="exq-pref-group">
+          <div className="exq-font-section-title">{t.offlineFontsTitle}</div>
+          <div className="exq-font-chip-grid">
+            {CJK_LANG_ORDER.map((cjkLang) => {
+              const meta = cjkFontManifest.sets[cjkLang];
+              const sizeLabel = formatBytesToMB(meta.totalBytes);
+              const status = cjkUiStore.statuses[cjkLang];
+              const label = t.cjkLangName[cjkLang];
+              const actionHint =
+                status === 'downloading'
+                  ? `${cjkUiStore.progress[cjkLang]}%`
+                  : status === 'installed'
+                    ? t.fontDelete
+                    : sizeLabel;
+              const titleText =
+                status === 'installed'
+                  ? `${label} (${sizeLabel}) — ${t.fontDelete}`
+                  : `${label} (${sizeLabel}) — ${t.fontDownload}`;
 
-            return (
-              <button
-                key={cjkLang}
-                type="button"
-                className={`exq-font-chip${status === 'installed' ? ' exq-font-chip--installed' : ''}`}
-                data-exq-cjk-row={cjkLang}
-                data-exq-cjk-btn={cjkLang}
-                data-exq-cjk-state={status}
-                title={titleText}
-                aria-label={titleText}
-                disabled={status === 'downloading'}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  void toggleLanguageFontCache(cjkLang, lang);
-                }}
-              >
-                <span className="exq-font-chip-name">{label}</span>
-                <span className="exq-font-chip-sub">
-                  {status === 'installed' ? (
-                    <PrefIcon name="trash" />
-                  ) : status === 'uninstalled' ? (
-                    <PrefIcon name="dl" />
-                  ) : null}
-                  <span>{actionHint}</span>
-                </span>
-              </button>
-            );
-          })}
+              return (
+                <button
+                  key={cjkLang}
+                  type="button"
+                  className={`exq-font-chip${status === 'installed' ? ' exq-font-chip--installed' : ''}`}
+                  data-exq-cjk-row={cjkLang}
+                  data-exq-cjk-btn={cjkLang}
+                  data-exq-cjk-state={status}
+                  title={titleText}
+                  aria-label={titleText}
+                  disabled={status === 'downloading'}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    void toggleLanguageFontCache(cjkLang, lang);
+                  }}
+                >
+                  <span className="exq-font-chip-name">{label}</span>
+                  <span className="exq-font-chip-sub">
+                    {status === 'installed' ? (
+                      <PrefIcon name="trash" />
+                    ) : status === 'uninstalled' ? (
+                      <PrefIcon name="dl" />
+                    ) : null}
+                    <span>{actionHint}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
     </>

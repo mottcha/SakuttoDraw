@@ -10,6 +10,7 @@ SakuttoDraw を保守・改修する際の設計方針と不変条件（Invarian
 - `src/annotator/apiActions.ts`: クリア・背景色変更・コピー/画像保存・ファイル開閉を `ExcalidrawImperativeAPI` と公式エクスポート関数へ直結する層。
 - `src/services/storageBridge.ts`: `localStorage`（`excalidraw`, `excalidraw-state`, `exq-annotator-prefs`）と `IndexedDB`（`files-db` / `files-store`）の永続化およびデバウンス保存管理。
 - `src/annotator/cjkFontManager.ts`: `Cache Storage`（`sakuttodraw-cjk-fonts`）に対する日本語・韓国語・中国語セットの手動ダウンロード・全件照合・共通チャンク保護付き削除。
+- `src/annotator/jpGlyphOverride.ts`: `Fonts.registered.get(100)`（`Xiaolai`）に対する `unicode-range` 厳密差集合による日本語手書き字形（`fonts/SetoJP/`、KosefontP-JP / SetoFont v6.20 由来・SIL OFL 1.1）へのランタイム差し替え・復元。日本語 UI（`ja-JP`）ではデフォルト ON、他言語ではデフォルト OFF とし、`Preferences` から ON/OFF 切替可能。
 - `src/styles/sakutto.css`: 標準 UI の非表示、ツールバーの `order` 並べ替え、自前ウィジェットのスタイル。
 - `src/i18n/messages.ts`: 5 ロケール（`en`, `ja-JP`, `zh-CN`, `zh-TW`, `ko-KR`）の UI 文言辞書とブラウザ言語自動判定。
 
@@ -35,11 +36,12 @@ SakuttoDraw を保守・改修する際の設計方針と不変条件（Invarian
 2. **デバウンス保存の競合防止（`src/services/storageBridge.ts`）**: キャンバスを破壊的に書き換える処理（`runInstantResetWithApi`, `runDirectFileLoadWithApi` 等）の先頭で必ず `cancelPendingScenePersist()` を呼ぶ。
 3. **`bootstrapCleanCanvas()` の単一実行（`src/App.tsx`）**: `App.tsx` の初回初期化で 1 回のみ実行し、`bootQuickAnnotator()` 内で再実行しない。
 4. **`scripts/sync-excalidraw-assets.mjs`**: 縮小済み変数名に依存しない解析を維持し、`ja` / `ko` / `zh` のいずれかが 0 件なら例外で停止する。
+5. **日本語字形差し替えの重複防止（`src/annotator/jpGlyphOverride.ts`）**: `Fonts.registered` の `Xiaolai` エントリに `SetoJP` チャンクを追加する際は、必ず既存 `Xiaolai` チャンクの `unicode-range` から `SetoJP` 担当コードポイントを差集合で除外し、二重フェッチおよび SVG 重複埋め込みを防ぐこと。
 
 ## 6. PWA・フォントキャッシュ・多言語
 
 - `vite.config.ts` の `base: './'` およびマニフェストの `start_url: './'`, `scope: './'`、`lang: 'en'`、PNG アイコンを維持し、サブパス（`/SakuttoDraw/`）でも同一ビルドで動作させる。
-- `fonts/Xiaolai/**` はプリキャッシュせず、`runtimeCaching`（`CacheFirst`, `sakuttodraw-cjk-fonts`）＋環境設定内の手動 DL / 削除とする。`manifestTransforms` で未使用チャンク（`CodeMirrorEditor-*`, `subset-shared*`, `subset-worker*`、5 ロケール以外の翻訳）を除外する。
+- `fonts/Xiaolai/**` および `fonts/SetoJP/**` はプリキャッシュせず、`runtimeCaching`（`CacheFirst`, `sakuttodraw-cjk-fonts`）＋環境設定内の手動 DL / 削除とする。`manifestTransforms` で未使用チャンク（`CodeMirrorEditor-*`, `subset-shared*`, `subset-worker*`、5 ロケール以外の翻訳）を除外する。
 - `deleteLanguageFontSet` では `computeExclusiveFilesForDeletion` で他言語セットとの共有チャンクを保護し、`isLanguageSetCached` は `cache.keys()` で全チャンクを照合する。
 - UI 文言の追加・変更時は 5 ロケール（`en`, `ja-JP`, `zh-CN`, `zh-TW`, `ko-KR`）すべてを更新する。
 

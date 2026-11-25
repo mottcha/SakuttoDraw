@@ -19,11 +19,13 @@ import {
   loadInitialSceneData,
   normalizeBoxSelectionMode,
   normalizeInputDevice,
+  resolvePreferJpFont,
   sakuttoGetFormFactor,
   savePrefs,
   scheduleScenePersist,
   syncDesktopUIMode,
 } from './services/storageBridge';
+import { applyJapaneseGlyphOverride } from './annotator/jpGlyphOverride';
 
 let bootstrappedOnce = false;
 const EXCALIDRAW_UI_OPTIONS = {
@@ -36,6 +38,10 @@ export function App() {
       bootstrappedOnce = true;
       const initResult = bootstrapCleanCanvas();
       runtime.prefs = initResult.prefs;
+      if (typeof document !== 'undefined' && document.documentElement) {
+        document.documentElement.lang = initResult.prefs.lang;
+      }
+      applyJapaneseGlyphOverride(resolvePreferJpFont(initResult.prefs));
     }
     syncDesktopUIMode(runtime.prefs.stylesPanelMode);
     return {

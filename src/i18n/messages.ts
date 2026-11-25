@@ -55,6 +55,7 @@ export interface MessageCatalog {
   prefStylesPanelCompact: string;
   prefStylesPanelFull: string;
   languageLabel: string;
+  prefPreferJpFont: string;
   offlineFontsTitle: string;
   cjkLangName: Record<CjkLang, string>;
   fontDownload: string;
@@ -136,6 +137,7 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     prefStylesPanelCompact: 'Slim',
     prefStylesPanelFull: 'Expanded',
     languageLabel: 'Language',
+    prefPreferJpFont: 'Preferred kanji font',
     offlineFontsTitle: 'Offline hand-drawn fonts',
     cjkLangName: { ja: 'Japanese', ko: 'Korean', zh: 'Chinese' },
     fontDownload: 'Download',
@@ -215,6 +217,7 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     prefStylesPanelCompact: 'スリム固定',
     prefStylesPanelFull: '常に展開',
     languageLabel: '言語',
+    prefPreferJpFont: '優先漢字フォント',
     offlineFontsTitle: 'オフライン手書きフォント',
     cjkLangName: { ja: '日本語', ko: '韓国語', zh: '中国語' },
     fontDownload: 'ダウンロード',
@@ -294,6 +297,7 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     prefStylesPanelCompact: '精简固定',
     prefStylesPanelFull: '始终展开',
     languageLabel: '语言',
+    prefPreferJpFont: '优先汉字字体',
     offlineFontsTitle: '离线手写字体',
     cjkLangName: { ja: '日语', ko: '韩语', zh: '中文' },
     fontDownload: '下载',
@@ -373,6 +377,7 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     prefStylesPanelCompact: '精簡固定',
     prefStylesPanelFull: '始終展開',
     languageLabel: '語言',
+    prefPreferJpFont: '優先漢字字體',
     offlineFontsTitle: '離線手寫字體',
     cjkLangName: { ja: '日文', ko: '韓文', zh: '中文' },
     fontDownload: '下載',
@@ -452,6 +457,7 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     prefStylesPanelCompact: '슬림 고정',
     prefStylesPanelFull: '항상 펼침',
     languageLabel: '언어',
+    prefPreferJpFont: '우선 한자 글꼴',
     offlineFontsTitle: '오프라인 손글씨 글꼴',
     cjkLangName: { ja: '일본어', ko: '한국어', zh: '중국어' },
     fontDownload: '다운로드',
