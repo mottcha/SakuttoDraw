@@ -1,84 +1,42 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { AppLang, RedactMode, RedactStrength } from '../types/annotator';
+import type { AppLang } from '../types/annotator';
 import { getMessages } from '../i18n/messages';
+import { REDACT_COLOR_SWATCHES } from '../services/storageBridge';
 
 export interface SakuttoRedactPanelProps {
   lang: AppLang;
   active: boolean;
   uiLayout: 'full' | 'compact' | 'phone';
-  mode: RedactMode;
-  strength: RedactStrength;
-  isBusy?: boolean;
-  onModeChange: (mode: RedactMode) => void;
-  onStrengthChange: (strength: RedactStrength) => void;
+  color: string;
+  onColorChange: (color: string) => void;
 }
 
-function RedactModeIcon({ mode, size = 16 }: { mode: RedactMode; size?: number }) {
-  if (mode === 'mosaic') {
-    return (
-      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <rect x="4" y="4" width="16" height="16" rx="2" />
-        <rect x="7" y="7" width="4" height="4" fill="currentColor" stroke="none" opacity="0.85" />
-        <rect x="13" y="7" width="4" height="4" fill="currentColor" stroke="none" opacity="0.35" />
-        <rect x="7" y="13" width="4" height="4" fill="currentColor" stroke="none" opacity="0.35" />
-        <rect x="13" y="13" width="4" height="4" fill="currentColor" stroke="none" opacity="0.85" />
-      </svg>
-    );
-  }
-  if (mode === 'blur') {
-    return (
-      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none" />
-        <circle cx="12" cy="12" r="5.5" strokeDasharray="2.5 2.5" />
-        <circle cx="12" cy="12" r="9" strokeDasharray="2 3" opacity="0.65" />
-      </svg>
-    );
-  }
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="4" y="5" width="16" height="14" rx="2.5" fill="currentColor" />
-    </svg>
-  );
-}
-
-function RedactSettingsContent({
+function RedactSwatchContent({
   lang,
-  mode,
-  strength,
-  isBusy,
+  color,
+  variant = 'popover',
   showClose,
   onClose,
-  onModeChange,
-  onStrengthChange,
+  onColorChange,
 }: {
   lang: AppLang;
-  mode: RedactMode;
-  strength: RedactStrength;
-  isBusy?: boolean;
+  color: string;
+  variant?: 'full' | 'popover';
   showClose?: boolean;
   onClose?: () => void;
-  onModeChange: (mode: RedactMode) => void;
-  onStrengthChange: (strength: RedactStrength) => void;
+  onColorChange: (color: string) => void;
 }) {
   const t = getMessages(lang);
-  const modes: ReadonlyArray<{ id: RedactMode; label: string }> = [
-    { id: 'mosaic', label: t.redactModeMosaic },
-    { id: 'blur', label: t.redactModeBlur },
-    { id: 'blackout', label: t.redactModeBlackout },
-  ];
-  const strengths: ReadonlyArray<{ id: RedactStrength; label: string }> = [
-    { id: 'weak', label: t.redactStrengthWeak },
-    { id: 'medium', label: t.redactStrengthMedium },
-    { id: 'strong', label: t.redactStrengthStrong },
-  ];
-  const strengthDisabled = mode === 'blackout';
+  const normalized = color.trim().toLowerCase();
 
   return (
     <div className="exq-redact-card-body" data-exq-redact-panel="1">
-      <div className="exq-pref-group">
+      {variant === 'full' ? (
+        <h3 aria-hidden="true">{t.redactColorTitle}</h3>
+      ) : (
         <div className="exq-pref-group-header">
-          <div className="exq-pref-group-title">{t.redactModeTitle}</div>
+          <div className="exq-pref-group-title">{t.redactColorTitle}</div>
           {showClose && (
             <button
               type="button"
@@ -96,46 +54,26 @@ function RedactSettingsContent({
             </button>
           )}
         </div>
-        <div className="exq-pref-card-grid exq-pref-card-grid--3" role="radiogroup" aria-label={t.redactModeTitle}>
-          {modes.map((m) => (
+      )}
+      <div className="exq-redact-color-grid" role="radiogroup" aria-label={t.redactColorTitle}>
+        {REDACT_COLOR_SWATCHES.map((hex) => {
+          const active = normalized === hex;
+          return (
             <button
-              key={m.id}
+              key={hex}
               type="button"
               role="radio"
-              aria-checked={mode === m.id}
-              disabled={isBusy}
-              className={`exq-redact-mode-card${mode === m.id ? ' exq-active' : ''}`}
-              data-exq-redact-mode={m.id}
-              onClick={() => onModeChange(m.id)}
-            >
-              <RedactModeIcon mode={m.id} size={15} />
-              <span>{m.label}</span>
-            </button>
-          ))}
-        </div>
+              aria-checked={active}
+              aria-label={`${t.redactColorTitle} ${hex}`}
+              title={hex}
+              className={`exq-redact-color-swatch${active ? ' exq-active' : ''}`}
+              data-exq-redact-color={hex}
+              style={{ background: hex }}
+              onClick={() => onColorChange(hex)}
+            />
+          );
+        })}
       </div>
-
-      <div className={`exq-pref-group${strengthDisabled ? ' exq-redact-group-disabled' : ''}`}>
-        <div className="exq-pref-group-title">{t.redactStrengthTitle}</div>
-        <div className="exq-pref-card-grid exq-pref-card-grid--3" role="radiogroup" aria-label={t.redactStrengthTitle}>
-          {strengths.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              role="radio"
-              aria-checked={strength === s.id}
-              disabled={isBusy || strengthDisabled}
-              className={`exq-pref-card exq-pref-card--compact3${strength === s.id ? ' exq-active' : ''}`}
-              data-exq-redact-strength={s.id}
-              onClick={() => onStrengthChange(s.id)}
-            >
-              <span>{s.label}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="exq-redact-note">{t.redactPrivacyNote}</div>
     </div>
   );
 }
@@ -144,11 +82,8 @@ export function SakuttoRedactPanel({
   lang,
   active,
   uiLayout,
-  mode,
-  strength,
-  isBusy,
-  onModeChange,
-  onStrengthChange,
+  color,
+  onColorChange,
 }: SakuttoRedactPanelProps) {
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [mountTarget, setMountTarget] = useState<Element | null>(null);
@@ -221,7 +156,7 @@ export function SakuttoRedactPanel({
       const btn = mobileBtnRef.current;
       if (!btn) return;
       const rect = btn.getBoundingClientRect();
-      const flyoutW = Math.min(256, window.innerWidth - 24);
+      const flyoutW = Math.min(228, window.innerWidth - 24);
       const center = rect.left + rect.width / 2;
       const clampedLeft = Math.max(12, Math.min(window.innerWidth - flyoutW - 12, center - flyoutW / 2));
       const bottom = Math.max(12, window.innerHeight - rect.top + 8);
@@ -239,19 +174,24 @@ export function SakuttoRedactPanel({
   if (uiLayout === 'full') {
     return createPortal(
       <div
-        className="Island App-menu__left exq-redact-full-island"
+        className="selected-shape-actions-container exq-redact-integrated-container"
         data-exq-redact-root="1"
-        onPointerDown={(e) => e.stopPropagation()}
       >
-        <div className="exq-redact-full-header">{t.redactSettingsTitle}</div>
-        <RedactSettingsContent
-          lang={lang}
-          mode={mode}
-          strength={strength}
-          isBusy={isBusy}
-          onModeChange={onModeChange}
-          onStrengthChange={onStrengthChange}
-        />
+        <section className="selected-shape-actions">
+          <div
+            className="Island App-menu__left exq-redact-integrated-full"
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <div className="selected-shape-actions">
+              <RedactSwatchContent
+                lang={lang}
+                color={color}
+                variant="full"
+                onColorChange={onColorChange}
+              />
+            </div>
+          </div>
+        </section>
       </div>,
       mountTarget,
     );
@@ -259,57 +199,60 @@ export function SakuttoRedactPanel({
 
   if (uiLayout === 'compact') {
     return createPortal(
-      <div className="exq-redact-compact-wrap" data-exq-redact-root="1">
-        <div className="Island compact-shape-actions-island exq-redact-compact-island">
-          <div className="compact-shape-actions">
-            <div className="compact-action-item">
-              <button
-                type="button"
-                className={`compact-action-button properties-trigger${popoverOpen ? ' active' : ''}`}
-                data-exq-redact-trigger="1"
-                title={t.redactSettingsTitle}
-                aria-label={t.redactSettingsTitle}
-                aria-expanded={popoverOpen}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setPopoverOpen((v) => !v);
-                }}
-              >
-                <RedactModeIcon mode={mode} size={16} />
-              </button>
+      <div
+        className="selected-shape-actions-container selected-shape-actions-container--compact exq-redact-integrated-container"
+        data-exq-redact-root="1"
+      >
+        <section className="selected-shape-actions">
+          <div className="exq-redact-compact-wrap">
+            <div className="Island compact-shape-actions-island exq-redact-compact-island">
+              <div className="compact-shape-actions">
+                <div className="compact-action-item">
+                  <button
+                    type="button"
+                    className={`compact-action-button properties-trigger${popoverOpen ? ' active' : ''}`}
+                    data-exq-redact-trigger="1"
+                    title={t.redactColorTitle}
+                    aria-label={t.redactColorTitle}
+                    aria-expanded={popoverOpen}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPopoverOpen((v) => !v);
+                    }}
+                  >
+                    <span className="exq-redact-trigger-swatch" style={{ background: color }} aria-hidden="true" />
+                  </button>
+                </div>
+              </div>
             </div>
+            {popoverOpen && (
+              <div
+                className="Island exq-redact-flyout exq-redact-flyout--side"
+                role="dialog"
+                aria-label={t.redactColorTitle}
+                onPointerDown={(e) => e.stopPropagation()}
+              >
+                <RedactSwatchContent
+                  lang={lang}
+                  color={color}
+                  variant="popover"
+                  showClose={true}
+                  onClose={() => setPopoverOpen(false)}
+                  onColorChange={onColorChange}
+                />
+              </div>
+            )}
           </div>
-        </div>
-        {popoverOpen && (
-          <div
-            className="Island exq-redact-flyout exq-redact-flyout--side"
-            role="dialog"
-            aria-label={t.redactSettingsTitle}
-            onPointerDown={(e) => e.stopPropagation()}
-          >
-            <RedactSettingsContent
-              lang={lang}
-              mode={mode}
-              strength={strength}
-              isBusy={isBusy}
-              showClose={true}
-              onClose={() => setPopoverOpen(false)}
-              onModeChange={onModeChange}
-              onStrengthChange={onStrengthChange}
-            />
-          </div>
-        )}
+        </section>
       </div>,
       mountTarget,
     );
   }
 
-  // Phone: integrate directly into .mobile-shape-actions > div:first-child as a single compact-action-item,
-  // and portal the upward popover outside overflow-x:auto so it is never clipped.
   const portalContainer =
-    (typeof document !== 'undefined'
+    typeof document !== 'undefined'
       ? document.querySelector('.excalidraw') || document.body
-      : null);
+      : null;
 
   return (
     <>
@@ -320,15 +263,15 @@ export function SakuttoRedactPanel({
             type="button"
             className={`compact-action-button properties-trigger${popoverOpen ? ' active' : ''}`}
             data-exq-redact-trigger="1"
-            title={t.redactSettingsTitle}
-            aria-label={t.redactSettingsTitle}
+            title={t.redactColorTitle}
+            aria-label={t.redactColorTitle}
             aria-expanded={popoverOpen}
             onClick={(e) => {
               e.stopPropagation();
               setPopoverOpen((v) => !v);
             }}
           >
-            <RedactModeIcon mode={mode} size={16} />
+            <span className="exq-redact-trigger-swatch" style={{ background: color }} aria-hidden="true" />
           </button>
         </div>,
         mountTarget,
@@ -341,19 +284,17 @@ export function SakuttoRedactPanel({
             className="Island exq-redact-flyout exq-redact-flyout--up"
             data-exq-redact-flyout="1"
             role="dialog"
-            aria-label={t.redactSettingsTitle}
+            aria-label={t.redactColorTitle}
             style={{ left: `${mobileFlyoutPos.left}px`, bottom: `${mobileFlyoutPos.bottom}px` }}
             onPointerDown={(e) => e.stopPropagation()}
           >
-            <RedactSettingsContent
+            <RedactSwatchContent
               lang={lang}
-              mode={mode}
-              strength={strength}
-              isBusy={isBusy}
+              color={color}
+              variant="popover"
               showClose={true}
               onClose={() => setPopoverOpen(false)}
-              onModeChange={onModeChange}
-              onStrengthChange={onStrengthChange}
+              onColorChange={onColorChange}
             />
           </div>,
           portalContainer,

@@ -589,6 +589,62 @@ function CjkFontCacheSection({ lang }: { lang: AppLang }) {
   );
 }
 
+function CustomOptIcon({
+  name,
+}: {
+  name: 'autoResetOnOpen' | 'textAutoResize' | 'fastLoadSave' | 'modernContextMenu' | 'penColor' | 'canvasBackground';
+}) {
+  if (name === 'autoResetOnOpen') {
+    return (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+        <path d="M3 3v5h5" />
+      </svg>
+    );
+  }
+  if (name === 'textAutoResize') {
+    return (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M4 17L8.5 6L13 17" />
+        <path d="M5.5 13.5h6" />
+        <path d="M15 12h6" />
+        <polyline points="18.5 9.5 21 12 18.5 14.5" />
+      </svg>
+    );
+  }
+  if (name === 'fastLoadSave') {
+    return (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+      </svg>
+    );
+  }
+  if (name === 'modernContextMenu') {
+    return (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <rect x="3" y="3" width="18" height="18" rx="3" />
+        <line x1="7" y1="8.5" x2="17" y2="8.5" />
+        <line x1="7" y1="12.5" x2="14" y2="12.5" />
+        <line x1="7" y1="16.5" x2="12" y2="16.5" />
+      </svg>
+    );
+  }
+  if (name === 'penColor') {
+    return (
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M12 19l7-7 3 3-7 7-3-3z" />
+        <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
+      </svg>
+    );
+  }
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="3" width="18" height="18" rx="3" />
+      <path d="M3 15l5-5 4 4 3-3 6 6" />
+    </svg>
+  );
+}
+
 export function CustomSettingsVisualPanel({ lang }: { lang: AppLang }) {
   const [, setTick] = useState(0);
   const t = getMessages(lang);
@@ -676,6 +732,9 @@ export function CustomSettingsVisualPanel({ lang }: { lang: AppLang }) {
                   showToast(`${label}: ${nextVal ? 'ON' : 'OFF'}`);
                 }}
               >
+                <span className="exq-custom-toggle-icon" aria-hidden="true">
+                  <CustomOptIcon name={def.key} />
+                </span>
                 <span className="exq-custom-toggle-label">{label}</span>
                 <button
                   type="button"
@@ -691,7 +750,10 @@ export function CustomSettingsVisualPanel({ lang }: { lang: AppLang }) {
       </div>
 
       <div className="exq-pref-group">
-        <div className="exq-pref-group-title">{t.penColor}</div>
+        <div className="exq-pref-group-title exq-pref-group-title--icon">
+          <CustomOptIcon name="penColor" />
+          <span>{t.penColor}</span>
+        </div>
         <div className="exq-custom-swatch-row" role="radiogroup" aria-label={t.penColorLabel}>
           {PEN_COLOR_SWATCHES.map((hex) => (
             <button
@@ -716,7 +778,10 @@ export function CustomSettingsVisualPanel({ lang }: { lang: AppLang }) {
       </div>
 
       <div className="exq-pref-group">
-        <div className="exq-pref-group-title">{t.canvasBackground}</div>
+        <div className="exq-pref-group-title exq-pref-group-title--icon">
+          <CustomOptIcon name="canvasBackground" />
+          <span>{t.canvasBackground}</span>
+        </div>
         <div className="exq-custom-swatch-row" role="radiogroup" aria-label={t.bgColorLabel}>
           {CANVAS_BG_SWATCHES.map((hex) => (
             <button

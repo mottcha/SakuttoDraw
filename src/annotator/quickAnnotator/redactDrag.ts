@@ -101,7 +101,7 @@ export function installRedactDragController(): () => void {
     dragState.boxEl.style.height = `${Math.round(height)}px`;
   };
 
-  const onPointerUp = async (e: PointerEvent) => {
+  const onPointerUp = (e: PointerEvent) => {
     if (!dragState || e.pointerId !== dragState.pointerId) return;
     e.preventDefault();
     e.stopPropagation();
@@ -127,11 +127,10 @@ export function installRedactDragController(): () => void {
 
     runtime.isBusy = true;
     try {
-      await createOrUpdateRedactElement({
+      createOrUpdateRedactElement({
         api: runtime.api,
         rect: { x: sceneX, y: sceneY, width: sceneW, height: sceneH },
-        mode: runtime.prefs.redactOpts.mode,
-        strength: runtime.prefs.redactOpts.strength,
+        color: runtime.prefs.redactOpts.color,
         selectResult: true,
       });
       if (!wasLocked) {

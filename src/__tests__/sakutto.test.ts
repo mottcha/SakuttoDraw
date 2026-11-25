@@ -58,10 +58,14 @@ import {
   applyPreferJpFont,
   attachExcalidrawAPI,
   clampContextMenuPopover,
+  clearTempFillSnapshot,
   cloneNativeToolbarIcon,
   computeSwappedStrokeFill,
+  deleteSelectedElementsWithApi,
+  duplicateSelectedElementsWithApi,
   installCtrlMultiSelectGuard,
   installTextAutoResizeGuard,
+  restoreTempFillIfToolChanged,
   runtime,
   syncContextMenu,
   syncExtraToolsMenu,
@@ -74,11 +78,14 @@ import {
   toggleFillOrSwapColorsWithApi,
 } from '../annotator/quickAnnotator';
 import {
-  applyGaussianBlurToImageData,
-  applyMosaicToImageData,
+  clearRedactStyleIsolationState,
   createOrUpdateRedactElement,
   getRedactMeta,
   isRedactElement,
+  resetRedactStyleIsolationForTests,
+  syncRedactStyleIsolation,
+  updateRedactElementsColor,
+  updateRedactStyleIsolationPenColor,
 } from '../annotator/redactProcessor';
 import { CustomSettingsVisualPanel } from '../components/SakuttoMainMenu';
 import { SakuttoRedactPanel } from '../components/SakuttoRedactPanel';
@@ -113,12 +120,8 @@ describe('i18n (en, ja-JP, zh-CN, zh-TW, ko-KR)', () => {
       expect(m.customBehaviorTitle.length).toBeGreaterThan(0);
       expect(m.toolRedact.length).toBeGreaterThan(0);
       expect(m.redactSettingsTitle.length).toBeGreaterThan(0);
-      expect(m.redactModeMosaic.length).toBeGreaterThan(0);
-      expect(m.redactModeBlur.length).toBeGreaterThan(0);
-      expect(m.redactModeBlackout.length).toBeGreaterThan(0);
+      expect(m.redactColorTitle.length).toBeGreaterThan(0);
       expect(m.fillToggleShort.length).toBeGreaterThan(0);
-      expect(m.fillToggleOutline.length).toBeGreaterThan(0);
-      expect(m.fillToggleFilled.length).toBeGreaterThan(0);
       expect(m.drawAssist.length).toBeGreaterThan(0);
       expect(m.exportSettings.length).toBeGreaterThan(0);
       expect(m.penColor.length).toBeGreaterThan(0);
@@ -1081,11 +1084,75 @@ describe('mobile UI unification (A-2 toolbar, persistent Duplicate/Delete, label
     expect(document.querySelector('[data-exq-extra-tool="frame"]')).toBeTruthy();
   });
 
-  it('injects persistent Duplicate and Delete buttons in MobileShapeActions based on native count and selection state', () => {
+  it('injects persistent Duplicate and Delete buttons in MobileShapeActions and executes via direct API', () => {
     applyLanguage('ja-JP');
     let selectedIds: Record<string, boolean> = { el1: true };
+    let selectedGroupIds: Record<string, boolean> = {};
+    let sceneElements = [
+      {
+        id: 'el1',
+        type: 'rectangle',
+        x: 20,
+        y: 30,
+        width: 100,
+        height: 50,
+        groupIds: ['grp-1'],
+        frameId: null,
+        boundElements: [{ id: 'txt1', type: 'text' }],
+        locked: false,
+        isDeleted: false,
+        seed: 1,
+        version: 1,
+        versionNonce: 1,
+        updated: 1,
+        created: 1,
+        index: 'a0',
+      },
+      {
+        id: 'txt1',
+        type: 'text',
+        x: 30,
+        y: 40,
+        width: 60,
+        height: 20,
+        containerId: 'el1',
+        groupIds: ['grp-1'],
+        frameId: null,
+        boundElements: null,
+        locked: false,
+        isDeleted: false,
+        seed: 2,
+        version: 1,
+        versionNonce: 2,
+        updated: 1,
+        created: 1,
+        index: 'a1',
+      },
+    ] as unknown as Array<Record<string, unknown>>;
+
+    const updateSceneMock = vi.fn(
+      (arg: {
+        elements?: Array<Record<string, unknown>>;
+        appState?: {
+          selectedElementIds?: Record<string, boolean>;
+          selectedGroupIds?: Record<string, boolean>;
+        };
+      }) => {
+        if (arg.elements) sceneElements = arg.elements;
+        if (arg.appState?.selectedElementIds) selectedIds = arg.appState.selectedElementIds;
+        if (arg.appState?.selectedGroupIds) selectedGroupIds = arg.appState.selectedGroupIds;
+      },
+    );
+
     attachExcalidrawAPI({
-      getAppState: () => ({ selectedElementIds: selectedIds, viewModeEnabled: false }),
+      getAppState: () => ({
+        selectedElementIds: selectedIds,
+        selectedGroupIds,
+        viewModeEnabled: false,
+      }),
+      getSceneElements: () => sceneElements.filter((el) => !el.isDeleted),
+      getSceneElementsIncludingDeleted: () => sceneElements,
+      updateScene: updateSceneMock,
     } as unknown as ExcalidrawImperativeAPI);
 
     // Smartphone width (<374px): only 2 native right items (Undo / Redo)
@@ -1109,23 +1176,35 @@ describe('mobile UI unification (A-2 toolbar, persistent Duplicate/Delete, label
     expect(dupBtn?.disabled).toBe(false);
     expect(delBtn?.disabled).toBe(false);
 
-    // Clicking Duplicate / Delete dispatches Ctrl/Cmd+D and Delete keydown
-    const keys: string[] = [];
-    const onKey = (e: KeyboardEvent) => keys.push(e.key);
-    document.addEventListener('keydown', onKey);
-    try {
-      dupBtn?.click();
-      delBtn?.click();
-      expect(keys).toEqual(['d', 'Delete']);
-    } finally {
-      document.removeEventListener('keydown', onKey);
-    }
+    // Clicking Duplicate clones selected rectangle + bound text, remaps group IDs, offsets by +10/+10
+    dupBtn?.click();
+    expect(updateSceneMock).toHaveBeenCalledTimes(1);
+    expect(sceneElements.length).toBe(4);
+    const dupRect = sceneElements[2];
+    const dupText = sceneElements[3];
+    expect(dupRect.id).not.toBe('el1');
+    expect(dupRect.x).toBe(30);
+    expect(dupRect.y).toBe(40);
+    expect((dupRect.groupIds as string[])[0]).not.toBe('grp-1');
+    expect(dupText.containerId).toBe(dupRect.id);
+    expect((dupRect.boundElements as Array<{ id: string }>)[0].id).toBe(dupText.id);
+    expect(selectedIds).toEqual({ [dupRect.id as string]: true });
+
+    // Clicking Delete marks newly selected duplicate & its bound text isDeleted=true and clears selection
+    delBtn?.click();
+    expect(updateSceneMock).toHaveBeenCalledTimes(2);
+    expect(sceneElements[2].isDeleted).toBe(true);
+    expect(sceneElements[3].isDeleted).toBe(true);
+    expect(selectedIds).toEqual({});
 
     // Empty selection disables both buttons
-    selectedIds = {};
     syncMobileShapeActions();
     expect(dupBtn?.disabled).toBe(true);
     expect(delBtn?.disabled).toBe(true);
+
+    // Sanity check standalone helpers return false when nothing is selected
+    expect(duplicateSelectedElementsWithApi(runtime.api)).toBe(false);
+    expect(deleteSelectedElementsWithApi(runtime.api)).toBe(false);
 
     // Medium width (374..411px): 3 native items (Undo, Redo, native Delete) => show Duplicate only, hide injected Delete
     const nativeDel = document.createElement('div');
@@ -1291,7 +1370,7 @@ describe('6-item UX improvements (Custom Settings, Toolbar SVG Match, Blur/Redac
     runtime.prefs = loadPrefs(localStorage);
   });
 
-  it('renders CustomSettingsVisualPanel with 4 behavior toggles, pen swatches, and bg swatches', async () => {
+  it('renders CustomSettingsVisualPanel with 4 icon-badged behavior toggles, pen swatches, and bg swatches', async () => {
     const host = document.createElement('div');
     document.body.append(host);
     const root = createRoot(host);
@@ -1300,6 +1379,7 @@ describe('6-item UX improvements (Custom Settings, Toolbar SVG Match, Blur/Redac
     });
 
     expect(host.querySelectorAll('[data-exq-quick-opt]').length).toBe(4);
+    expect(host.querySelectorAll('.exq-custom-toggle-icon svg').length).toBe(4);
     expect(host.querySelectorAll('[data-exq-pen-color]').length).toBe(6);
     expect(host.querySelectorAll('[data-exq-bg-color]').length).toBe(5);
 
@@ -1330,7 +1410,8 @@ describe('6-item UX improvements (Custom Settings, Toolbar SVG Match, Blur/Redac
     expect(fallback.getAttribute('stroke-width')).toBe('1.5');
   });
 
-  it('computes stroke<->background swap with smart solid upgrade and skips non-fillable elements', () => {
+  it('scopes fill swap to shapes, preserves pen/text global colors, and auto-restores on tool switch', () => {
+    clearTempFillSnapshot();
     // Outline -> Filled upgrades hachure to solid
     expect(
       computeSwappedStrokeFill({
@@ -1357,7 +1438,7 @@ describe('6-item UX improvements (Custom Settings, Toolbar SVG Match, Blur/Redac
       fillStyle: 'solid',
     });
 
-    // Edit mode updates fillable rectangle and ignores text & redact elements
+    // Edit mode updates fillable rectangle ONLY without mutating global currentItemStrokeColor/BackgroundColor
     let captured: { elements?: unknown[]; appState?: Record<string, unknown> } | null = null;
     const elements = [
       {
@@ -1388,17 +1469,19 @@ describe('6-item UX improvements (Custom Settings, Toolbar SVG Match, Blur/Redac
         strokeColor: 'transparent',
         backgroundColor: '#111111',
         fillStyle: 'solid',
-        customData: { sakuttoRedact: { v: 1, mode: 'blackout', strength: 'medium' } },
+        customData: { sakuttoRedact: { v: 1, color: '#111111' } },
         version: 1,
         versionNonce: 12,
         updated: 1,
         isDeleted: false,
       },
     ];
-    const mockApi = {
+    const mockEditApi = {
       getAppState: () => ({
         selectedElementIds: { 'rect-1': true, 'text-1': true, 'redact-1': true },
         activeTool: { type: 'selection' },
+        currentItemStrokeColor: '#c2255c',
+        currentItemBackgroundColor: 'transparent',
       }),
       getSceneElements: () => elements,
       updateScene: (arg: { elements?: unknown[]; appState?: Record<string, unknown> }) => {
@@ -1406,21 +1489,67 @@ describe('6-item UX improvements (Custom Settings, Toolbar SVG Match, Blur/Redac
       },
     } as unknown as ExcalidrawImperativeAPI;
 
-    expect(toggleFillOrSwapColorsWithApi(mockApi, { lang: 'ja-JP' })).toBe(true);
+    expect(toggleFillOrSwapColorsWithApi(mockEditApi, { lang: 'ja-JP' })).toBe(true);
     const updated = captured!.elements as Array<{ id: string; strokeColor: string; backgroundColor: string; fillStyle: string }>;
     expect(updated[0].strokeColor).toBe('transparent');
     expect(updated[0].backgroundColor).toBe('#c2255c');
     expect(updated[0].fillStyle).toBe('solid');
     expect(updated[1].strokeColor).toBe('#c2255c');
     expect(updated[2].backgroundColor).toBe('#111111');
+    expect(captured!.appState).toBeUndefined();
+
+    // Creation mode: toggling Fill on rectangle saves temp snapshot, and switching to freedraw/text/selection restores it
+    let toolState: {
+      activeTool: { type: string };
+      selectedElementIds: Record<string, boolean>;
+      currentItemStrokeColor: string;
+      currentItemBackgroundColor: string;
+      currentItemFillStyle: string;
+    } = {
+      activeTool: { type: 'rectangle' },
+      selectedElementIds: {},
+      currentItemStrokeColor: '#c2255c',
+      currentItemBackgroundColor: 'transparent',
+      currentItemFillStyle: 'hachure',
+    };
+    const mockToolApi = {
+      getAppState: () => toolState,
+      getSceneElements: () => [],
+      updateScene: (arg: { appState?: Record<string, unknown> }) => {
+        if (arg.appState) {
+          toolState = { ...toolState, ...arg.appState };
+        }
+      },
+    } as unknown as ExcalidrawImperativeAPI;
+
+    expect(toggleFillOrSwapColorsWithApi(mockToolApi, { lang: 'ja-JP' })).toBe(true);
+    expect(toolState.currentItemStrokeColor).toBe('transparent');
+    expect(toolState.currentItemBackgroundColor).toBe('#c2255c');
+    expect(toolState.currentItemFillStyle).toBe('solid');
+
+    // Staying on another fillable shape keeps temporary fill; switching to freedraw restores original stroke & bg
+    toolState = { ...toolState, activeTool: { type: 'ellipse' } };
+    expect(restoreTempFillIfToolChanged(mockToolApi, toolState)).toBe(false);
+    expect(toolState.currentItemStrokeColor).toBe('transparent');
+
+    toolState = { ...toolState, activeTool: { type: 'freedraw' } };
+    expect(restoreTempFillIfToolChanged(mockToolApi, toolState)).toBe(true);
+    expect(toolState.currentItemStrokeColor).toBe('#c2255c');
+    expect(toolState.currentItemBackgroundColor).toBe('transparent');
+    expect(toolState.currentItemFillStyle).toBe('hachure');
+
+    // Disallowed tools (freedraw, text) cannot trigger creation-mode fill swap
+    expect(toggleFillOrSwapColorsWithApi(mockToolApi, { lang: 'ja-JP' })).toBe(false);
   });
 
-  it('injects Fill toggle in Slim, Mobile, and Expanded style panels only when both stroke and bg exist', () => {
+  it('injects Fill toggle in Slim and Mobile when eligible, hides on pen/text, and never leaves standalone Expanded segment', () => {
+    clearTempFillSnapshot();
     applyLanguage('ja-JP');
+    let activeToolType = 'rectangle';
     attachExcalidrawAPI({
       getAppState: () => ({
         selectedElementIds: {},
-        activeTool: { type: 'rectangle' },
+        activeTool: { type: activeToolType },
         currentItemStrokeColor: '#c2255c',
         currentItemBackgroundColor: 'transparent',
         currentItemFillStyle: 'hachure',
@@ -1454,10 +1583,18 @@ describe('6-item UX improvements (Custom Settings, Toolbar SVG Match, Blur/Redac
     expect(mobBtn?.textContent).toContain('塗潰');
     expect(slimBtn?.classList.contains('exq-is-filled')).toBe(false);
 
-    // Expanded panel gets 2-choice segment
+    // Switching to freedraw removes compact Fill toggle cleanly
+    activeToolType = 'freedraw';
+    syncStylesPanelColorSwap();
+    expect(document.querySelector('.App-menu_top__left [data-exq-fill-toggle="1"]')).toBeNull();
+    expect(document.querySelector('.mobile-shape-actions [data-exq-fill-toggle="1"]')).toBeNull();
+
+    // Expanded panel never injects standalone [data-exq-fill-segment="1"], and cleans up any stale one
+    activeToolType = 'rectangle';
     document.body.innerHTML = `
       <div class="selected-shape-actions-container">
         <div class="Island App-menu__left">
+          <div data-exq-fill-segment="1">stale</div>
           <div class="panelColumn">
             <button data-openpopup="elementStroke"></button>
             <button data-openpopup="elementBackground"></button>
@@ -1465,79 +1602,171 @@ describe('6-item UX improvements (Custom Settings, Toolbar SVG Match, Blur/Redac
         </div>
       </div>
     `;
-    expect(syncStylesPanelColorSwap()).toBe(true);
-    expect(document.querySelector('[data-exq-fill-segment="1"] [data-exq-fill-mode="outline"]')?.classList.contains('exq-active')).toBe(true);
-    expect(document.querySelector('[data-exq-fill-segment="1"] [data-exq-fill-mode="filled"]')?.classList.contains('exq-active')).toBe(false);
+    syncStylesPanelColorSwap();
+    expect(document.querySelector('[data-exq-fill-segment="1"]')).toBeNull();
   });
 
-  it('applies pure-JS mosaic and Gaussian blur without dark halos, creates blackout redact element, and mounts SakuttoRedactPanel', async () => {
-    // 2x2 block mosaic averages [200, 0, 0, 255] and [0, 200, 0, 255] -> [50, 50, 0, 255]
-    const mosaicData = new Uint8ClampedArray([
-      200, 0, 0, 255,   0, 200, 0, 255,
-      0, 0, 0, 255,     0, 0, 0, 255,
-    ]);
-    applyMosaicToImageData(mosaicData, 2, 2, 2);
-    expect(Array.from(mosaicData.slice(0, 4))).toEqual([50, 50, 0, 255]);
-    expect(Array.from(mosaicData.slice(12, 16))).toEqual([50, 50, 0, 255]);
-
-    // Edge-clamped Gaussian blur preserves uniform white without dark border halo
-    const uniformWhite = new Uint8ClampedArray(6 * 6 * 4).fill(255);
-    applyGaussianBlurToImageData(uniformWhite, 6, 6, 4);
-    expect(uniformWhite[0]).toBe(255);
-    expect(uniformWhite[uniformWhite.length - 1]).toBe(255);
-
-    // Persists redactOpts in Prefs
+  it('creates native blackout rectangle with customizable color, updates selected blackout color, and mounts color-only SakuttoRedactPanel', async () => {
+    // Persists redactOpts.color in Prefs and migrates legacy { mode, strength }
     const prefs = loadPrefs(localStorage);
-    expect(prefs.redactOpts).toEqual({ mode: 'mosaic', strength: 'medium' });
-    prefs.redactOpts = { mode: 'blur', strength: 'strong' };
+    expect(prefs.redactOpts).toEqual({ color: '#111111' });
+    prefs.redactOpts = { color: '#1971c2' };
     savePrefs(prefs, localStorage);
-    expect(loadPrefs(localStorage).redactOpts).toEqual({ mode: 'blur', strength: 'strong' });
+    expect(loadPrefs(localStorage).redactOpts).toEqual({ color: '#1971c2' });
 
-    // Creates blackout rectangle with sakuttoRedact metadata
-    let committedElements: unknown[] = [];
+    localStorage.setItem('exq-annotator-prefs', JSON.stringify({ redactOpts: { mode: 'mosaic', strength: 'strong' } }));
+    expect(loadPrefs(localStorage).redactOpts).toEqual({ color: '#111111' });
+
+    // Creates native blackout rectangle with sakuttoRedact metadata & chosen color
+    let committedElements: Array<Record<string, unknown>> = [];
     const mockApi = {
-      getSceneElements: () => [],
+      getSceneElements: () => committedElements,
       getAppState: () => ({ viewBackgroundColor: '#ffffff', theme: 'light' }),
       getFiles: () => ({}),
       addFiles: vi.fn(),
-      updateScene: (arg: { elements?: unknown[] }) => {
+      updateScene: (arg: { elements?: Array<Record<string, unknown>> }) => {
         committedElements = arg.elements || [];
       },
     } as unknown as ExcalidrawImperativeAPI;
 
-    const created = await createOrUpdateRedactElement({
+    const created = createOrUpdateRedactElement({
       api: mockApi,
       rect: { x: 10, y: 20, width: 120, height: 40 },
-      mode: 'blackout',
-      strength: 'high' as never,
+      color: '#495057',
     });
     expect(created).toBeTruthy();
+    expect(created?.type).toBe('rectangle');
+    expect(created?.backgroundColor).toBe('#495057');
     expect(committedElements.length).toBe(1);
     expect(isRedactElement(created)).toBe(true);
-    expect(getRedactMeta(created)?.mode).toBe('blackout');
+    expect(getRedactMeta(created)?.color).toBe('#495057');
 
-    // Renders SakuttoRedactPanel into .App-menu_top__left (compact 1-button mode without dedicated strength button)
+    // Updates selected blackout element color atomically
+    expect(
+      updateRedactElementsColor({
+        api: mockApi,
+        elementIds: [created!.id],
+        color: '#c2255c',
+      }),
+    ).toBe(true);
+    expect(committedElements[0].backgroundColor).toBe('#c2255c');
+    expect(getRedactMeta(committedElements[0] as never)?.color).toBe('#c2255c');
+
+    // getRedactMeta prefers live backgroundColor over stale customData.sakuttoRedact.color
+    const updatedViaNativePicker = {
+      ...created!,
+      backgroundColor: '#1971c2',
+    };
+    expect(getRedactMeta(updatedViaNativePicker)?.color).toBe('#1971c2');
+
+    // Renders SakuttoRedactPanel integrated into native left-panel chrome without standalone header
     document.body.innerHTML = `<div class="excalidraw"><div class="App-menu_top__left"></div></div>`;
     const host = document.createElement('div');
     document.body.append(host);
     const root = createRoot(host);
+    const onColorChange = vi.fn();
+    await act(async () => {
+      root.render(
+        createElement(SakuttoRedactPanel, {
+          lang: 'ja-JP',
+          active: true,
+          uiLayout: 'full',
+          color: '#111111',
+          onColorChange,
+        }),
+      );
+    });
+    expect(document.querySelector('.App-menu_top__left .exq-redact-full-header')).toBeNull();
+    expect(document.querySelector('.App-menu_top__left .selected-shape-actions-container.exq-redact-integrated-container .App-menu__left')).toBeTruthy();
+    expect(document.querySelectorAll('.App-menu_top__left [data-exq-redact-color]').length).toBe(6);
+    document.querySelector<HTMLButtonElement>('.App-menu_top__left [data-exq-redact-color="#c2255c"]')?.click();
+    expect(onColorChange).toHaveBeenCalledWith('#c2255c');
+
+    // Renders compact 1-swatch trigger inside .selected-shape-actions-container--compact
     await act(async () => {
       root.render(
         createElement(SakuttoRedactPanel, {
           lang: 'ja-JP',
           active: true,
           uiLayout: 'compact',
-          mode: 'mosaic',
-          strength: 'medium',
-          onModeChange: vi.fn(),
-          onStrengthChange: vi.fn(),
+          color: '#c2255c',
+          onColorChange,
         }),
       );
     });
-    expect(document.querySelectorAll('.App-menu_top__left [data-exq-redact-trigger="1"]').length).toBe(1);
+    expect(document.querySelector('.App-menu_top__left .selected-shape-actions-container--compact [data-exq-redact-trigger="1"]')).toBeTruthy();
     await act(async () => {
       root.unmount();
     });
+  });
+
+  it('isolates blackout style edits so normal shape/pen defaults remain unaffected', () => {
+    resetRedactStyleIsolationForTests();
+    let appState: Record<string, unknown> = {
+      currentItemBackgroundColor: 'transparent',
+      currentItemStrokeColor: '#c2255c',
+      currentItemFillStyle: 'hachure',
+      currentItemStrokeWidthKey: 'medium',
+      currentItemStrokeStyle: 'solid',
+      currentItemRoughness: 1,
+      currentItemOpacity: 100,
+      currentItemRoundness: 'round',
+    };
+    const updateSceneMock = vi.fn((arg: { appState?: Record<string, unknown> }) => {
+      if (arg.appState) {
+        appState = { ...appState, ...arg.appState };
+      }
+    });
+    const mockApi = {
+      updateScene: updateSceneMock,
+    } as unknown as ExcalidrawImperativeAPI;
+
+    // 1. Normal non-redact state records baseline without calling updateScene
+    expect(syncRedactStyleIsolation(mockApi, appState as never, false)).toBe(false);
+    expect(updateSceneMock).not.toHaveBeenCalled();
+
+    // 2. Selecting a blackout element freezes baseline and immediately reverts global default leaks
+    expect(syncRedactStyleIsolation(mockApi, appState as never, true)).toBe(false);
+    appState = {
+      ...appState,
+      currentItemBackgroundColor: '#1971c2',
+      currentItemStrokeWidthKey: 'bold',
+      currentItemStrokeStyle: 'dashed',
+      currentItemRoughness: 0,
+      currentItemOpacity: 60,
+      currentItemRoundness: 'sharp',
+    };
+    expect(syncRedactStyleIsolation(mockApi, appState as never, true)).toBe(true);
+    expect(updateSceneMock).toHaveBeenCalledTimes(1);
+    expect(appState.currentItemBackgroundColor).toBe('transparent');
+    expect(appState.currentItemStrokeColor).toBe('#c2255c');
+    expect(appState.currentItemStrokeWidthKey).toBe('medium');
+    expect(appState.currentItemStrokeStyle).toBe('solid');
+    expect(appState.currentItemRoughness).toBe(1);
+    expect(appState.currentItemOpacity).toBe(100);
+    expect(appState.currentItemRoundness).toBe('round');
+
+    // 3. Updating pen color during blackout selection preserves the new pen color upon deselection
+    appState = { ...appState, currentItemStrokeColor: '#1971c2' };
+    updateRedactStyleIsolationPenColor('#1971c2');
+    expect(syncRedactStyleIsolation(mockApi, appState as never, false)).toBe(false);
+    expect(appState.currentItemStrokeColor).toBe('#1971c2');
+
+    // 4. Leaving blackout selection keeps global defaults isolated, then accepts normal updates again
+    appState = { ...appState, currentItemBackgroundColor: '#2f9e44' };
+    expect(syncRedactStyleIsolation(mockApi, appState as never, false)).toBe(false);
+    // Re-entering blackout selection freezes the new '#2f9e44' baseline
+    appState = { ...appState, currentItemBackgroundColor: '#111111' };
+    expect(syncRedactStyleIsolation(mockApi, appState as never, true)).toBe(true);
+    expect(appState.currentItemBackgroundColor).toBe('#2f9e44');
+
+    // 5. clearRedactStyleIsolationState prevents stale temporary fill state from being frozen
+    syncRedactStyleIsolation(mockApi, appState as never, false);
+    clearRedactStyleIsolationState();
+    appState = { ...appState, currentItemBackgroundColor: 'transparent', currentItemStrokeColor: '#c2255c' };
+    expect(syncRedactStyleIsolation(mockApi, appState as never, true)).toBe(false);
+    expect(appState.currentItemBackgroundColor).toBe('transparent');
+    expect(appState.currentItemStrokeColor).toBe('#c2255c');
   });
 });
 

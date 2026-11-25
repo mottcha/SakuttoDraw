@@ -2,6 +2,7 @@
 import type { AppLang } from '../../types/annotator';
 import { getMessages } from '../../i18n/messages';
 import { silently } from '../../services/storageBridge';
+import { deleteSelectedElementsWithApi, duplicateSelectedElementsWithApi } from '../apiActions';
 import { MOBILE_SHAPE_OTHER_ITEMS, REDACT_TOOL_CUSTOM_TYPE, SHAPE_OTHER_ITEMS } from './constants';
 import { cloneNativeToolbarIcon, el, svgIcon } from './dom';
 import {
@@ -12,7 +13,7 @@ import {
   runtime,
   scheduleSync,
 } from './runtime';
-import { getButtonIconSignature, isMacPlatform } from './guards';
+import { getButtonIconSignature } from './guards';
 import { runInstantReset } from './topRightBar';
 
 const toolbarMounts = new WeakMap<Element, {
@@ -369,33 +370,6 @@ export function syncMobileToolbar(root: ParentNode = document): boolean {
   return true;
 }
 
-function dispatchElementShortcut(action: 'duplicate' | 'delete'): void {
-  const isMac = isMacPlatform();
-  silently(() => {
-    if (action === 'delete') {
-      document.dispatchEvent(
-        new KeyboardEvent('keydown', {
-          key: 'Delete',
-          code: 'Delete',
-          bubbles: true,
-          cancelable: true,
-        }),
-      );
-      return;
-    }
-    document.dispatchEvent(
-      new KeyboardEvent('keydown', {
-        key: 'd',
-        code: 'KeyD',
-        ctrlKey: !isMac,
-        metaKey: isMac,
-        bubbles: true,
-        cancelable: true,
-      }),
-    );
-  });
-}
-
 function hasAnySelectedElement(): boolean {
   if (!runtime.api) return true;
   const st = silently(() => runtime.api?.getAppState());
@@ -438,7 +412,7 @@ export function syncMobileShapeActions(root: ParentNode = document): boolean {
       e.preventDefault();
       e.stopPropagation();
       if (dupBtn.disabled) return;
-      dispatchElementShortcut('duplicate');
+      duplicateSelectedElementsWithApi(runtime.api);
       scheduleSync();
     });
     const dupWrap = el('div', { class: 'compact-action-item exq-mobile-action-item' }, dupBtn);
@@ -458,7 +432,7 @@ export function syncMobileShapeActions(root: ParentNode = document): boolean {
       e.preventDefault();
       e.stopPropagation();
       if (delBtn.disabled) return;
-      dispatchElementShortcut('delete');
+      deleteSelectedElementsWithApi(runtime.api);
       scheduleSync();
     });
     const delWrap = el('div', { class: 'compact-action-item exq-mobile-action-item' }, delBtn);

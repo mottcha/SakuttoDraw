@@ -6,8 +6,6 @@ import type {
   ExportScale,
   InputDevicePref,
   Prefs,
-  RedactMode,
-  RedactStrength,
   StylesPanelPref,
   ThemeMode,
 } from '../types/annotator';
@@ -16,6 +14,8 @@ import { detectBrowserLang, normalizeAppLang } from '../i18n/messages';
 export const DEFAULT_PINK = '#c2255c';
 export const DEFAULT_PEN_COLOR = DEFAULT_PINK;
 export const PEN_COLOR_SWATCHES = ['#c2255c', '#1e1e1e', '#e03131', '#1971c2', '#2f9e44', '#f08c00'] as const;
+export const DEFAULT_REDACT_COLOR = '#111111';
+export const REDACT_COLOR_SWATCHES = ['#111111', '#495057', '#adb5bd', '#ffffff', '#c2255c', '#1971c2'] as const;
 export const LS_ELEMENTS_KEY = 'excalidraw';
 export const LS_STATE_KEY = 'excalidraw-state';
 export const LS_PREFS_KEY = 'exq-annotator-prefs';
@@ -46,8 +46,7 @@ export const DEFAULT_PREFS: Prefs = {
     modernContextMenu: true,
   },
   redactOpts: {
-    mode: 'mosaic',
-    strength: 'medium',
+    color: DEFAULT_REDACT_COLOR,
   },
 };
 
@@ -91,16 +90,6 @@ export function normalizeInputDevice(value: unknown): InputDevicePref {
 export function normalizeStylesPanelMode(value: unknown): StylesPanelPref {
   if (value === 'compact' || value === 'full') return value;
   return 'auto';
-}
-
-export function normalizeRedactMode(value: unknown): RedactMode {
-  if (value === 'blur' || value === 'blackout') return value;
-  return 'mosaic';
-}
-
-export function normalizeRedactStrength(value: unknown): RedactStrength {
-  if (value === 'weak' || value === 'strong') return value;
-  return 'medium';
 }
 
 export function sakuttoGetFormFactor(width: number, height: number): 'phone' | 'desktop' {
@@ -254,8 +243,10 @@ export function loadPrefs(
         }
       }
       if (saved.redactOpts && typeof saved.redactOpts === 'object') {
-        base.redactOpts.mode = normalizeRedactMode(saved.redactOpts.mode);
-        base.redactOpts.strength = normalizeRedactStrength(saved.redactOpts.strength);
+        base.redactOpts.color = normalizeHexColor(
+          saved.redactOpts.color,
+          DEFAULT_REDACT_COLOR,
+        );
       }
     }
   }

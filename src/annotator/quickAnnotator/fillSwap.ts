@@ -12,7 +12,42 @@ import { getCurrentPenColor } from './mainMenu';
 
 /* ================= Stroke <-> Background Fill Toggle (Item 6) ================= */
 const FILLABLE_ELEMENT_TYPES = new Set(['rectangle', 'ellipse', 'diamond', 'line', 'freedraw']);
+const FILLABLE_SHAPE_TOOLS = new Set(['rectangle', 'ellipse', 'diamond']);
 type ElementFillStyle = 'hachure' | 'cross-hatch' | 'solid' | 'zigzag';
+
+interface TempFillSnapshot {
+  strokeColor: string;
+  backgroundColor: string;
+  fillStyle: ElementFillStyle;
+}
+
+let tempFillSnapshot: TempFillSnapshot | null = null;
+
+export function clearTempFillSnapshot(): void {
+  tempFillSnapshot = null;
+}
+
+export function restoreTempFillIfToolChanged(
+  api: ExcalidrawImperativeAPI | null,
+  appState?: { activeTool?: { type?: string } },
+): boolean {
+  if (!api || !tempFillSnapshot) return false;
+  const activeType = appState?.activeTool?.type ?? api.getAppState()?.activeTool?.type;
+  if (activeType && FILLABLE_SHAPE_TOOLS.has(activeType)) {
+    return false;
+  }
+  const snap = tempFillSnapshot;
+  tempFillSnapshot = null;
+  api.updateScene({
+    appState: {
+      currentItemStrokeColor: snap.strokeColor,
+      currentItemBackgroundColor: snap.backgroundColor,
+      currentItemFillStyle: snap.fillStyle,
+    },
+    captureUpdate: CaptureUpdateAction.NEVER,
+  });
+  return true;
+}
 
 export function computeSwappedStrokeFill({
   strokeColor,
@@ -117,7 +152,7 @@ export function getActiveStrokeFillState(api: ExcalidrawImperativeAPI | null): {
   }
 
   const activeType = appState.activeTool?.type;
-  const eligibleTool = activeType === 'rectangle' || activeType === 'ellipse' || activeType === 'diamond';
+  const eligibleTool = Boolean(activeType && FILLABLE_SHAPE_TOOLS.has(activeType));
   const stroke = appState.currentItemStrokeColor || DEFAULT_PEN_COLOR;
   const bg = appState.currentItemBackgroundColor || 'transparent';
   return {
@@ -182,30 +217,45 @@ export function toggleFillOrSwapColorsWithApi(
 
     api.updateScene({
       elements: nextElements,
-      appState: {
-        currentItemStrokeColor: resolvedStyle.strokeColor,
-        currentItemBackgroundColor: resolvedStyle.backgroundColor,
-        currentItemFillStyle: resolvedStyle.fillStyle,
-      },
       captureUpdate: CaptureUpdateAction.IMMEDIATELY,
     });
     toastFn?.(getMessages(lang).toastColorSwapped);
     return true;
   }
 
+  const activeType = appState.activeTool?.type;
+  if (!activeType || !FILLABLE_SHAPE_TOOLS.has(activeType)) {
+    return false;
+  }
+
+  const curStroke = appState.currentItemStrokeColor || defaultPenColor;
+  const curBg = appState.currentItemBackgroundColor || 'transparent';
+  const curFill = (appState.currentItemFillStyle || 'hachure') as ElementFillStyle;
+
   const nextStyle = computeSwappedStrokeFill({
-    strokeColor: appState.currentItemStrokeColor || defaultPenColor,
-    backgroundColor: appState.currentItemBackgroundColor || 'transparent',
-    fillStyle: appState.currentItemFillStyle || 'hachure',
+    strokeColor: curStroke,
+    backgroundColor: curBg,
+    fillStyle: curFill,
     fallbackStrokeColor: defaultPenColor,
     targetMode,
   });
+
+  const enteringFilled = nextStyle.strokeColor === 'transparent' && nextStyle.backgroundColor !== 'transparent';
+  let resolvedFillStyle = nextStyle.fillStyle;
+  if (enteringFilled) {
+    if (!tempFillSnapshot) {
+      tempFillSnapshot = { strokeColor: curStroke, backgroundColor: curBg, fillStyle: curFill };
+    }
+  } else if (tempFillSnapshot) {
+    resolvedFillStyle = tempFillSnapshot.fillStyle;
+    tempFillSnapshot = null;
+  }
 
   api.updateScene({
     appState: {
       currentItemStrokeColor: nextStyle.strokeColor,
       currentItemBackgroundColor: nextStyle.backgroundColor,
-      currentItemFillStyle: nextStyle.fillStyle,
+      currentItemFillStyle: resolvedFillStyle,
     },
     captureUpdate: CaptureUpdateAction.NEVER,
   });
@@ -218,12 +268,6 @@ const fillToggleMounts = new WeakMap<Element, {
   wrap: HTMLElement;
   btn: HTMLButtonElement;
   iconSlot: HTMLElement;
-}>();
-const fillSegmentMounts = new WeakMap<Element, {
-  lang: AppLang;
-  wrap: HTMLElement;
-  outlineBtn: HTMLButtonElement;
-  filledBtn: HTMLButtonElement;
 }>();
 
 function updateFillToggleButtonState(
@@ -240,8 +284,9 @@ function syncCompactFillToggle(container: Element, isMobile: boolean): boolean {
   const strokeTrigger = container.querySelector('[data-openpopup="elementStroke"]');
   const bgTrigger = container.querySelector('[data-openpopup="elementBackground"]');
   const existing = fillToggleMounts.get(container);
+  const { isFilledOnly, eligible } = getActiveStrokeFillState(runtime.api);
 
-  if (!strokeTrigger || !bgTrigger) {
+  if (!strokeTrigger || !bgTrigger || !eligible) {
     if (existing) {
       existing.wrap.remove();
       fillToggleMounts.delete(container);
@@ -250,7 +295,6 @@ function syncCompactFillToggle(container: Element, isMobile: boolean): boolean {
   }
 
   const t = getMessages(runtime.prefs.lang);
-  const { isFilledOnly } = getActiveStrokeFillState(runtime.api);
 
   let mounted = existing;
   if (mounted && mounted.lang !== runtime.prefs.lang) {
@@ -307,108 +351,10 @@ function syncCompactFillToggle(container: Element, isMobile: boolean): boolean {
   return true;
 }
 
-function syncExpandedFillSegment(panelRoot: Element): boolean {
-  const strokeTrigger = panelRoot.querySelector('[data-openpopup="elementStroke"]');
-  const bgTrigger = panelRoot.querySelector('[data-openpopup="elementBackground"]');
-  const existing = fillSegmentMounts.get(panelRoot);
-
-  if (!strokeTrigger || !bgTrigger) {
-    if (existing) {
-      existing.wrap.remove();
-      fillSegmentMounts.delete(panelRoot);
-    }
-    return false;
-  }
-
-  const targetParent =
-    strokeTrigger.closest('.panelColumn') ||
-    panelRoot.querySelector('.panelColumn') ||
-    panelRoot;
-  const t = getMessages(runtime.prefs.lang);
-  const { isFilledOnly } = getActiveStrokeFillState(runtime.api);
-
-  let mounted = existing;
-  if (mounted && mounted.lang !== runtime.prefs.lang) {
-    mounted.wrap.remove();
-    fillSegmentMounts.delete(panelRoot);
-    mounted = undefined;
-  }
-
-  if (!mounted || !mounted.wrap.isConnected) {
-    const outlineBtn = el(
-      'button',
-      {
-        type: 'button',
-        role: 'radio',
-        class: 'exq-fill-seg-btn',
-        'data-exq-fill-mode': 'outline',
-        title: t.swapStrokeFillTitle,
-      },
-      svgIcon('fillOutline', 13, '0 0 24 24', 1.6),
-      el('span', null, t.fillToggleOutline),
-    );
-    const filledBtn = el(
-      'button',
-      {
-        type: 'button',
-        role: 'radio',
-        class: 'exq-fill-seg-btn',
-        'data-exq-fill-mode': 'filled',
-        title: t.swapStrokeFillTitle,
-      },
-      svgIcon('fillSolid', 13, '0 0 24 24', 1.6),
-      el('span', null, t.fillToggleFilled),
-    );
-
-    outlineBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      toggleFillOrSwapColorsWithApi(runtime.api, {
-        lang: runtime.prefs.lang,
-        showToast,
-        defaultPenColor: getCurrentPenColor(),
-        targetMode: 'outline',
-      });
-      syncStylesPanelColorSwap();
-      scheduleSync();
-    });
-    filledBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      toggleFillOrSwapColorsWithApi(runtime.api, {
-        lang: runtime.prefs.lang,
-        showToast,
-        defaultPenColor: getCurrentPenColor(),
-        targetMode: 'filled',
-      });
-      syncStylesPanelColorSwap();
-      scheduleSync();
-    });
-
-    const wrap = el(
-      'div',
-      {
-        class: 'exq-fill-segment',
-        'data-exq-fill-segment': '1',
-        role: 'radiogroup',
-        'aria-label': t.swapStrokeFillTitle,
-      },
-      outlineBtn,
-      filledBtn,
-    );
-    targetParent.insertBefore(wrap, targetParent.firstChild);
-    mounted = { lang: runtime.prefs.lang, wrap, outlineBtn, filledBtn };
-    fillSegmentMounts.set(panelRoot, mounted);
-  }
-
-  mounted.outlineBtn.classList.toggle('exq-active', !isFilledOnly);
-  mounted.outlineBtn.setAttribute('aria-checked', String(!isFilledOnly));
-  mounted.filledBtn.classList.toggle('exq-active', isFilledOnly);
-  mounted.filledBtn.setAttribute('aria-checked', String(isFilledOnly));
-  return true;
-}
-
 export function syncStylesPanelColorSwap(root: ParentNode = document): boolean {
+  restoreTempFillIfToolChanged(runtime.api);
+  root.querySelectorAll('[data-exq-fill-segment="1"]').forEach((node) => node.remove());
+
   let updated = false;
   const slimContainer = root.querySelector('.App-menu_top__left .compact-shape-actions, .compact-shape-actions-island .compact-shape-actions');
   if (slimContainer) {
@@ -418,13 +364,6 @@ export function syncStylesPanelColorSwap(root: ParentNode = document): boolean {
   const mobileContainer = root.querySelector('.mobile-shape-actions > div:first-child');
   if (mobileContainer) {
     updated = syncCompactFillToggle(mobileContainer, true) || updated;
-  }
-
-  const expandedPanel = root.querySelector(
-    '.selected-shape-actions-container:not(.selected-shape-actions-container--compact) .App-menu__left, .selected-shape-actions-container:not(.selected-shape-actions-container--compact) .selected-shape-actions, .App-menu__left',
-  );
-  if (expandedPanel && !expandedPanel.closest('.compact-shape-actions-island') && !expandedPanel.closest('.exq-redact-full-island')) {
-    updated = syncExpandedFillSegment(expandedPanel) || updated;
   }
 
   return updated;

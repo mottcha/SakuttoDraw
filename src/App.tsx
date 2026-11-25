@@ -1,15 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Excalidraw } from '@excalidraw/excalidraw';
 import type { AppState, BinaryFiles, ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
-import type { ExcalidrawElement, OrderedExcalidrawElement } from '@excalidraw/excalidraw/element/types';
+import type { OrderedExcalidrawElement } from '@excalidraw/excalidraw/element/types';
 import '@excalidraw/excalidraw/index.css';
 import './styles/sakutto.css';
 import type {
   AppLang,
   BoxSelectionPref,
   InputDevicePref,
-  RedactMode,
-  RedactStrength,
   StylesPanelPref,
   ThemeMode,
 } from './types/annotator';
@@ -20,13 +18,16 @@ import {
   bootQuickAnnotator,
   bootstrapCleanCanvas,
   REDACT_TOOL_CUSTOM_TYPE,
+  restoreTempFillIfToolChanged,
   runtime,
   setLangChangeListener,
 } from './annotator/quickAnnotator';
 import {
-  createOrUpdateRedactElement,
+  clearRedactStyleIsolationState,
   getRedactMeta,
   isRedactElement,
+  syncRedactStyleIsolation,
+  updateRedactElementsColor,
 } from './annotator/redactProcessor';
 import {
   cancelPendingScenePersist,
@@ -46,10 +47,9 @@ import { applyJapaneseGlyphOverride } from './annotator/jpGlyphOverride';
 type RedactUiLayout = 'full' | 'compact' | 'phone';
 
 interface RedactUiState {
-  active: boolean;
-  mode: RedactMode;
-  strength: RedactStrength;
-  selectedIds: string[];
+  toolActive: boolean;
+  selectionOnly: boolean;
+  color: string;
   uiLayout: RedactUiLayout;
 }
 
@@ -98,16 +98,11 @@ export function App() {
     viewModeEnabled: false,
   }));
   const [redactState, setRedactState] = useState<RedactUiState>(() => ({
-    active: false,
-    mode: runtime.prefs.redactOpts.mode,
-    strength: runtime.prefs.redactOpts.strength,
-    selectedIds: [],
+    toolActive: false,
+    selectionOnly: false,
+    color: runtime.prefs.redactOpts.color,
     uiLayout: resolveRedactUiLayout(initialBootstrap.stylesPanelMode),
   }));
-  const [redactBusy, setRedactBusy] = useState(false);
-  const redactGeomRef = useRef<Map<string, string>>(new Map());
-  const redactRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const redactRefreshingRef = useRef(false);
   const [systemDark, setSystemDark] = useState<boolean>(() =>
     typeof window !== 'undefined' && typeof window.matchMedia === 'function'
       ? window.matchMedia('(prefers-color-scheme: dark)').matches
@@ -140,9 +135,6 @@ export function App() {
       window.removeEventListener('pagehide', onUnload);
       window.removeEventListener('beforeunload', onUnload);
       window.removeEventListener('resize', onResize, true);
-      if (redactRefreshTimerRef.current !== null) {
-        clearTimeout(redactRefreshTimerRef.current);
-      }
       setLangChangeListener(null);
       cleanup();
       cancelPendingScenePersist();
@@ -171,37 +163,26 @@ export function App() {
     syncDesktopUIMode(nextMode, { triggerResize: true });
   }, []);
 
-  const applyRedactSettingToSelected = useCallback(
-    async (nextMode: RedactMode, nextStrength: RedactStrength) => {
-      runtime.prefs.redactOpts = { mode: nextMode, strength: nextStrength };
-      savePrefs(runtime.prefs);
-      setRedactState((prev) => ({ ...prev, mode: nextMode, strength: nextStrength }));
+  const applyRedactColor = useCallback((nextColor: string) => {
+    runtime.prefs.redactOpts = { color: nextColor };
+    savePrefs(runtime.prefs);
+    setRedactState((prev) => ({ ...prev, color: nextColor }));
 
-      const api = runtime.api;
-      if (!api || redactState.selectedIds.length === 0) return;
+    const api = runtime.api;
+    if (!api) return;
+    const selectedIdsMap = api.getAppState()?.selectedElementIds || {};
+    const selectedRedactIds = api
+      .getSceneElements()
+      .filter((item) => !item.isDeleted && Boolean(selectedIdsMap[item.id]) && isRedactElement(item))
+      .map((item) => item.id);
+    if (selectedRedactIds.length === 0) return;
 
-      setRedactBusy(true);
-      redactRefreshingRef.current = true;
-      try {
-        for (const id of redactState.selectedIds) {
-          const elItem = api.getSceneElements().find((item) => item.id === id && !item.isDeleted);
-          if (!elItem) continue;
-          await createOrUpdateRedactElement({
-            api,
-            rect: { x: elItem.x, y: elItem.y, width: elItem.width, height: elItem.height },
-            mode: nextMode,
-            strength: nextStrength,
-            existingElementId: id,
-            selectResult: true,
-          });
-        }
-      } finally {
-        redactRefreshingRef.current = false;
-        setRedactBusy(false);
-      }
-    },
-    [redactState.selectedIds],
-  );
+    updateRedactElementsColor({
+      api,
+      elementIds: selectedRedactIds,
+      color: nextColor,
+    });
+  }, []);
 
   const handleApi = useCallback((api: ExcalidrawImperativeAPI | null) => {
     attachExcalidrawAPI(api);
@@ -240,93 +221,60 @@ export function App() {
       const redactSelectionOnly =
         selectedElements.length > 0 && selectedElements.every((item) => isRedactElement(item));
       const openMenuBlocking = Boolean(appState.openMenu);
-      const nextRedactActive =
+      const nextLayout = resolveRedactUiLayout(runtime.prefs.stylesPanelMode);
+      const nextToolActive =
         !nextZen &&
         !nextView &&
-        (redactToolActive || redactSelectionOnly) &&
-        !(resolveRedactUiLayout(runtime.prefs.stylesPanelMode) === 'phone' && openMenuBlocking);
+        redactToolActive &&
+        !(nextLayout === 'phone' && openMenuBlocking);
+      const nextSelectionOnly =
+        !nextZen &&
+        !nextView &&
+        !redactToolActive &&
+        redactSelectionOnly;
+
+      const tempFillRestored = restoreTempFillIfToolChanged(runtime.api, appState);
+      if (tempFillRestored) {
+        clearRedactStyleIsolationState();
+      } else {
+        syncRedactStyleIsolation(runtime.api, appState, redactSelectionOnly);
+      }
 
       const firstMeta = redactSelectionOnly ? getRedactMeta(selectedElements[0]) : null;
-      const nextMode = firstMeta ? firstMeta.mode : runtime.prefs.redactOpts.mode;
-      const nextStrength = firstMeta ? firstMeta.strength : runtime.prefs.redactOpts.strength;
-      const nextSelectedIds = redactSelectionOnly ? selectedElements.map((item) => item.id) : [];
-      const nextLayout = resolveRedactUiLayout(runtime.prefs.stylesPanelMode);
+      const nextColor = firstMeta ? firstMeta.color : runtime.prefs.redactOpts.color;
+      if (firstMeta && runtime.prefs.redactOpts.color !== firstMeta.color) {
+        runtime.prefs.redactOpts = { color: firstMeta.color };
+        savePrefs(runtime.prefs);
+      }
 
       setRedactState((prev) => {
         if (
-          prev.active === nextRedactActive &&
-          prev.mode === nextMode &&
-          prev.strength === nextStrength &&
-          prev.uiLayout === nextLayout &&
-          prev.selectedIds.length === nextSelectedIds.length &&
-          prev.selectedIds.every((id, idx) => id === nextSelectedIds[idx])
+          prev.toolActive === nextToolActive &&
+          prev.selectionOnly === nextSelectionOnly &&
+          prev.color === nextColor &&
+          prev.uiLayout === nextLayout
         ) {
           return prev;
         }
         return {
-          active: nextRedactActive,
-          mode: nextMode,
-          strength: nextStrength,
-          selectedIds: nextSelectedIds,
+          toolActive: nextToolActive,
+          selectionOnly: nextSelectionOnly,
+          color: nextColor,
           uiLayout: nextLayout,
         };
       });
-
-      // Re-sample mosaic/blur redact elements smoothly when moved or resized
-      if (!redactRefreshingRef.current && runtime.api) {
-        const nextGeomMap = new Map<string, string>();
-        const movedOrResized: Array<{ el: ExcalidrawElement; meta: NonNullable<ReturnType<typeof getRedactMeta>> }> = [];
-        for (const item of elements) {
-          if (item.isDeleted) continue;
-          const meta = getRedactMeta(item);
-          if (!meta) continue;
-          const sig = `${Math.round(item.x * 10)}:${Math.round(item.y * 10)}:${Math.round(item.width * 10)}:${Math.round(item.height * 10)}`;
-          const prevSig = redactGeomRef.current.get(item.id);
-          nextGeomMap.set(item.id, sig);
-          if (prevSig && prevSig !== sig && (meta.mode === 'mosaic' || meta.mode === 'blur')) {
-            movedOrResized.push({ el: item, meta });
-          }
-        }
-        redactGeomRef.current = nextGeomMap;
-
-        if (movedOrResized.length > 0) {
-          if (redactRefreshTimerRef.current !== null) {
-            clearTimeout(redactRefreshTimerRef.current);
-          }
-          redactRefreshTimerRef.current = setTimeout(() => {
-            redactRefreshTimerRef.current = null;
-            const api = runtime.api;
-            if (!api || redactRefreshingRef.current) return;
-            void (async () => {
-              redactRefreshingRef.current = true;
-              try {
-                for (const { el: targetEl, meta } of movedOrResized) {
-                  const latest = api.getSceneElements().find((x) => x.id === targetEl.id && !x.isDeleted);
-                  if (!latest) continue;
-                  await createOrUpdateRedactElement({
-                    api,
-                    rect: { x: latest.x, y: latest.y, width: latest.width, height: latest.height },
-                    mode: meta.mode,
-                    strength: meta.strength,
-                    existingElementId: latest.id,
-                    selectResult: false,
-                  });
-                }
-              } finally {
-                redactRefreshingRef.current = false;
-              }
-            })();
-          }, 180);
-        }
-      }
 
       scheduleScenePersist(elements, appState as unknown as Record<string, unknown>, files);
     },
     [],
   );
 
+  const rootClassName = `sakutto-app-root${
+    redactState.toolActive ? ' exq-redact-tool-active' : ''
+  }${redactState.selectionOnly ? ' exq-redact-selected' : ''}`;
+
   return (
-    <div className={`sakutto-app-root${redactState.active ? ' exq-redact-panel-active' : ''}`}>
+    <div className={rootClassName}>
       <Excalidraw
         langCode={lang}
         theme={resolvedTheme}
@@ -346,13 +294,10 @@ export function App() {
       </Excalidraw>
       <SakuttoRedactPanel
         lang={lang}
-        active={redactState.active}
+        active={redactState.toolActive}
         uiLayout={redactState.uiLayout}
-        mode={redactState.mode}
-        strength={redactState.strength}
-        isBusy={redactBusy}
-        onModeChange={(nextMode) => void applyRedactSettingToSelected(nextMode, redactState.strength)}
-        onStrengthChange={(nextStrength) => void applyRedactSettingToSelected(redactState.mode, nextStrength)}
+        color={redactState.color}
+        onColorChange={applyRedactColor}
       />
     </div>
   );

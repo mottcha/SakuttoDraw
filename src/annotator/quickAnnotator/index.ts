@@ -158,8 +158,10 @@ export { activateLassoTool, syncExtraToolsMenu } from './extraToolsMenu';
 export { clampContextMenuPopover, syncContextMenu } from './contextMenu';
 export { runInstantExport, runInstantReset, syncTopRightBar } from './topRightBar';
 export {
+  clearTempFillSnapshot,
   computeSwappedStrokeFill,
   getActiveStrokeFillState,
+  restoreTempFillIfToolChanged,
   syncStylesPanelColorSwap,
   toggleFillOrSwapColorsWithApi,
 } from './fillSwap';
@@ -167,6 +169,8 @@ export { installRedactDragController } from './redactDrag';
 export {
   DEFAULT_PINK,
   DEFAULT_PREFS,
+  DEFAULT_REDACT_COLOR,
+  REDACT_COLOR_SWATCHES,
   bootstrapCleanCanvas,
   clearIndexedDbFiles,
   loadPrefs,
@@ -175,4 +179,9 @@ export {
   savePrefs,
   shouldSkipAutoReset,
 } from '../../services/storageBridge';
-export { filterTargetElementsForExport, inlinePreSplitFontsIntoSvg } from '../apiActions';
+export {
+  deleteSelectedElementsWithApi,
+  duplicateSelectedElementsWithApi,
+  filterTargetElementsForExport,
+  inlinePreSplitFontsIntoSvg,
+} from '../apiActions';

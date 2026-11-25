@@ -470,10 +470,10 @@ body,
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  min-height: 32px;
+  gap: 9px;
+  min-height: 36px;
   padding: 5px 9px;
-  border-radius: 8px;
+  border-radius: 9px;
   border: 1px solid var(--default-border-color, rgba(128, 128, 148, 0.22));
   background: var(--color-surface-low, rgba(128, 128, 148, 0.06));
   color: var(--text-primary-color, #1b1b1f);
@@ -489,6 +489,24 @@ body,
 .exq-custom-toggle-card.exq-active {
   border-color: color-mix(in srgb, var(--color-primary, #6965db) 42%, transparent);
   background: color-mix(in srgb, var(--color-primary, #6965db) 8%, transparent);
+}
+.exq-custom-toggle-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid var(--default-border-color, rgba(128, 128, 148, 0.2));
+  background: var(--island-bg-color, #ffffff);
+  color: var(--text-secondary-color, #686878);
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+.exq-custom-toggle-card.exq-active .exq-custom-toggle-icon {
+  border-color: color-mix(in srgb, var(--color-primary, #6965db) 32%, transparent);
+  background: color-mix(in srgb, var(--color-primary, #6965db) 16%, transparent);
+  color: var(--color-primary, #6965db);
 }
 .exq-custom-toggle-label {
   flex: 1 1 auto;
@@ -541,6 +559,11 @@ body,
   font-weight: 600;
   color: var(--text-secondary-color, #686878);
   user-select: none;
+}
+.exq-pref-group-title--icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 .exq-pref-close-btn {
   width: 22px;
@@ -1254,68 +1277,37 @@ body,
   white-space: nowrap;
 }
 
-.exq-fill-segment {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 3px;
-  padding: 3px;
-  margin-bottom: 10px;
-  border-radius: 8px;
-  background: var(--color-surface-low, rgba(128, 128, 148, 0.12));
-  border: 1px solid var(--default-border-color, rgba(128, 128, 148, 0.18));
+/* === 9. Blackout / Redact Tool & Left Style Panel Integration (Option B) === */
+.sakutto-app-root.exq-redact-tool-active .selected-shape-actions-container:not(.exq-redact-integrated-container) {
+  display: none !important;
 }
-.exq-fill-seg-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  height: 28px;
-  padding: 0 6px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-secondary-color, #686878);
-  font-size: 11px;
-  font-weight: 600;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: background-color 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
-}
-.exq-fill-seg-btn:hover {
-  color: var(--text-primary-color, #1b1b1f);
-}
-.exq-fill-seg-btn.exq-active {
-  background: var(--island-bg-color, #ffffff);
-  color: var(--color-primary, #6965db);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
-}
-.excalidraw.theme--dark .exq-fill-seg-btn.exq-active {
-  background: rgba(168, 165, 255, 0.2);
-  color: #e0dfff;
+.sakutto-app-root.exq-redact-tool-active .mobile-shape-actions > div:first-child > .compact-action-item:not(.exq-redact-mobile-item) {
+  display: none !important;
 }
 
-/* === 9. Blur / Redact Tool & Left Style Panel Integration (Item 5) === */
-.sakutto-app-root.exq-redact-panel-active .selected-shape-actions-container {
+/* Option B: When blackout rectangle(s) are selected, curate native left panel to relevant controls */
+.sakutto-app-root.exq-redact-selected .App-menu__left .selected-shape-actions > div:has([data-openpopup="elementStroke"]),
+.sakutto-app-root.exq-redact-selected .App-menu__left .selected-shape-actions > fieldset:has([data-testid="fill-hachure"]),
+.sakutto-app-root.exq-redact-selected .App-menu__left .selected-shape-actions > fieldset:has([data-testid="strokeWidth-thin"]),
+.sakutto-app-root.exq-redact-selected .App-menu__left .selected-shape-actions > fieldset:has(input[name="stroke-width"]),
+.sakutto-app-root.exq-redact-selected .App-menu__left .selected-shape-actions > fieldset:has(input[name="strokeStyle"]),
+.sakutto-app-root.exq-redact-selected .App-menu__left .selected-shape-actions > fieldset:has(input[name="sloppiness"]) {
   display: none !important;
 }
-.sakutto-app-root.exq-redact-panel-active .mobile-shape-actions > div:first-child > .compact-action-item:not(.exq-redact-mobile-item) {
+.sakutto-app-root.exq-redact-selected .compact-shape-actions > .compact-action-item:has([data-openpopup="elementStroke"]),
+.sakutto-app-root.exq-redact-selected .compact-shape-actions > .exq-fill-compact-item,
+.sakutto-app-root.exq-redact-selected .compact-shape-actions > .compact-action-item:has([data-openpopup="elementBackground"]) + .compact-action-item:has(.properties-trigger),
+.sakutto-app-root.exq-redact-selected .mobile-shape-actions > div:first-child > .compact-action-item:has([data-openpopup="elementStroke"]),
+.sakutto-app-root.exq-redact-selected .mobile-shape-actions > div:first-child > .exq-fill-mobile-item,
+.sakutto-app-root.exq-redact-selected .mobile-shape-actions > div:first-child > .compact-action-item:has([data-openpopup="elementBackground"]) + .compact-action-item:has(.properties-trigger) {
   display: none !important;
 }
-.exq-redact-full-island {
+
+.exq-redact-integrated-full {
   pointer-events: auto;
-  width: 202px;
-  max-width: 12.5rem;
-  padding: 10px;
-  border-radius: var(--border-radius-lg, 8px);
-  background: var(--island-bg-color, #ffffff);
-  box-shadow: var(--shadow-island, 0 1px 4px rgba(0, 0, 0, 0.12));
+  width: 12.625rem;
+  max-width: 12.625rem;
   box-sizing: border-box;
-}
-.exq-redact-full-header {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-primary-color, #1b1b1f);
-  margin-bottom: 8px;
 }
 .exq-redact-compact-wrap {
   position: relative;
@@ -1326,7 +1318,7 @@ body,
   width: fit-content;
 }
 .excalidraw .exq-redact-flyout {
-  width: 244px;
+  width: 224px;
   height: auto !important;
   max-height: calc(100vh - 120px) !important;
   padding: 10px;
@@ -1346,7 +1338,7 @@ body,
   position: fixed !important;
   top: auto !important;
   right: auto !important;
-  width: min(256px, calc(100vw - 24px));
+  width: min(228px, calc(100vw - 24px));
   z-index: 1050;
 }
 .exq-redact-card-body {
@@ -1354,43 +1346,36 @@ body,
   flex-direction: column;
   gap: 8px;
 }
-.exq-redact-mode-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  min-height: 46px;
-  padding: 5px 3px;
-  border-radius: 8px;
-  border: 1px solid var(--default-border-color, rgba(128, 128, 148, 0.22));
-  background: var(--color-surface-low, rgba(128, 128, 148, 0.06));
-  color: var(--text-primary-color, #1b1b1f);
-  font-size: 10.5px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+.exq-redact-color-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+  padding-top: 2px;
 }
-.exq-redact-mode-card:hover:not(:disabled) {
-  background: var(--button-hover-bg, #f1f0ff);
-}
-.exq-redact-mode-card.exq-active {
-  border-color: var(--color-primary, #6965db);
-  background: color-mix(in srgb, var(--color-primary, #6965db) 12%, transparent);
-  color: var(--color-primary, #6965db);
-  font-weight: 600;
-}
-.exq-redact-group-disabled {
-  opacity: 0.42;
-  pointer-events: none;
-}
-.exq-redact-note {
-  font-size: 10px;
-  line-height: 1.35;
-  color: var(--text-secondary-color, #686878);
-  padding: 4px 6px;
+.exq-redact-color-swatch {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  min-width: 22px;
+  padding: 0;
   border-radius: 6px;
-  background: var(--color-surface-low, rgba(128, 128, 148, 0.08));
+  border: 1.5px solid rgba(128, 128, 148, 0.42);
+  cursor: pointer;
+  transition: transform 0.1s ease, outline-color 0.1s ease;
+}
+.exq-redact-color-swatch:hover {
+  transform: scale(1.06);
+}
+.exq-redact-color-swatch.exq-active {
+  outline: 2px solid var(--color-primary, #6965db);
+  outline-offset: 2px;
+}
+.exq-redact-trigger-swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1.5px solid rgba(128, 128, 148, 0.52);
+  display: inline-block;
+  box-sizing: border-box;
 }
 .exq-redact-rubberband {
   position: absolute;

@@ -18,12 +18,9 @@ export interface ExportOpts {
 export type BoxSelectionPref = 'overlap' | 'contain';
 export type InputDevicePref = 'trackpad' | 'mouse';
 export type StylesPanelPref = 'auto' | 'compact' | 'full';
-export type RedactMode = 'mosaic' | 'blur' | 'blackout';
-export type RedactStrength = 'weak' | 'medium' | 'strong';
 
 export interface RedactOpts {
-  mode: RedactMode;
-  strength: RedactStrength;
+  color: string;
 }
 
 export interface QuickOpts {

@@ -22,11 +22,7 @@ const ICON_DEFS: Record<string, Array<[string, Record<string, string | number>]>
   line: [['line', { x1: 5, y1: 19, x2: 19, y2: 5 }]],
   diamond: [['path', { d: 'M12 3.5 20.5 12 12 20.5 3.5 12 12 3.5Z' }]],
   redact: [
-    ['rect', { x: 4, y: 4, width: 16, height: 16, rx: 2 }],
-    ['rect', { x: 7, y: 7, width: 4, height: 4, fill: 'currentColor', stroke: 'none', opacity: '0.85' }],
-    ['rect', { x: 13, y: 7, width: 4, height: 4, fill: 'currentColor', stroke: 'none', opacity: '0.35' }],
-    ['rect', { x: 7, y: 13, width: 4, height: 4, fill: 'currentColor', stroke: 'none', opacity: '0.35' }],
-    ['rect', { x: 13, y: 13, width: 4, height: 4, fill: 'currentColor', stroke: 'none', opacity: '0.85' }],
+    ['rect', { x: 4, y: 5, width: 16, height: 14, rx: 2.5, fill: 'currentColor' }],
   ],
   fillOutline: [['rect', { x: 4, y: 4, width: 16, height: 16, rx: 2.5 }]],
   fillSolid: [['rect', { x: 4, y: 4, width: 16, height: 16, rx: 2.5, fill: 'currentColor' }]],
