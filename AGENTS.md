@@ -6,7 +6,13 @@ SakuttoDraw を保守・改修する際の設計方針と不変条件（Invarian
 
 - `src/App.tsx`: `<Excalidraw />` のマウント、初回1回のみの `bootstrapCleanCanvas()`、`langCode` / `themeMode`（`light | dark | system`）管理、`onChange` のデバウンス保存委譲。
 - `src/components/SakuttoMainMenu.tsx`: 公式 `<MainMenu>` の構成（ファイル操作・`Preferences` サブメニュー・3択 `ToggleTheme`・言語セレクター）。`Preferences` の `additionalItems` としてオフライン用 CJK フォント管理 UI を配置する。
-- `src/annotator/quickAnnotator.ts`: ツールバー・左メニュー書き出し領域・その他メニュー・右上2ボタン・右クリックメニューへの最小限の DOM 注入とイベントガード。**標準 `.App-toolbar` を自前 React ツールバーへ全面置換しないこと**（Excalidraw 内部の `data-viewport-ui` 余白計測・`preferredSelectionTool` の挙動を維持するため）。
+- `src/annotator/quickAnnotator/`: ツールバー・左メニュー書き出し領域・その他メニュー・右上2ボタン・右クリックメニューへの最小限の DOM 注入とイベントガード。**標準 `.App-toolbar` を自前 React ツールバーへ全面置換しないこと**（Excalidraw 内部の `data-viewport-ui` 余白計測・`preferredSelectionTool` の挙動を維持するため）。外部からは必ず `index.ts`（`'./annotator/quickAnnotator'`）経由で import する。
+  - `index.ts`: `syncUI` / `bootQuickAnnotator` と公開 API の re-export。`setSyncHandler(syncUI)` で同期処理を登録する。
+  - `runtime.ts`: 共有状態 `runtime`、`scheduleSync`、言語切替、トースト、ネイティブツール操作ヘルパー。他の機能モジュールに依存しない土台とする。
+  - `constants.ts` / `dom.ts`: 静的定義と、DOM ビルダー・SVG アイコン。
+  - `guards.ts`: `install*Guard` 系のイベントガード。
+  - `toolbar.ts` / `mainMenu.ts` / `extraToolsMenu.ts` / `contextMenu.ts` / `topRightBar.ts` / `fillSwap.ts` / `redactDrag.ts`: 機能ごとの DOM 注入。
+  - **依存は「機能モジュール → `runtime` / `constants` / `dom`」の一方向を保ち、機能モジュールから `index.ts` を import しないこと**（再同期が必要なら `runtime.ts` の `scheduleSync()` を使う）。
 - `src/annotator/apiActions.ts`: クリア・背景色変更・コピー/画像保存・ファイル開閉を `ExcalidrawImperativeAPI` と公式エクスポート関数へ直結する層。
 - `src/services/storageBridge.ts`: `localStorage`（`excalidraw`, `excalidraw-state`, `exq-annotator-prefs`）と `IndexedDB`（`files-db` / `files-store`）の永続化およびデバウンス保存管理。
 - `src/annotator/cjkFontManager.ts`: `Cache Storage`（`sakuttodraw-cjk-fonts`）に対する日本語・韓国語・中国語セットの手動ダウンロード・全件照合・共通チャンク保護付き削除。
@@ -32,7 +38,7 @@ SakuttoDraw を保守・改修する際の設計方針と不変条件（Invarian
 
 ## 5. 再発防止ルール
 
-1. **`installTextAutoResizeGuard()`（`src/annotator/quickAnnotator.ts`）**: `pointerdown` 直後にツールロック OFF 時は `activeTool.type` が `'selection'` へ戻るため、`onPointerMove` / `onPointerUp` で `isTextToolActive()` を再チェックしないこと（`downPos` と `pointerId` のみで判定する）。
+1. **`installTextAutoResizeGuard()`（`src/annotator/quickAnnotator/guards.ts`）**: `pointerdown` 直後にツールロック OFF 時は `activeTool.type` が `'selection'` へ戻るため、`onPointerMove` / `onPointerUp` で `isTextToolActive()` を再チェックしないこと（`downPos` と `pointerId` のみで判定する）。
 2. **デバウンス保存の競合防止（`src/services/storageBridge.ts`）**: キャンバスを破壊的に書き換える処理（`runInstantResetWithApi`, `runDirectFileLoadWithApi` 等）の先頭で必ず `cancelPendingScenePersist()` を呼ぶ。
 3. **`bootstrapCleanCanvas()` の単一実行（`src/App.tsx`）**: `App.tsx` の初回初期化で 1 回のみ実行し、`bootQuickAnnotator()` 内で再実行しない。
 4. **`scripts/sync-excalidraw-assets.mjs`**: 縮小済み変数名に依存しない解析を維持し、`ja` / `ko` / `zh` のいずれかが 0 件なら例外で停止する。
