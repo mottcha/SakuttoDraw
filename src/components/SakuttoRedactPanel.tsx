@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import type { AppLang } from '../types/annotator';
 import { EXCALIDRAW_SELECTORS } from '../excalidraw/domContract';
@@ -182,6 +182,7 @@ export function SakuttoRedactPanel({
   if (!active || !mountTarget) return null;
 
   const t = getMessages(lang);
+  const triggerSwatchStyle = { '--swatch-color': color, backgroundColor: color } as CSSProperties;
 
   if (uiLayout === 'full') {
     return createPortal(
@@ -222,8 +223,9 @@ export function SakuttoRedactPanel({
                 <div className="compact-action-item">
                   <button
                     type="button"
-                    className={`compact-action-button properties-trigger${popoverOpen ? ' active' : ''}`}
+                    className={`color-picker__button active-color properties-trigger compact-sizing exq-redact-trigger-btn${popoverOpen ? ' active' : ''}`}
                     data-exq-redact-trigger="1"
+                    style={triggerSwatchStyle}
                     title={t.redactColorTitle}
                     aria-label={t.redactColorTitle}
                     aria-expanded={popoverOpen}
@@ -232,7 +234,7 @@ export function SakuttoRedactPanel({
                       setPopoverOpen((v) => !v);
                     }}
                   >
-                    <span className="exq-redact-trigger-swatch" style={{ background: color }} aria-hidden="true" />
+                    <div className="color-picker__button-outline" aria-hidden="true" />
                   </button>
                 </div>
               </div>
@@ -273,8 +275,9 @@ export function SakuttoRedactPanel({
           <button
             ref={mobileBtnRef}
             type="button"
-            className={`compact-action-button properties-trigger${popoverOpen ? ' active' : ''}`}
+            className={`color-picker__button active-color properties-trigger compact-sizing mobile-border exq-redact-trigger-btn${popoverOpen ? ' active' : ''}`}
             data-exq-redact-trigger="1"
+            style={triggerSwatchStyle}
             title={t.redactColorTitle}
             aria-label={t.redactColorTitle}
             aria-expanded={popoverOpen}
@@ -283,7 +286,7 @@ export function SakuttoRedactPanel({
               setPopoverOpen((v) => !v);
             }}
           >
-            <span className="exq-redact-trigger-swatch" style={{ background: color }} aria-hidden="true" />
+            <div className="color-picker__button-outline" aria-hidden="true" />
           </button>
         </div>,
         mountTarget,

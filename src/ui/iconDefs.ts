@@ -54,11 +54,30 @@ export const ICON_DEFS = {
   redact: {
     shapes: [['rect', { x: 4, y: 5, width: 16, height: 14, rx: 2.5, fill: 'currentColor' }]],
   },
-  fillOutline: {
-    shapes: [['rect', { x: 4, y: 4, width: 16, height: 16, rx: 2.5 }]],
+  fillBucket: {
+    shapes: [
+      ['path', { d: 'm19 11-8-8-8.6 8.6a2 2 0 0 0 0 2.8l5.2 5.2c.8.8 2 .8 2.8 0L19 11Z' }],
+      ['path', { d: 'm5 2 5 5' }],
+      ['path', { d: 'M2 13h15' }],
+      ['path', { d: 'M22 20a2 2 0 1 1-4 0c0-1.6 1.7-2.4 2-4 .3 1.6 2 2.4 2 4Z' }],
+    ],
   },
-  fillSolid: {
-    shapes: [['rect', { x: 4, y: 4, width: 16, height: 16, rx: 2.5, fill: 'currentColor' }]],
+  fillBucketSolid: {
+    shapes: [
+      [
+        'path',
+        {
+          d: 'M2.2 13H17l-6.6 6.6c-.8.8-2 .8-2.8 0L2.4 14.4c-.3-.4-.3-.9-.2-1.4Z',
+          fill: 'currentColor',
+          'fill-opacity': 0.32,
+          stroke: 'none',
+        },
+      ],
+      ['path', { d: 'm19 11-8-8-8.6 8.6a2 2 0 0 0 0 2.8l5.2 5.2c.8.8 2 .8 2.8 0L19 11Z' }],
+      ['path', { d: 'm5 2 5 5' }],
+      ['path', { d: 'M2 13h15' }],
+      ['path', { d: 'M22 20a2 2 0 1 1-4 0c0-1.6 1.7-2.4 2-4 .3 1.6 2 2.4 2 4Z', fill: 'currentColor' }],
+    ],
   },
   eraser: {
     shapes: [

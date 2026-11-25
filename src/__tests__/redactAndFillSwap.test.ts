@@ -184,16 +184,18 @@ describe('CustomSettings, Stroke-Fill Swap, and Blackout/Redact Tool', () => {
     expect(toggleFillOrSwapColorsWithApi(mockToolApi, { lang: 'ja-JP' })).toBe(false);
   });
 
-  it('injects Fill toggle in Slim and Mobile when eligible, hides on pen/text, and never leaves standalone Expanded segment', () => {
+  it('injects textless Fill bucket toggle in Slim and Mobile when eligible, hides on pen/text, and never leaves standalone Expanded segment', () => {
     clearTempFillSnapshot();
     applyLanguage('ja-JP');
     let activeToolType = 'rectangle';
+    let currentStroke = '#c2255c';
+    let currentBg = 'transparent';
     attachExcalidrawAPI({
       getAppState: () => ({
         selectedElementIds: {},
         activeTool: { type: activeToolType },
-        currentItemStrokeColor: '#c2255c',
-        currentItemBackgroundColor: 'transparent',
+        currentItemStrokeColor: currentStroke,
+        currentItemBackgroundColor: currentBg,
         currentItemFillStyle: 'hachure',
       }),
       getSceneElements: () => [],
@@ -221,9 +223,25 @@ describe('CustomSettings, Stroke-Fill Swap, and Blackout/Redact Tool', () => {
     expect(syncStylesPanelColorSwap()).toBe(true);
     const slimBtn = document.querySelector<HTMLButtonElement>('.App-menu_top__left [data-exq-fill-toggle="1"]');
     const mobBtn = document.querySelector<HTMLButtonElement>('.mobile-shape-actions [data-exq-fill-toggle="1"]');
-    expect(slimBtn?.textContent).toContain('塗潰');
-    expect(mobBtn?.textContent).toContain('塗潰');
+    expect(slimBtn?.textContent).toBe('');
+    expect(mobBtn?.textContent).toBe('');
+    expect(document.querySelector('.exq-fill-btn-label')).toBeNull();
+    expect(slimBtn?.getAttribute('aria-label')).toContain('Shift+X');
+    expect(slimBtn?.getAttribute('title')).toContain('Shift+X');
+    expect(mobBtn?.getAttribute('aria-label')).toContain('Shift+X');
     expect(slimBtn?.classList.contains('exq-is-filled')).toBe(false);
+    expect(slimBtn?.getAttribute('aria-pressed')).toBe('false');
+    expect(slimBtn?.querySelectorAll('.exq-fill-btn-icon svg path').length).toBe(4);
+    expect(mobBtn?.querySelectorAll('.exq-fill-btn-icon svg path').length).toBe(4);
+
+    currentStroke = 'transparent';
+    currentBg = '#c2255c';
+    syncStylesPanelColorSwap();
+    expect(slimBtn?.classList.contains('exq-is-filled')).toBe(true);
+    expect(slimBtn?.getAttribute('aria-pressed')).toBe('true');
+    expect(slimBtn?.querySelectorAll('.exq-fill-btn-icon svg path').length).toBe(5);
+    expect(mobBtn?.classList.contains('exq-is-filled')).toBe(true);
+    expect(mobBtn?.querySelectorAll('.exq-fill-btn-icon svg path').length).toBe(5);
 
     activeToolType = 'freedraw';
     syncStylesPanelColorSwap();
@@ -328,9 +346,54 @@ describe('CustomSettings, Stroke-Fill Swap, and Blackout/Redact Tool', () => {
         }),
       );
     });
-    expect(document.querySelector('.App-menu_top__left .selected-shape-actions-container--compact [data-exq-redact-trigger="1"]')).toBeTruthy();
+    const compactTrigger = document.querySelector<HTMLButtonElement>(
+      '.App-menu_top__left .selected-shape-actions-container--compact [data-exq-redact-trigger="1"]',
+    );
+    expect(compactTrigger).toBeTruthy();
+    expect(compactTrigger?.classList.contains('color-picker__button')).toBe(true);
+    expect(compactTrigger?.classList.contains('compact-sizing')).toBe(true);
+    expect(compactTrigger?.classList.contains('exq-redact-trigger-btn')).toBe(true);
+    expect(compactTrigger?.style.getPropertyValue('--swatch-color')).toBe('#c2255c');
+    expect(document.querySelector('.exq-redact-trigger-swatch')).toBeNull();
+
+    document.body.innerHTML = `
+      <div class="excalidraw">
+        <div class="mobile-shape-actions"><div></div><div></div></div>
+      </div>
+    `;
+    const phoneHost = document.createElement('div');
+    document.body.append(phoneHost);
+    const phoneRoot = createRoot(phoneHost);
+    await act(async () => {
+      phoneRoot.render(
+        createElement(SakuttoRedactPanel, {
+          lang: 'ja-JP',
+          active: true,
+          uiLayout: 'phone',
+          color: '#111111',
+          onColorChange,
+        }),
+      );
+    });
+    const phoneTrigger = document.querySelector<HTMLButtonElement>(
+      '.mobile-shape-actions [data-exq-redact-trigger="1"]',
+    );
+    expect(phoneTrigger).toBeTruthy();
+    expect(phoneTrigger?.classList.contains('color-picker__button')).toBe(true);
+    expect(phoneTrigger?.classList.contains('compact-sizing')).toBe(true);
+    expect(phoneTrigger?.classList.contains('mobile-border')).toBe(true);
+    expect(phoneTrigger?.classList.contains('exq-redact-trigger-btn')).toBe(true);
+    expect(phoneTrigger?.style.getPropertyValue('--swatch-color')).toBe('#111111');
+    await act(async () => {
+      phoneTrigger?.click();
+    });
+    const flyout = document.querySelector('[data-exq-redact-flyout="1"]');
+    expect(flyout).toBeTruthy();
+    expect(flyout?.querySelectorAll('[data-exq-redact-color]').length).toBe(6);
+
     await act(async () => {
       root.unmount();
+      phoneRoot.unmount();
     });
   });
 

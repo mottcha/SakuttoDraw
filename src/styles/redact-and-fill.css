@@ -3,40 +3,30 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  width: var(--mobile-action-button-size, 2rem);
+  height: var(--mobile-action-button-size, 2rem);
   border-radius: var(--border-radius-lg, 8px);
-  border: 1px solid var(--default-border-color, rgba(128, 128, 148, 0.24));
+  border: none;
   background: var(--mobile-action-button-bg, var(--color-surface-low, rgba(128, 128, 148, 0.08)));
-  color: var(--text-primary-color, #1b1b1f);
+  color: var(--color-on-surface, var(--text-primary-color, #1b1b1f));
   cursor: pointer;
   padding: 0;
-  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
-}
-.exq-fill-toggle-btn--slim {
-  flex-direction: column;
-  width: var(--mobile-action-button-size, 2rem);
-  min-height: 36px;
-  padding: 3px 2px;
-}
-.exq-fill-toggle-btn--mobile {
-  flex-direction: column;
-  width: auto;
-  min-width: 34px;
-  height: var(--mobile-action-button-size, 2rem);
-  padding: 2px 5px;
+  flex-shrink: 0;
+  transition: background-color 0.12s ease, color 0.12s ease, transform 0.08s ease;
 }
 .exq-fill-toggle-btn:hover {
   background: var(--button-hover-bg, #f1f0ff);
 }
+.exq-fill-toggle-btn:active {
+  transform: scale(0.95);
+}
 .exq-fill-toggle-btn.exq-is-filled {
   background: var(--color-surface-primary-container, #e0dfff);
   color: var(--color-on-primary-container, #030064);
-  border-color: var(--color-primary, #6965db);
 }
 .excalidraw.theme--dark .exq-fill-toggle-btn.exq-is-filled {
   background: rgba(168, 165, 255, 0.22);
   color: #e0dfff;
-  border-color: #a8a5ff;
 }
 .exq-fill-btn-icon {
   display: inline-flex;
@@ -45,15 +35,9 @@
   line-height: 0;
 }
 .exq-fill-btn-icon svg {
-  width: 13px !important;
-  height: 13px !important;
+  width: 1rem !important;
+  height: 1rem !important;
   display: block;
-}
-.exq-fill-btn-label {
-  font-size: 9px;
-  font-weight: 600;
-  line-height: 1;
-  white-space: nowrap;
 }
 
 /* === Blackout / Redact Tool & Left Style Panel Integration (Option B) === */
@@ -148,13 +132,16 @@
   outline: 2px solid var(--color-primary, #6965db);
   outline-offset: 2px;
 }
-.exq-redact-trigger-swatch {
-  width: 16px;
-  height: 16px;
-  border-radius: 4px;
-  border: 1.5px solid rgba(128, 128, 148, 0.52);
-  display: inline-block;
-  box-sizing: border-box;
+.excalidraw .exq-redact-trigger-btn {
+  width: var(--mobile-action-button-size, 2rem);
+  height: var(--mobile-action-button-size, 2rem);
+  border: 1px solid var(--default-border-color, rgba(128, 128, 148, 0.35));
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.excalidraw .exq-redact-trigger-btn.active {
+  outline: 2px solid var(--color-primary, #6965db);
+  outline-offset: 1px;
 }
 .exq-redact-rubberband {
   position: absolute;

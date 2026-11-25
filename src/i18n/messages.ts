@@ -66,7 +66,6 @@ export interface MessageCatalog {
   prefPreferJpFont: string;
   offlineFontsTitle: string;
   redactColorTitle: string;
-  fillToggleShort: string;
   swapStrokeFillTitle: string;
   toastColorSwapped: string;
   cjkLangName: Record<CjkLang, string>;
@@ -161,7 +160,6 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     prefPreferJpFont: 'Preferred kanji font',
     offlineFontsTitle: 'Offline hand-drawn fonts',
     redactColorTitle: 'Fill color',
-    fillToggleShort: 'Fill',
     swapStrokeFillTitle: 'Toggle fill / swap stroke & background (Shift+X)',
     toastColorSwapped: 'Swapped stroke & background',
     cjkLangName: { ja: 'Japanese', ko: 'Korean', zh: 'Chinese' },
@@ -254,7 +252,6 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     prefPreferJpFont: '優先漢字フォント',
     offlineFontsTitle: 'オフライン手書きフォント',
     redactColorTitle: '塗りつぶし色',
-    fillToggleShort: '塗潰',
     swapStrokeFillTitle: '塗りつぶし切替・ストロークと背景色を入替 (Shift+X)',
     toastColorSwapped: 'ストロークと背景色を入れ替えました',
     cjkLangName: { ja: '日本語', ko: '韓国語', zh: '中国語' },
@@ -347,7 +344,6 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     prefPreferJpFont: '优先汉字字体',
     offlineFontsTitle: '离线手写字体',
     redactColorTitle: '填充颜色',
-    fillToggleShort: '填充',
     swapStrokeFillTitle: '切换填充/交换描边与背景色 (Shift+X)',
     toastColorSwapped: '已交换描边与背景色',
     cjkLangName: { ja: '日语', ko: '韩语', zh: '中文' },
@@ -440,7 +436,6 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     prefPreferJpFont: '優先漢字字體',
     offlineFontsTitle: '離線手寫字體',
     redactColorTitle: '填滿顏色',
-    fillToggleShort: '填滿',
     swapStrokeFillTitle: '切換填滿/交換筆畫與背景色 (Shift+X)',
     toastColorSwapped: '已交換筆畫與背景色',
     cjkLangName: { ja: '日文', ko: '韓文', zh: '中文' },
@@ -533,7 +528,6 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     prefPreferJpFont: '우선 한자 글꼴',
     offlineFontsTitle: '오프라인 손글씨 글꼴',
     redactColorTitle: '채우기 색상',
-    fillToggleShort: '채움',
     swapStrokeFillTitle: '채우기 전환 / 선과 배경색 바꾸기 (Shift+X)',
     toastColorSwapped: '선 색상과 배경색을 바꿨습니다',
     cjkLangName: { ja: '일본어', ko: '한국어', zh: '중국어' },

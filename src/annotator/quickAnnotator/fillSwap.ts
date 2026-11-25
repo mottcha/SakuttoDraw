@@ -274,7 +274,7 @@ function updateFillToggleButtonState(
 ): void {
   btn.classList.toggle('exq-is-filled', isFilled);
   btn.setAttribute('aria-pressed', String(isFilled));
-  iconSlot.replaceChildren(svgIcon(isFilled ? 'fillSolid' : 'fillOutline', 14, '0 0 24 24', 1.6));
+  iconSlot.replaceChildren(svgIcon(isFilled ? 'fillBucketSolid' : 'fillBucket', 16, '0 0 24 24', 1.8));
 }
 
 function syncCompactFillToggle(container: Element, isMobile: boolean): boolean {
@@ -302,7 +302,6 @@ function syncCompactFillToggle(container: Element, isMobile: boolean): boolean {
 
   if (!mounted || !mounted.wrap.isConnected) {
     const iconSlot = el('span', { class: 'exq-fill-btn-icon', 'aria-hidden': 'true' });
-    const labelSpan = el('span', { class: 'exq-fill-btn-label' }, t.fillToggleShort);
     const btn = el(
       'button',
       {
@@ -314,7 +313,6 @@ function syncCompactFillToggle(container: Element, isMobile: boolean): boolean {
         'aria-pressed': String(isFilledOnly),
       },
       iconSlot,
-      labelSpan,
     );
     btn.addEventListener('click', (e) => {
       e.preventDefault();
