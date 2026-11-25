@@ -6,6 +6,8 @@ import type {
   ExportScale,
   InputDevicePref,
   Prefs,
+  RedactMode,
+  RedactStrength,
   StylesPanelPref,
   ThemeMode,
 } from '../types/annotator';
@@ -42,6 +44,10 @@ export const DEFAULT_PREFS: Prefs = {
     textAutoResize: true,
     fastLoadSave: true,
     modernContextMenu: true,
+  },
+  redactOpts: {
+    mode: 'mosaic',
+    strength: 'medium',
   },
 };
 
@@ -85,6 +91,16 @@ export function normalizeInputDevice(value: unknown): InputDevicePref {
 export function normalizeStylesPanelMode(value: unknown): StylesPanelPref {
   if (value === 'compact' || value === 'full') return value;
   return 'auto';
+}
+
+export function normalizeRedactMode(value: unknown): RedactMode {
+  if (value === 'blur' || value === 'blackout') return value;
+  return 'mosaic';
+}
+
+export function normalizeRedactStrength(value: unknown): RedactStrength {
+  if (value === 'weak' || value === 'strong') return value;
+  return 'medium';
 }
 
 export function sakuttoGetFormFactor(width: number, height: number): 'phone' | 'desktop' {
@@ -168,6 +184,7 @@ export function loadPrefs(
     preferJpFont: DEFAULT_PREFS.preferJpFont,
     exportOpts: { ...DEFAULT_PREFS.exportOpts },
     quickOpts: { ...DEFAULT_PREFS.quickOpts },
+    redactOpts: { ...DEFAULT_PREFS.redactOpts },
   };
   if (!storage) return base;
 
@@ -235,6 +252,10 @@ export function loadPrefs(
         } else if (saved.quickOpts.defaultPink === false) {
           base.quickOpts.defaultPenColor = '#1e1e1e';
         }
+      }
+      if (saved.redactOpts && typeof saved.redactOpts === 'object') {
+        base.redactOpts.mode = normalizeRedactMode(saved.redactOpts.mode);
+        base.redactOpts.strength = normalizeRedactStrength(saved.redactOpts.strength);
       }
     }
   }

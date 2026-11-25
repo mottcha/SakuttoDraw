@@ -19,6 +19,7 @@ export interface MessageCatalog {
   toolArrow: string;
   toolLine: string;
   toolDiamond: string;
+  toolRedact: string;
   toolEraser: string;
   toolSticky: string;
   toolLasso: string;
@@ -39,6 +40,8 @@ export interface MessageCatalog {
   assistArrowBinding: string;
   assistMidpointSnap: string;
   quickSettings: string;
+  customSettings: string;
+  customBehaviorTitle: string;
   optAutoResetOnOpen: string;
   optTextAutoResize: string;
   optFastLoadSave: string;
@@ -63,6 +66,21 @@ export interface MessageCatalog {
   languageLabel: string;
   prefPreferJpFont: string;
   offlineFontsTitle: string;
+  redactSettingsTitle: string;
+  redactModeTitle: string;
+  redactModeMosaic: string;
+  redactModeBlur: string;
+  redactModeBlackout: string;
+  redactStrengthTitle: string;
+  redactStrengthWeak: string;
+  redactStrengthMedium: string;
+  redactStrengthStrong: string;
+  redactPrivacyNote: string;
+  fillToggleShort: string;
+  fillToggleOutline: string;
+  fillToggleFilled: string;
+  swapStrokeFillTitle: string;
+  toastColorSwapped: string;
   cjkLangName: Record<CjkLang, string>;
   fontDownload: string;
   fontDelete: string;
@@ -98,8 +116,8 @@ export interface MessageCatalog {
 
 const MESSAGES: Record<AppLang, MessageCatalog> = {
   en: {
-    shapeGroupTitle: 'Arrow, Line, Diamond',
-    mobileShapeGroupTitle: 'Ellipse, Arrow, Line, Diamond',
+    shapeGroupTitle: 'Arrow, Line, Diamond, Blur',
+    mobileShapeGroupTitle: 'Ellipse, Arrow, Line, Diamond, Blur',
     toolRectangle: 'Rectangle',
     toolEllipse: 'Ellipse',
     toolText: 'Text',
@@ -108,6 +126,7 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     toolArrow: 'Arrow',
     toolLine: 'Line',
     toolDiamond: 'Diamond',
+    toolRedact: 'Blur',
     toolEraser: 'Eraser',
     toolSticky: 'Sticky note',
     toolLasso: 'Lasso selection',
@@ -128,6 +147,8 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     assistArrowBinding: 'Bind arrows to shapes',
     assistMidpointSnap: 'Snap arrows to midpoint',
     quickSettings: 'Quick settings',
+    customSettings: 'Custom settings',
+    customBehaviorTitle: 'Behavior',
     optAutoResetOnOpen: 'Reset canvas on open',
     optTextAutoResize: 'No fixed width on new text',
     optFastLoadSave: 'Skip load/save prompts',
@@ -152,6 +173,21 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     languageLabel: 'Language',
     prefPreferJpFont: 'Preferred kanji font',
     offlineFontsTitle: 'Offline hand-drawn fonts',
+    redactSettingsTitle: 'Blur settings',
+    redactModeTitle: 'Style',
+    redactModeMosaic: 'Mosaic',
+    redactModeBlur: 'Gaussian',
+    redactModeBlackout: 'Blackout',
+    redactStrengthTitle: 'Strength',
+    redactStrengthWeak: 'Low',
+    redactStrengthMedium: 'Mid',
+    redactStrengthStrong: 'High',
+    redactPrivacyNote: 'Baked on PNG export (editable files keep original)',
+    fillToggleShort: 'Fill',
+    fillToggleOutline: 'Outline',
+    fillToggleFilled: 'Filled',
+    swapStrokeFillTitle: 'Toggle fill / swap stroke & background (Shift+X)',
+    toastColorSwapped: 'Swapped stroke & background',
     cjkLangName: { ja: 'Japanese', ko: 'Korean', zh: 'Chinese' },
     fontDownload: 'Download',
     fontDelete: 'Delete',
@@ -185,8 +221,8 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     toastFontDeleteFailed: (n) => `Failed to delete ${n} font cache`,
   },
   'ja-JP': {
-    shapeGroupTitle: '矢印・直線・ひし形',
-    mobileShapeGroupTitle: '丸・矢印・直線・ひし形',
+    shapeGroupTitle: '矢印・直線・ひし形・ぼかし',
+    mobileShapeGroupTitle: '丸・矢印・直線・ひし形・ぼかし',
     toolRectangle: '四角形',
     toolEllipse: '丸',
     toolText: 'テキスト',
@@ -195,6 +231,7 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     toolArrow: '矢印',
     toolLine: '直線',
     toolDiamond: 'ひし形',
+    toolRedact: 'ぼかし',
     toolEraser: '消しゴム',
     toolSticky: '付箋',
     toolLasso: 'なげなわ選択',
@@ -215,6 +252,8 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     assistArrowBinding: '矢印を図形に結合',
     assistMidpointSnap: '矢印を中点にスナップ',
     quickSettings: 'クイック設定',
+    customSettings: 'カスタム設定',
+    customBehaviorTitle: '動作設定',
     optAutoResetOnOpen: '起動時にキャンバスをリセット',
     optTextAutoResize: 'テキスト挿入時に固定幅にしない',
     optFastLoadSave: '開く/保存の確認スキップ',
@@ -239,6 +278,21 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     languageLabel: '言語',
     prefPreferJpFont: '優先漢字フォント',
     offlineFontsTitle: 'オフライン手書きフォント',
+    redactSettingsTitle: 'ぼかし設定',
+    redactModeTitle: 'ぼかし種類',
+    redactModeMosaic: 'モザイク',
+    redactModeBlur: 'ガウス',
+    redactModeBlackout: '黒塗り',
+    redactStrengthTitle: '強さ',
+    redactStrengthWeak: '弱',
+    redactStrengthMedium: '中',
+    redactStrengthStrong: '強',
+    redactPrivacyNote: 'PNG 出力時に焼き込み反映（編集ファイルには元画像が残ります）',
+    fillToggleShort: '塗潰',
+    fillToggleOutline: '枠線のみ',
+    fillToggleFilled: '塗りつぶし',
+    swapStrokeFillTitle: '塗りつぶし切替・ストロークと背景色を入替 (Shift+X)',
+    toastColorSwapped: 'ストロークと背景色を入れ替えました',
     cjkLangName: { ja: '日本語', ko: '韓国語', zh: '中国語' },
     fontDownload: 'ダウンロード',
     fontDelete: '削除',
@@ -272,8 +326,8 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     toastFontDeleteFailed: (n) => `${n}フォントの削除に失敗しました`,
   },
   'zh-CN': {
-    shapeGroupTitle: '箭头・直线・菱形',
-    mobileShapeGroupTitle: '椭圆・箭头・直线・菱形',
+    shapeGroupTitle: '箭头・直线・菱形・模糊',
+    mobileShapeGroupTitle: '椭圆・箭头・直线・菱形・模糊',
     toolRectangle: '矩形',
     toolEllipse: '椭圆',
     toolText: '文本',
@@ -282,6 +336,7 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     toolArrow: '箭头',
     toolLine: '直线',
     toolDiamond: '菱形',
+    toolRedact: '模糊',
     toolEraser: '橡皮擦',
     toolSticky: '便签',
     toolLasso: '套索选择',
@@ -302,6 +357,8 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     assistArrowBinding: '箭头绑定到图形',
     assistMidpointSnap: '箭头吸附到中点',
     quickSettings: '快捷设置',
+    customSettings: '自定义设置',
+    customBehaviorTitle: '行为设置',
     optAutoResetOnOpen: '打开时重置画布',
     optTextAutoResize: '插入文本时不固定宽度',
     optFastLoadSave: '跳过打开/保存确认',
@@ -326,6 +383,21 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     languageLabel: '语言',
     prefPreferJpFont: '优先汉字字体',
     offlineFontsTitle: '离线手写字体',
+    redactSettingsTitle: '模糊设置',
+    redactModeTitle: '模糊方式',
+    redactModeMosaic: '马赛克',
+    redactModeBlur: '高斯',
+    redactModeBlackout: '涂黑',
+    redactStrengthTitle: '强度',
+    redactStrengthWeak: '弱',
+    redactStrengthMedium: '中',
+    redactStrengthStrong: '强',
+    redactPrivacyNote: '导出 PNG 时永久生效（编辑文件保留原图）',
+    fillToggleShort: '填充',
+    fillToggleOutline: '仅描边',
+    fillToggleFilled: '填充',
+    swapStrokeFillTitle: '切换填充/交换描边与背景色 (Shift+X)',
+    toastColorSwapped: '已交换描边与背景色',
     cjkLangName: { ja: '日语', ko: '韩语', zh: '中文' },
     fontDownload: '下载',
     fontDelete: '删除',
@@ -359,8 +431,8 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     toastFontDeleteFailed: (n) => `删除${n}手写字体缓存失败`,
   },
   'zh-TW': {
-    shapeGroupTitle: '箭頭・直線・菱形',
-    mobileShapeGroupTitle: '橢圓・箭頭・直線・菱形',
+    shapeGroupTitle: '箭頭・直線・菱形・模糊',
+    mobileShapeGroupTitle: '橢圓・箭頭・直線・菱形・模糊',
     toolRectangle: '矩形',
     toolEllipse: '橢圓',
     toolText: '文字',
@@ -369,6 +441,7 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     toolArrow: '箭頭',
     toolLine: '直線',
     toolDiamond: '菱形',
+    toolRedact: '模糊',
     toolEraser: '橡皮擦',
     toolSticky: '便利貼',
     toolLasso: '套索選取',
@@ -389,6 +462,8 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     assistArrowBinding: '箭頭綁定至圖形',
     assistMidpointSnap: '箭頭吸附至中點',
     quickSettings: '快速設定',
+    customSettings: '自訂設定',
+    customBehaviorTitle: '行為設定',
     optAutoResetOnOpen: '開啟時重設畫布',
     optTextAutoResize: '插入文字時不固定寬度',
     optFastLoadSave: '略過開啟/儲存確認',
@@ -413,6 +488,21 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     languageLabel: '語言',
     prefPreferJpFont: '優先漢字字體',
     offlineFontsTitle: '離線手寫字體',
+    redactSettingsTitle: '模糊設定',
+    redactModeTitle: '模糊方式',
+    redactModeMosaic: '馬賽克',
+    redactModeBlur: '高斯',
+    redactModeBlackout: '塗黑',
+    redactStrengthTitle: '強度',
+    redactStrengthWeak: '弱',
+    redactStrengthMedium: '中',
+    redactStrengthStrong: '強',
+    redactPrivacyNote: '匯出 PNG 時永久生效（編輯檔保留原圖）',
+    fillToggleShort: '填滿',
+    fillToggleOutline: '僅邊框',
+    fillToggleFilled: '填滿',
+    swapStrokeFillTitle: '切換填滿/交換筆畫與背景色 (Shift+X)',
+    toastColorSwapped: '已交換筆畫與背景色',
     cjkLangName: { ja: '日文', ko: '韓文', zh: '中文' },
     fontDownload: '下載',
     fontDelete: '刪除',
@@ -446,8 +536,8 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     toastFontDeleteFailed: (n) => `刪除${n}手寫字體快取失敗`,
   },
   'ko-KR': {
-    shapeGroupTitle: '화살표・직선・마름모',
-    mobileShapeGroupTitle: '원・화살표・직선・마름모',
+    shapeGroupTitle: '화살표・직선・마름모・블러',
+    mobileShapeGroupTitle: '원・화살표・직선・마름모・블러',
     toolRectangle: '사각형',
     toolEllipse: '원',
     toolText: '텍스트',
@@ -456,6 +546,7 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     toolArrow: '화살표',
     toolLine: '직선',
     toolDiamond: '마름모',
+    toolRedact: '블러',
     toolEraser: '지우개',
     toolSticky: '스티커 메모',
     toolLasso: '올가미 선택',
@@ -476,6 +567,8 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     assistArrowBinding: '화살표를 도형에 결합',
     assistMidpointSnap: '화살표를 중점에 스냅',
     quickSettings: '빠른 설정',
+    customSettings: '사용자 설정',
+    customBehaviorTitle: '동작 설정',
     optAutoResetOnOpen: '시작 시 캔버스 초기화',
     optTextAutoResize: '텍스트 삽입 시 너비 고정 안 함',
     optFastLoadSave: '열기/저장 확인 건너뛰기',
@@ -500,6 +593,21 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     languageLabel: '언어',
     prefPreferJpFont: '우선 한자 글꼴',
     offlineFontsTitle: '오프라인 손글씨 글꼴',
+    redactSettingsTitle: '블러 설정',
+    redactModeTitle: '블러 방식',
+    redactModeMosaic: '모자이크',
+    redactModeBlur: '가우시안',
+    redactModeBlackout: '검은 가리기',
+    redactStrengthTitle: '강도',
+    redactStrengthWeak: '약',
+    redactStrengthMedium: '중',
+    redactStrengthStrong: '강',
+    redactPrivacyNote: 'PNG 내보내기 시 영구 반영 (편집 파일엔 원본 유지)',
+    fillToggleShort: '채움',
+    fillToggleOutline: '테두리만',
+    fillToggleFilled: '채우기',
+    swapStrokeFillTitle: '채우기 전환 / 선과 배경색 바꾸기 (Shift+X)',
+    toastColorSwapped: '선 색상과 배경색을 바꿨습니다',
     cjkLangName: { ja: '일본어', ko: '한국어', zh: '중국어' },
     fontDownload: '다운로드',
     fontDelete: '삭제',

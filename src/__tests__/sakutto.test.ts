@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createRoot } from 'react-dom/client';
+import { act, createElement } from 'react';
 import { IDBFactory } from 'fake-indexeddb';
+
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 import {
   bootstrapCleanCanvas,
@@ -54,6 +58,9 @@ import {
   applyPreferJpFont,
   attachExcalidrawAPI,
   clampContextMenuPopover,
+  cloneNativeToolbarIcon,
+  computeSwappedStrokeFill,
+  installCtrlMultiSelectGuard,
   installTextAutoResizeGuard,
   runtime,
   syncContextMenu,
@@ -61,9 +68,20 @@ import {
   syncMainMenu,
   syncMobileShapeActions,
   syncMobileToolbar,
+  syncStylesPanelColorSwap,
   syncToolbar,
   syncTopRightBar,
+  toggleFillOrSwapColorsWithApi,
 } from '../annotator/quickAnnotator';
+import {
+  applyGaussianBlurToImageData,
+  applyMosaicToImageData,
+  createOrUpdateRedactElement,
+  getRedactMeta,
+  isRedactElement,
+} from '../annotator/redactProcessor';
+import { CustomSettingsVisualPanel } from '../components/SakuttoMainMenu';
+import { SakuttoRedactPanel } from '../components/SakuttoRedactPanel';
 import {
   detectBrowserLang,
   getMessages,
@@ -91,6 +109,16 @@ describe('i18n (en, ja-JP, zh-CN, zh-TW, ko-KR)', () => {
     for (const { code } of SUPPORTED_LANGS) {
       const m = getMessages(code);
       expect(m.quickSettings.length).toBeGreaterThan(0);
+      expect(m.customSettings.length).toBeGreaterThan(0);
+      expect(m.customBehaviorTitle.length).toBeGreaterThan(0);
+      expect(m.toolRedact.length).toBeGreaterThan(0);
+      expect(m.redactSettingsTitle.length).toBeGreaterThan(0);
+      expect(m.redactModeMosaic.length).toBeGreaterThan(0);
+      expect(m.redactModeBlur.length).toBeGreaterThan(0);
+      expect(m.redactModeBlackout.length).toBeGreaterThan(0);
+      expect(m.fillToggleShort.length).toBeGreaterThan(0);
+      expect(m.fillToggleOutline.length).toBeGreaterThan(0);
+      expect(m.fillToggleFilled.length).toBeGreaterThan(0);
       expect(m.drawAssist.length).toBeGreaterThan(0);
       expect(m.exportSettings.length).toBeGreaterThan(0);
       expect(m.penColor.length).toBeGreaterThan(0);
@@ -328,10 +356,38 @@ describe('apiActions (direct ExcalidrawImperativeAPI & WASM-free SVG font inlini
     URL.createObjectURL = vi.fn(() => 'blob:mock-url');
     URL.revokeObjectURL = vi.fn();
     try {
-      expect(runDirectDiskSaveWithApi(mockApi)).toBe(true);
+      expect(await runDirectDiskSaveWithApi(mockApi)).toBe(true);
     } finally {
       URL.createObjectURL = origCreateObjectURL;
       URL.revokeObjectURL = origRevokeObjectURL;
+    }
+
+    // Option 3A: When showSaveFilePicker exists, invoke it directly and handle AbortError silently
+    const write = vi.fn(async () => {});
+    const close = vi.fn(async () => {});
+    const showSaveFilePicker = vi.fn(async () => ({
+      createWritable: async () => ({ write, close }),
+    }));
+    const toastFn = vi.fn();
+    Object.defineProperty(globalThis, 'showSaveFilePicker', {
+      value: showSaveFilePicker,
+      configurable: true,
+      writable: true,
+    });
+    try {
+      expect(await runDirectDiskSaveWithApi(mockApi, { lang: 'ja-JP', showToast: toastFn })).toBe(true);
+      expect(showSaveFilePicker).toHaveBeenCalledTimes(1);
+      expect(write).toHaveBeenCalledTimes(1);
+      expect(close).toHaveBeenCalledTimes(1);
+      expect(toastFn).toHaveBeenCalledTimes(1);
+
+      const abortErr = Object.assign(new Error('Cancelled'), { name: 'AbortError' });
+      showSaveFilePicker.mockRejectedValueOnce(abortErr);
+      toastFn.mockClear();
+      expect(await runDirectDiskSaveWithApi(mockApi, { lang: 'ja-JP', showToast: toastFn })).toBe(false);
+      expect(toastFn).not.toHaveBeenCalled();
+    } finally {
+      delete (globalThis as { showSaveFilePicker?: unknown }).showSaveFilePicker;
     }
   });
 });
@@ -513,10 +569,10 @@ describe('quickAnnotator DOM sync, language switcher, and textAutoResize guard r
     expect(syncExtraToolsMenu()).toBe(true);
     expect(syncContextMenu()).toBe(true);
 
-    expect(document.querySelector('[data-exq-pen-toggle="1"]')).toBeTruthy();
-    expect(document.querySelector('[data-exq-bg-toggle="1"]')).toBeTruthy();
+    expect(document.querySelector('[data-exq-pen-toggle="1"]')).toBeNull();
+    expect(document.querySelector('[data-exq-bg-toggle="1"]')).toBeNull();
     expect(document.querySelector('[data-exq-draw-assist="1"]')?.classList.contains('exq-acc-open')).toBe(false);
-    expect(document.querySelector('[data-exq-quick-settings="1"]')?.classList.contains('exq-acc-open')).toBe(false);
+    expect(document.querySelector('[data-exq-quick-settings="1"]')).toBeNull();
     expect(document.querySelector('[data-exq-proxy="toolbar-lock"]')?.getAttribute('title')).toBe('作成後もツールを連続使用 (Q)');
     expect(document.querySelector('[data-exq-lang-select="1"]')).toBeNull();
     expect(document.querySelector('[data-exq-cjk-btn]')).toBeNull();
@@ -745,7 +801,7 @@ describe('quickAnnotator DOM sync, language switcher, and textAutoResize guard r
     expect(document.querySelector('.excalidraw-ui-top-right [data-exq-right-bar="1"]')).toBeTruthy();
     expect(document.querySelector('[data-exq-t3-row="1"]')).toBeTruthy();
     expect(document.querySelector('[data-exq-draw-assist="1"]')).toBeTruthy();
-    expect(document.querySelector('[data-exq-quick-settings="1"]')).toBeTruthy();
+    expect(document.querySelector('[data-exq-quick-settings="1"]')).toBeNull();
   });
 
   it('resolves desktopUIMode cleanly for PC mini-windows and persists stylesPanelMode preference', () => {
@@ -1000,7 +1056,7 @@ describe('mobile UI unification (A-2 toolbar, persistent Duplicate/Delete, label
     expect(fallbackText).toBeTruthy();
     expect(fallbackText?.style.display).toBe('');
     expect(rectBtn).toBeTruthy();
-    expect(shapeGroup?.querySelectorAll('[data-exq-mobile-shape]').length).toBe(4);
+    expect(shapeGroup?.querySelectorAll('[data-exq-mobile-shape]').length).toBe(5);
 
     // Selecting arrow inside upward shape group activates arrow and updates remembered icon
     const arrowBtn = shapeGroup?.querySelector<HTMLButtonElement>('[data-exq-mobile-shape="arrow"]');
@@ -1223,6 +1279,436 @@ describe('mobile UI unification (A-2 toolbar, persistent Duplicate/Delete, label
       cleanup();
       canvas.removeEventListener('pointerdown', onCanvasPointerDown);
       window.removeEventListener('pointermove', moveListener);
+    }
+  });
+});
+
+describe('6-item UX improvements (Custom Settings, Toolbar SVG Match, Blur/Redact, Stroke-Fill Toggle)', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+    localStorage.clear();
+    attachExcalidrawAPI(null);
+    runtime.prefs = loadPrefs(localStorage);
+  });
+
+  it('renders CustomSettingsVisualPanel with 4 behavior toggles, pen swatches, and bg swatches', async () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const root = createRoot(host);
+    await act(async () => {
+      root.render(createElement(CustomSettingsVisualPanel, { lang: 'ja-JP' }));
+    });
+
+    expect(host.querySelectorAll('[data-exq-quick-opt]').length).toBe(4);
+    expect(host.querySelectorAll('[data-exq-pen-color]').length).toBe(6);
+    expect(host.querySelectorAll('[data-exq-bg-color]').length).toBe(5);
+
+    const fastSaveBtn = host.querySelector<HTMLButtonElement>('[data-exq-quick-opt="fastLoadSave"]');
+    expect(fastSaveBtn?.classList.contains('exq-on')).toBe(true);
+    await act(async () => {
+      fastSaveBtn?.parentElement?.click();
+    });
+    expect(runtime.prefs.quickOpts.fastLoadSave).toBe(false);
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it('clones native toolbar SVG icon when present and falls back to stroke-width=1.5', () => {
+    document.body.innerHTML = `
+      <div class="App-toolbar">
+        <button data-testid="toolbar-diamond">
+          <svg viewBox="0 0 24 24" stroke-width="1.25"><path d="M12 3l9 9-9 9-9-9z" /></svg>
+        </button>
+      </div>
+    `;
+    const cloned = cloneNativeToolbarIcon('toolbar-diamond', 'diamond', 16, 1.5);
+    expect(cloned.getAttribute('stroke-width')).toBe('1.25');
+    expect(cloned.getAttribute('width')).toBe('16');
+
+    const fallback = cloneNativeToolbarIcon('toolbar-missing', 'redact', 16, 1.5);
+    expect(fallback.getAttribute('stroke-width')).toBe('1.5');
+  });
+
+  it('computes stroke<->background swap with smart solid upgrade and skips non-fillable elements', () => {
+    // Outline -> Filled upgrades hachure to solid
+    expect(
+      computeSwappedStrokeFill({
+        strokeColor: '#c2255c',
+        backgroundColor: 'transparent',
+        fillStyle: 'hachure',
+      }),
+    ).toEqual({
+      strokeColor: 'transparent',
+      backgroundColor: '#c2255c',
+      fillStyle: 'solid',
+    });
+
+    // Filled -> Outline restores stroke
+    expect(
+      computeSwappedStrokeFill({
+        strokeColor: 'transparent',
+        backgroundColor: '#1971c2',
+        fillStyle: 'solid',
+      }),
+    ).toEqual({
+      strokeColor: '#1971c2',
+      backgroundColor: 'transparent',
+      fillStyle: 'solid',
+    });
+
+    // Edit mode updates fillable rectangle and ignores text & redact elements
+    let captured: { elements?: unknown[]; appState?: Record<string, unknown> } | null = null;
+    const elements = [
+      {
+        id: 'rect-1',
+        type: 'rectangle',
+        strokeColor: '#c2255c',
+        backgroundColor: 'transparent',
+        fillStyle: 'hachure',
+        version: 1,
+        versionNonce: 10,
+        updated: 1,
+        isDeleted: false,
+      },
+      {
+        id: 'text-1',
+        type: 'text',
+        strokeColor: '#c2255c',
+        backgroundColor: 'transparent',
+        fillStyle: 'hachure',
+        version: 1,
+        versionNonce: 11,
+        updated: 1,
+        isDeleted: false,
+      },
+      {
+        id: 'redact-1',
+        type: 'rectangle',
+        strokeColor: 'transparent',
+        backgroundColor: '#111111',
+        fillStyle: 'solid',
+        customData: { sakuttoRedact: { v: 1, mode: 'blackout', strength: 'medium' } },
+        version: 1,
+        versionNonce: 12,
+        updated: 1,
+        isDeleted: false,
+      },
+    ];
+    const mockApi = {
+      getAppState: () => ({
+        selectedElementIds: { 'rect-1': true, 'text-1': true, 'redact-1': true },
+        activeTool: { type: 'selection' },
+      }),
+      getSceneElements: () => elements,
+      updateScene: (arg: { elements?: unknown[]; appState?: Record<string, unknown> }) => {
+        captured = arg;
+      },
+    } as unknown as ExcalidrawImperativeAPI;
+
+    expect(toggleFillOrSwapColorsWithApi(mockApi, { lang: 'ja-JP' })).toBe(true);
+    const updated = captured!.elements as Array<{ id: string; strokeColor: string; backgroundColor: string; fillStyle: string }>;
+    expect(updated[0].strokeColor).toBe('transparent');
+    expect(updated[0].backgroundColor).toBe('#c2255c');
+    expect(updated[0].fillStyle).toBe('solid');
+    expect(updated[1].strokeColor).toBe('#c2255c');
+    expect(updated[2].backgroundColor).toBe('#111111');
+  });
+
+  it('injects Fill toggle in Slim, Mobile, and Expanded style panels only when both stroke and bg exist', () => {
+    applyLanguage('ja-JP');
+    attachExcalidrawAPI({
+      getAppState: () => ({
+        selectedElementIds: {},
+        activeTool: { type: 'rectangle' },
+        currentItemStrokeColor: '#c2255c',
+        currentItemBackgroundColor: 'transparent',
+        currentItemFillStyle: 'hachure',
+      }),
+      getSceneElements: () => [],
+    } as unknown as ExcalidrawImperativeAPI);
+
+    document.body.innerHTML = `
+      <div class="App-menu_top__left">
+        <div class="selected-shape-actions-container selected-shape-actions-container--compact">
+          <div class="compact-shape-actions">
+            <div class="compact-action-item"><button data-openpopup="elementStroke"></button></div>
+            <div class="compact-action-item"><button data-openpopup="elementBackground"></button></div>
+            <div class="compact-action-item"><button data-openpopup="compactOtherProperties"></button></div>
+          </div>
+        </div>
+      </div>
+      <div class="mobile-shape-actions">
+        <div>
+          <div class="compact-action-item"><button data-openpopup="elementStroke"></button></div>
+          <div class="compact-action-item"><button data-openpopup="elementBackground"></button></div>
+        </div>
+        <div></div>
+      </div>
+    `;
+
+    expect(syncStylesPanelColorSwap()).toBe(true);
+    const slimBtn = document.querySelector<HTMLButtonElement>('.App-menu_top__left [data-exq-fill-toggle="1"]');
+    const mobBtn = document.querySelector<HTMLButtonElement>('.mobile-shape-actions [data-exq-fill-toggle="1"]');
+    expect(slimBtn?.textContent).toContain('塗潰');
+    expect(mobBtn?.textContent).toContain('塗潰');
+    expect(slimBtn?.classList.contains('exq-is-filled')).toBe(false);
+
+    // Expanded panel gets 2-choice segment
+    document.body.innerHTML = `
+      <div class="selected-shape-actions-container">
+        <div class="Island App-menu__left">
+          <div class="panelColumn">
+            <button data-openpopup="elementStroke"></button>
+            <button data-openpopup="elementBackground"></button>
+          </div>
+        </div>
+      </div>
+    `;
+    expect(syncStylesPanelColorSwap()).toBe(true);
+    expect(document.querySelector('[data-exq-fill-segment="1"] [data-exq-fill-mode="outline"]')?.classList.contains('exq-active')).toBe(true);
+    expect(document.querySelector('[data-exq-fill-segment="1"] [data-exq-fill-mode="filled"]')?.classList.contains('exq-active')).toBe(false);
+  });
+
+  it('applies pure-JS mosaic and Gaussian blur without dark halos, creates blackout redact element, and mounts SakuttoRedactPanel', async () => {
+    // 2x2 block mosaic averages [200, 0, 0, 255] and [0, 200, 0, 255] -> [50, 50, 0, 255]
+    const mosaicData = new Uint8ClampedArray([
+      200, 0, 0, 255,   0, 200, 0, 255,
+      0, 0, 0, 255,     0, 0, 0, 255,
+    ]);
+    applyMosaicToImageData(mosaicData, 2, 2, 2);
+    expect(Array.from(mosaicData.slice(0, 4))).toEqual([50, 50, 0, 255]);
+    expect(Array.from(mosaicData.slice(12, 16))).toEqual([50, 50, 0, 255]);
+
+    // Edge-clamped Gaussian blur preserves uniform white without dark border halo
+    const uniformWhite = new Uint8ClampedArray(6 * 6 * 4).fill(255);
+    applyGaussianBlurToImageData(uniformWhite, 6, 6, 4);
+    expect(uniformWhite[0]).toBe(255);
+    expect(uniformWhite[uniformWhite.length - 1]).toBe(255);
+
+    // Persists redactOpts in Prefs
+    const prefs = loadPrefs(localStorage);
+    expect(prefs.redactOpts).toEqual({ mode: 'mosaic', strength: 'medium' });
+    prefs.redactOpts = { mode: 'blur', strength: 'strong' };
+    savePrefs(prefs, localStorage);
+    expect(loadPrefs(localStorage).redactOpts).toEqual({ mode: 'blur', strength: 'strong' });
+
+    // Creates blackout rectangle with sakuttoRedact metadata
+    let committedElements: unknown[] = [];
+    const mockApi = {
+      getSceneElements: () => [],
+      getAppState: () => ({ viewBackgroundColor: '#ffffff', theme: 'light' }),
+      getFiles: () => ({}),
+      addFiles: vi.fn(),
+      updateScene: (arg: { elements?: unknown[] }) => {
+        committedElements = arg.elements || [];
+      },
+    } as unknown as ExcalidrawImperativeAPI;
+
+    const created = await createOrUpdateRedactElement({
+      api: mockApi,
+      rect: { x: 10, y: 20, width: 120, height: 40 },
+      mode: 'blackout',
+      strength: 'high' as never,
+    });
+    expect(created).toBeTruthy();
+    expect(committedElements.length).toBe(1);
+    expect(isRedactElement(created)).toBe(true);
+    expect(getRedactMeta(created)?.mode).toBe('blackout');
+
+    // Renders SakuttoRedactPanel into .App-menu_top__left (compact 1-button mode without dedicated strength button)
+    document.body.innerHTML = `<div class="excalidraw"><div class="App-menu_top__left"></div></div>`;
+    const host = document.createElement('div');
+    document.body.append(host);
+    const root = createRoot(host);
+    await act(async () => {
+      root.render(
+        createElement(SakuttoRedactPanel, {
+          lang: 'ja-JP',
+          active: true,
+          uiLayout: 'compact',
+          mode: 'mosaic',
+          strength: 'medium',
+          onModeChange: vi.fn(),
+          onStrengthChange: vi.fn(),
+        }),
+      );
+    });
+    expect(document.querySelectorAll('.App-menu_top__left [data-exq-redact-trigger="1"]').length).toBe(1);
+    await act(async () => {
+      root.unmount();
+    });
+  });
+});
+
+describe('Ctrl+click multi-select guard', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+    localStorage.clear();
+    attachExcalidrawAPI(null);
+    runtime.prefs = loadPrefs(localStorage);
+  });
+
+  it('remaps Ctrl+pointer to Shift+pointer across down/move/up when selection tool is active', () => {
+    attachExcalidrawAPI({
+      getAppState: () => ({
+        activeTool: { type: 'selection' },
+        viewModeEnabled: false,
+        editingTextElement: null,
+        croppingElementId: null,
+        selectedLinearElement: null,
+      }),
+    } as unknown as ExcalidrawImperativeAPI);
+
+    const canvas = document.createElement('canvas');
+    canvas.className = 'excalidraw__canvas interactive';
+    document.body.append(canvas);
+
+    const cleanup = installCtrlMultiSelectGuard();
+    const seen: Array<{ type: string; ctrlKey: boolean; shiftKey: boolean }> = [];
+    const record = (e: Event) => {
+      const me = e as MouseEvent;
+      seen.push({ type: e.type, ctrlKey: me.ctrlKey, shiftKey: me.shiftKey });
+    };
+    window.addEventListener('pointerdown', record);
+    window.addEventListener('pointermove', record);
+    window.addEventListener('pointerup', record);
+
+    try {
+      const downEvt = new MouseEvent('pointerdown', { bubbles: true, button: 0, ctrlKey: true, shiftKey: false });
+      Object.defineProperty(downEvt, 'pointerId', { value: 11 });
+      canvas.dispatchEvent(downEvt);
+
+      const moveEvt = new MouseEvent('pointermove', { bubbles: true, button: 0, ctrlKey: true, shiftKey: false });
+      Object.defineProperty(moveEvt, 'pointerId', { value: 11 });
+      canvas.dispatchEvent(moveEvt);
+
+      const upEvt = new MouseEvent('pointerup', { bubbles: true, button: 0, ctrlKey: true, shiftKey: false });
+      Object.defineProperty(upEvt, 'pointerId', { value: 11 });
+      canvas.dispatchEvent(upEvt);
+
+      expect(seen).toEqual([
+        { type: 'pointerdown', ctrlKey: false, shiftKey: true },
+        { type: 'pointermove', ctrlKey: false, shiftKey: true },
+        { type: 'pointerup', ctrlKey: false, shiftKey: true },
+      ]);
+    } finally {
+      cleanup();
+      window.removeEventListener('pointerdown', record);
+      window.removeEventListener('pointermove', record);
+      window.removeEventListener('pointerup', record);
+    }
+  });
+
+  it('remaps Cmd+pointer (metaKey) to Shift+pointer on macOS', () => {
+    const platformSpy = vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel');
+    attachExcalidrawAPI({
+      getAppState: () => ({
+        activeTool: { type: 'selection' },
+        viewModeEnabled: false,
+        editingTextElement: null,
+        croppingElementId: null,
+        selectedLinearElement: null,
+      }),
+    } as unknown as ExcalidrawImperativeAPI);
+
+    const canvas = document.createElement('canvas');
+    canvas.className = 'excalidraw__canvas interactive';
+    document.body.append(canvas);
+
+    const cleanup = installCtrlMultiSelectGuard();
+    const seen: Array<{ type: string; metaKey: boolean; shiftKey: boolean }> = [];
+    const record = (e: Event) => {
+      const me = e as MouseEvent;
+      seen.push({ type: e.type, metaKey: me.metaKey, shiftKey: me.shiftKey });
+    };
+    window.addEventListener('pointerdown', record);
+    window.addEventListener('pointerup', record);
+
+    try {
+      const downEvt = new MouseEvent('pointerdown', { bubbles: true, button: 0, metaKey: true, shiftKey: false });
+      Object.defineProperty(downEvt, 'pointerId', { value: 31 });
+      canvas.dispatchEvent(downEvt);
+
+      const upEvt = new MouseEvent('pointerup', { bubbles: true, button: 0, metaKey: true, shiftKey: false });
+      Object.defineProperty(upEvt, 'pointerId', { value: 31 });
+      canvas.dispatchEvent(upEvt);
+
+      expect(seen).toEqual([
+        { type: 'pointerdown', metaKey: false, shiftKey: true },
+        { type: 'pointerup', metaKey: false, shiftKey: true },
+      ]);
+    } finally {
+      cleanup();
+      window.removeEventListener('pointerdown', record);
+      window.removeEventListener('pointerup', record);
+      platformSpy.mockRestore();
+    }
+  });
+
+  it('preserves Alt+Ctrl lasso, non-selection tools, line-editor mode, and Ctrl release mid-gesture', () => {
+    let appState: Record<string, unknown> = {
+      activeTool: { type: 'selection' },
+      viewModeEnabled: false,
+      editingTextElement: null,
+      croppingElementId: null,
+      selectedLinearElement: null,
+    };
+    attachExcalidrawAPI({
+      getAppState: () => appState,
+    } as unknown as ExcalidrawImperativeAPI);
+
+    const canvas = document.createElement('canvas');
+    canvas.className = 'excalidraw__canvas interactive';
+    document.body.append(canvas);
+
+    const cleanup = installCtrlMultiSelectGuard();
+    const seen: Array<{ type: string; ctrlKey: boolean; shiftKey: boolean; altKey: boolean }> = [];
+    const record = (e: Event) => {
+      const me = e as MouseEvent;
+      seen.push({ type: e.type, ctrlKey: me.ctrlKey, shiftKey: me.shiftKey, altKey: me.altKey });
+    };
+    window.addEventListener('pointerdown', record);
+    window.addEventListener('pointerup', record);
+
+    try {
+      // 1. Alt+Ctrl (lasso shortcut) must remain untouched
+      const altCtrlDown = new MouseEvent('pointerdown', { bubbles: true, button: 0, ctrlKey: true, altKey: true });
+      Object.defineProperty(altCtrlDown, 'pointerId', { value: 21 });
+      canvas.dispatchEvent(altCtrlDown);
+
+      // 2. Non-selection tool (e.g. rectangle) must remain untouched
+      appState = { ...appState, activeTool: { type: 'rectangle' } };
+      const rectDown = new MouseEvent('pointerdown', { bubbles: true, button: 0, ctrlKey: true });
+      Object.defineProperty(rectDown, 'pointerId', { value: 22 });
+      canvas.dispatchEvent(rectDown);
+
+      // 3. Linear element point editing must remain untouched
+      appState = { ...appState, activeTool: { type: 'selection' }, selectedLinearElement: { isEditing: true } };
+      const lineEditDown = new MouseEvent('pointerdown', { bubbles: true, button: 0, ctrlKey: true });
+      Object.defineProperty(lineEditDown, 'pointerId', { value: 23 });
+      canvas.dispatchEvent(lineEditDown);
+
+      // 4. Releasing Ctrl before pointerup does not force shiftKey on pointerup
+      appState = { ...appState, selectedLinearElement: null };
+      const startDown = new MouseEvent('pointerdown', { bubbles: true, button: 0, ctrlKey: true });
+      Object.defineProperty(startDown, 'pointerId', { value: 24 });
+      canvas.dispatchEvent(startDown);
+      const releasedUp = new MouseEvent('pointerup', { bubbles: true, button: 0, ctrlKey: false, shiftKey: false });
+      Object.defineProperty(releasedUp, 'pointerId', { value: 24 });
+      canvas.dispatchEvent(releasedUp);
+
+      expect(seen).toEqual([
+        { type: 'pointerdown', ctrlKey: true, shiftKey: false, altKey: true },
+        { type: 'pointerdown', ctrlKey: true, shiftKey: false, altKey: false },
+        { type: 'pointerdown', ctrlKey: true, shiftKey: false, altKey: false },
+        { type: 'pointerdown', ctrlKey: false, shiftKey: true, altKey: false },
+        { type: 'pointerup', ctrlKey: false, shiftKey: false, altKey: false },
+      ]);
+    } finally {
+      cleanup();
+      window.removeEventListener('pointerdown', record);
+      window.removeEventListener('pointerup', record);
     }
   });
 });

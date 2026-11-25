@@ -180,6 +180,21 @@ body,
   cursor: pointer;
   transition: background-color 0.12s ease;
 }
+.exq-icon-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--lg-icon-size, 1rem);
+  height: var(--lg-icon-size, 1rem);
+  line-height: 0;
+  flex-shrink: 0;
+}
+.exq-icon-slot svg,
+.exq-shape-trigger svg,
+.exq-toolbar-reset svg,
+.exq-mobile-tool-btn svg {
+  display: block;
+}
 .exq-shape-trigger:hover { background: var(--button-hover-bg, #f1f0ff); }
 .exq-shape-trigger.exq-active {
   background: var(--color-surface-primary-container, #e0dfff);
@@ -434,15 +449,74 @@ body,
   width: 100%;
 }
 
-/* Preferences submenu layout (Design 4: Visual Card Selector + 3-column Offline Fonts) */
-.excalidraw .excalidraw-main-menu-preferences-submenu {
+/* Preferences & Custom Settings submenu layout */
+.excalidraw .excalidraw-main-menu-preferences-submenu,
+.excalidraw .exq-custom-settings-submenu {
   width: 344px;
   min-width: 344px;
   max-width: min(344px, calc(100vw - 24px)) !important;
 }
-.excalidraw.excalidraw--mobile .excalidraw-main-menu-preferences-submenu {
+.excalidraw.excalidraw--mobile .excalidraw-main-menu-preferences-submenu,
+.excalidraw.excalidraw--mobile .exq-custom-settings-submenu {
   width: min(320px, calc(100vw - 24px));
   min-width: 0;
+}
+.exq-custom-toggle-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.exq-custom-toggle-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 32px;
+  padding: 5px 9px;
+  border-radius: 8px;
+  border: 1px solid var(--default-border-color, rgba(128, 128, 148, 0.22));
+  background: var(--color-surface-low, rgba(128, 128, 148, 0.06));
+  color: var(--text-primary-color, #1b1b1f);
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+.exq-custom-toggle-card:hover {
+  background: var(--button-hover-bg, #f1f0ff);
+}
+.exq-custom-toggle-card.exq-active {
+  border-color: color-mix(in srgb, var(--color-primary, #6965db) 42%, transparent);
+  background: color-mix(in srgb, var(--color-primary, #6965db) 8%, transparent);
+}
+.exq-custom-toggle-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  line-height: 1.25;
+}
+.exq-custom-swatch-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 2px 2px 0;
+  flex-wrap: wrap;
+}
+.exq-custom-swatch {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1.5px solid rgba(128, 128, 148, 0.36);
+  cursor: pointer;
+  transition: transform 0.1s ease, outline-color 0.1s ease;
+}
+.exq-custom-swatch:hover {
+  transform: scale(1.06);
+}
+.exq-custom-swatch.exq-active {
+  outline: 2px solid var(--color-primary, #6965db);
+  outline-offset: 2px;
 }
 .exq-pref-panel {
   display: flex;
@@ -1021,9 +1095,9 @@ body,
   justify-content: center;
   gap: 3px;
   width: auto;
-  min-width: 50px;
+  min-width: 46px;
   height: auto;
-  padding: 6px 8px;
+  padding: 6px 7px;
   font-size: 10.5px;
 }
 
@@ -1121,5 +1195,212 @@ body,
   width: 34px;
   height: 30px;
 }
+
+/* === 8. Left Style Panel Stroke <-> Background Fill Toggle (Item 6) === */
+.exq-fill-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border-radius: var(--border-radius-lg, 8px);
+  border: 1px solid var(--default-border-color, rgba(128, 128, 148, 0.24));
+  background: var(--mobile-action-button-bg, var(--color-surface-low, rgba(128, 128, 148, 0.08)));
+  color: var(--text-primary-color, #1b1b1f);
+  cursor: pointer;
+  padding: 0;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+.exq-fill-toggle-btn--slim {
+  flex-direction: column;
+  width: var(--mobile-action-button-size, 2rem);
+  min-height: 36px;
+  padding: 3px 2px;
+}
+.exq-fill-toggle-btn--mobile {
+  flex-direction: column;
+  width: auto;
+  min-width: 34px;
+  height: var(--mobile-action-button-size, 2rem);
+  padding: 2px 5px;
+}
+.exq-fill-toggle-btn:hover {
+  background: var(--button-hover-bg, #f1f0ff);
+}
+.exq-fill-toggle-btn.exq-is-filled {
+  background: var(--color-surface-primary-container, #e0dfff);
+  color: var(--color-on-primary-container, #030064);
+  border-color: var(--color-primary, #6965db);
+}
+.excalidraw.theme--dark .exq-fill-toggle-btn.exq-is-filled {
+  background: rgba(168, 165, 255, 0.22);
+  color: #e0dfff;
+  border-color: #a8a5ff;
+}
+.exq-fill-btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+.exq-fill-btn-icon svg {
+  width: 13px !important;
+  height: 13px !important;
+  display: block;
+}
+.exq-fill-btn-label {
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.exq-fill-segment {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+  padding: 3px;
+  margin-bottom: 10px;
+  border-radius: 8px;
+  background: var(--color-surface-low, rgba(128, 128, 148, 0.12));
+  border: 1px solid var(--default-border-color, rgba(128, 128, 148, 0.18));
+}
+.exq-fill-seg-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary-color, #686878);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
+}
+.exq-fill-seg-btn:hover {
+  color: var(--text-primary-color, #1b1b1f);
+}
+.exq-fill-seg-btn.exq-active {
+  background: var(--island-bg-color, #ffffff);
+  color: var(--color-primary, #6965db);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+.excalidraw.theme--dark .exq-fill-seg-btn.exq-active {
+  background: rgba(168, 165, 255, 0.2);
+  color: #e0dfff;
+}
+
+/* === 9. Blur / Redact Tool & Left Style Panel Integration (Item 5) === */
+.sakutto-app-root.exq-redact-panel-active .selected-shape-actions-container {
+  display: none !important;
+}
+.sakutto-app-root.exq-redact-panel-active .mobile-shape-actions > div:first-child > .compact-action-item:not(.exq-redact-mobile-item) {
+  display: none !important;
+}
+.exq-redact-full-island {
+  pointer-events: auto;
+  width: 202px;
+  max-width: 12.5rem;
+  padding: 10px;
+  border-radius: var(--border-radius-lg, 8px);
+  background: var(--island-bg-color, #ffffff);
+  box-shadow: var(--shadow-island, 0 1px 4px rgba(0, 0, 0, 0.12));
+  box-sizing: border-box;
+}
+.exq-redact-full-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary-color, #1b1b1f);
+  margin-bottom: 8px;
+}
+.exq-redact-compact-wrap {
+  position: relative;
+  pointer-events: auto;
+  width: fit-content;
+}
+.exq-redact-compact-island {
+  width: fit-content;
+}
+.excalidraw .exq-redact-flyout {
+  width: 244px;
+  height: auto !important;
+  max-height: calc(100vh - 120px) !important;
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--island-bg-color, #ffffff);
+  border: 1px solid var(--default-border-color, rgba(0, 0, 0, 0.08));
+  box-shadow: var(--shadow-island, 0 4px 16px rgba(0, 0, 0, 0.16));
+  z-index: 140;
+  pointer-events: auto;
+}
+.excalidraw .exq-redact-flyout--side {
+  position: absolute !important;
+  top: 0 !important;
+  left: calc(100% + 8px);
+}
+.excalidraw .exq-redact-flyout--up {
+  position: fixed !important;
+  top: auto !important;
+  right: auto !important;
+  width: min(256px, calc(100vw - 24px));
+  z-index: 1050;
+}
+.exq-redact-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.exq-redact-mode-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 46px;
+  padding: 5px 3px;
+  border-radius: 8px;
+  border: 1px solid var(--default-border-color, rgba(128, 128, 148, 0.22));
+  background: var(--color-surface-low, rgba(128, 128, 148, 0.06));
+  color: var(--text-primary-color, #1b1b1f);
+  font-size: 10.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+.exq-redact-mode-card:hover:not(:disabled) {
+  background: var(--button-hover-bg, #f1f0ff);
+}
+.exq-redact-mode-card.exq-active {
+  border-color: var(--color-primary, #6965db);
+  background: color-mix(in srgb, var(--color-primary, #6965db) 12%, transparent);
+  color: var(--color-primary, #6965db);
+  font-weight: 600;
+}
+.exq-redact-group-disabled {
+  opacity: 0.42;
+  pointer-events: none;
+}
+.exq-redact-note {
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--text-secondary-color, #686878);
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: var(--color-surface-low, rgba(128, 128, 148, 0.08));
+}
+.exq-redact-rubberband {
+  position: absolute;
+  border: 1.5px dashed var(--color-primary, #6965db);
+  background: rgba(105, 101, 219, 0.14);
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 90;
+  box-sizing: border-box;
+}
+
 
 

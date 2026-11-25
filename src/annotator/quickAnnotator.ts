@@ -1,5 +1,6 @@
 import { CaptureUpdateAction } from '@excalidraw/excalidraw';
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
+import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types';
 import type { AppLang, ExportFormat, ExportScale, Prefs } from '../types/annotator';
 import { getMessages } from '../i18n/messages';
 import {
@@ -13,7 +14,6 @@ import {
   normalizeFormat,
   normalizeHexColor,
   normalizeScale,
-  PEN_COLOR_SWATCHES,
   resolvePreferJpFont,
   savePrefs,
   shouldSkipAutoReset,
@@ -33,11 +33,15 @@ import {
   applyJapaneseGlyphOverride,
   refreshSceneHandDrawnTextFonts,
 } from './jpGlyphOverride';
+import { createOrUpdateRedactElement, isRedactElement } from './redactProcessor';
+
+export const REDACT_TOOL_CUSTOM_TYPE = 'sakutto-redact';
 
 export const SHAPE_OTHER_ITEMS = [
   { id: 'arrow', testId: 'toolbar-arrow', msgKey: 'toolArrow', shortcut: 'A' },
   { id: 'line', testId: 'toolbar-line', msgKey: 'toolLine', shortcut: 'L' },
   { id: 'diamond', testId: 'toolbar-diamond', msgKey: 'toolDiamond', shortcut: 'D' },
+  { id: 'redact', testId: 'toolbar-redact', msgKey: 'toolRedact', shortcut: '' },
 ] as const;
 
 export const MOBILE_SHAPE_OTHER_ITEMS = [
@@ -45,6 +49,7 @@ export const MOBILE_SHAPE_OTHER_ITEMS = [
   { id: 'arrow', testId: 'toolbar-arrow', msgKey: 'toolArrow', shortcut: 'A' },
   { id: 'line', testId: 'toolbar-line', msgKey: 'toolLine', shortcut: 'L' },
   { id: 'diamond', testId: 'toolbar-diamond', msgKey: 'toolDiamond', shortcut: 'D' },
+  { id: 'redact', testId: 'toolbar-redact', msgKey: 'toolRedact', shortcut: '' },
 ] as const;
 
 export const EXTRA_T3_LEFT_ITEMS = [
@@ -103,7 +108,16 @@ const ICON_DEFS: Record<string, Array<[string, Record<string, string | number>]>
     ['polyline', { points: '13 6 19 12 13 18' }],
   ],
   line: [['line', { x1: 5, y1: 19, x2: 19, y2: 5 }]],
-  diamond: [['path', { d: 'M12 3 21 12 12 21 3 12 12 3Z' }]],
+  diamond: [['path', { d: 'M12 3.5 20.5 12 12 20.5 3.5 12 12 3.5Z' }]],
+  redact: [
+    ['rect', { x: 4, y: 4, width: 16, height: 16, rx: 2 }],
+    ['rect', { x: 7, y: 7, width: 4, height: 4, fill: 'currentColor', stroke: 'none', opacity: '0.85' }],
+    ['rect', { x: 13, y: 7, width: 4, height: 4, fill: 'currentColor', stroke: 'none', opacity: '0.35' }],
+    ['rect', { x: 7, y: 13, width: 4, height: 4, fill: 'currentColor', stroke: 'none', opacity: '0.35' }],
+    ['rect', { x: 13, y: 13, width: 4, height: 4, fill: 'currentColor', stroke: 'none', opacity: '0.85' }],
+  ],
+  fillOutline: [['rect', { x: 4, y: 4, width: 16, height: 16, rx: 2.5 }]],
+  fillSolid: [['rect', { x: 4, y: 4, width: 16, height: 16, rx: 2.5, fill: 'currentColor' }]],
   eraser: [
     ['path', { d: 'm7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21' }],
     ['path', { d: 'M22 21H7' }],
@@ -304,17 +318,33 @@ function svgIcon(name: string, size = 16, viewBox = '0 0 24 24', strokeWidth = 2
   return svg;
 }
 
+export function cloneNativeToolbarIcon(
+  testId: string,
+  fallbackIconId: string,
+  size = 16,
+  strokeWidth = 1.5,
+  root: ParentNode = document,
+): SVGSVGElement {
+  const nativeSvg = root.querySelector<SVGSVGElement>(`.App-toolbar [data-testid="${testId}"] svg`);
+  if (nativeSvg && typeof nativeSvg.cloneNode === 'function') {
+    const cloned = nativeSvg.cloneNode(true) as SVGSVGElement;
+    cloned.setAttribute('width', String(size));
+    cloned.setAttribute('height', String(size));
+    cloned.setAttribute('aria-hidden', 'true');
+    cloned.removeAttribute('class');
+    return cloned;
+  }
+  return svgIcon(fallbackIconId, size, '0 0 24 24', strokeWidth);
+}
+
 export const runtime: {
   api: ExcalidrawImperativeAPI | null;
   prefs: Prefs;
-  lastShapeOther: 'arrow' | 'line' | 'diamond';
-  lastMobileShapeOther: 'ellipse' | 'arrow' | 'line' | 'diamond';
+  lastShapeOther: 'arrow' | 'line' | 'diamond' | 'redact';
+  lastMobileShapeOther: 'ellipse' | 'arrow' | 'line' | 'diamond' | 'redact';
   isBusy: boolean;
   drawAssistAccOpen: boolean;
-  accOpen: boolean;
   expAccOpen: boolean;
-  penPaletteOpen: boolean;
-  bgPaletteOpen: boolean;
   lastCanvasBg: string | null;
   primarySelIconSig: string;
   onLangChange: ((lang: AppLang) => void) | null;
@@ -329,15 +359,13 @@ export const runtime: {
     preferJpFont: DEFAULT_PREFS.preferJpFont,
     exportOpts: { ...DEFAULT_PREFS.exportOpts },
     quickOpts: { ...DEFAULT_PREFS.quickOpts },
+    redactOpts: { ...DEFAULT_PREFS.redactOpts },
   },
   lastShapeOther: 'arrow',
   lastMobileShapeOther: 'ellipse',
   isBusy: false,
   drawAssistAccOpen: false,
-  accOpen: false,
   expAccOpen: false,
-  penPaletteOpen: false,
-  bgPaletteOpen: false,
   lastCanvasBg: null,
   primarySelIconSig: '',
   onLangChange: null,
@@ -421,14 +449,31 @@ function sendEscape(target: EventTarget = document): void {
   });
 }
 
-function getActiveNativeToolId(root: ParentNode = document): 'arrow' | 'line' | 'diamond' | null {
+export function isRedactToolActive(): boolean {
+  const activeTool = silently(() => runtime.api?.getAppState()?.activeTool);
+  return activeTool?.type === 'custom' && activeTool?.customType === REDACT_TOOL_CUSTOM_TYPE;
+}
+
+export function activateRedactTool(): boolean {
+  if (!runtime.api) return false;
+  runtime.api.setActiveTool({ type: 'custom', customType: REDACT_TOOL_CUSTOM_TYPE });
+  scheduleSync();
+  return true;
+}
+
+function getActiveNativeToolId(root: ParentNode = document): 'arrow' | 'line' | 'diamond' | 'redact' | null {
   if (runtime.api) {
-    const activeType = silently(() => runtime.api?.getAppState()?.activeTool?.type);
+    const activeTool = silently(() => runtime.api?.getAppState()?.activeTool);
+    if (activeTool?.type === 'custom' && activeTool?.customType === REDACT_TOOL_CUSTOM_TYPE) {
+      return 'redact';
+    }
+    const activeType = activeTool?.type;
     if (activeType === 'arrow' || activeType === 'line' || activeType === 'diamond') {
       return activeType;
     }
   }
   for (const item of SHAPE_OTHER_ITEMS) {
+    if (item.id === 'redact') continue;
     const btn = root.querySelector(`.App-toolbar [data-testid="${item.testId}"]`);
     if (btn?.classList.contains('ToolIcon--checked')) return item.id;
   }
@@ -582,6 +627,106 @@ export function installTextAutoResizeGuard(): () => void {
   };
 }
 
+/* ================= Ctrl+Click Multi-Select Guard ================= */
+function isMacPlatform(): boolean {
+  return (
+    typeof navigator !== 'undefined' &&
+    /Mac|iPod|iPhone|iPad/i.test(navigator.platform || navigator.userAgent || '')
+  );
+}
+
+function isSelectionToolActive(root: ParentNode = document): boolean {
+  if (runtime.api) {
+    const t = silently(() => runtime.api?.getAppState()?.activeTool?.type);
+    if (t) return t === 'selection';
+  }
+  return !!(
+    root.querySelector('.App-toolbar [data-testid="toolbar-selection"].ToolIcon--checked') ||
+    root.querySelector('.App-toolbar [data-exq-mobile-tool="selection"].exq-active')
+  );
+}
+
+function remapCtrlToShift(e: PointerEvent, isMac: boolean): void {
+  if (isMac) {
+    silently(() => Object.defineProperty(e, 'metaKey', { value: false, configurable: true }));
+  } else {
+    silently(() => Object.defineProperty(e, 'ctrlKey', { value: false, configurable: true }));
+  }
+  silently(() => Object.defineProperty(e, 'shiftKey', { value: true, configurable: true }));
+}
+
+/**
+ * Maps Ctrl+pointer (or Cmd+pointer on macOS) on the selection canvas to Shift+pointer
+ * so Ctrl+click on shapes performs Excalidraw's toggle multi-select instead of deep single-select.
+ */
+export function installCtrlMultiSelectGuard(): () => void {
+  let activePointerId: number | null = null;
+
+  const onPointerDownCapture = (e: PointerEvent) => {
+    if (e.button !== 0 || e.altKey) return;
+    const isMac = isMacPlatform();
+    if (!(isMac ? e.metaKey : e.ctrlKey)) return;
+    if (!(e.target instanceof Element) || !e.target.matches('canvas.interactive')) return;
+    if (!isSelectionToolActive()) return;
+
+    const st = silently(() => runtime.api?.getAppState());
+    if (
+      st &&
+      (st.viewModeEnabled ||
+        st.editingTextElement ||
+        st.croppingElementId ||
+        st.selectedLinearElement?.isEditing)
+    ) {
+      return;
+    }
+
+    activePointerId = e.pointerId;
+    remapCtrlToShift(e, isMac);
+  };
+
+  const onPointerMoveCapture = (e: PointerEvent) => {
+    if (activePointerId === null || e.pointerId !== activePointerId) return;
+    const isMac = isMacPlatform();
+    if (!e.altKey && (isMac ? e.metaKey : e.ctrlKey)) {
+      remapCtrlToShift(e, isMac);
+    }
+  };
+
+  const onPointerUpCapture = (e: PointerEvent) => {
+    if (activePointerId === null || e.pointerId !== activePointerId) return;
+    activePointerId = null;
+    const isMac = isMacPlatform();
+    if (!e.altKey && (isMac ? e.metaKey : e.ctrlKey)) {
+      remapCtrlToShift(e, isMac);
+    }
+  };
+
+  const onPointerCancelCapture = (e: PointerEvent) => {
+    if (activePointerId !== null && e.pointerId === activePointerId) {
+      activePointerId = null;
+    }
+  };
+
+  const onWindowBlur = () => {
+    activePointerId = null;
+  };
+
+  window.addEventListener('pointerdown', onPointerDownCapture, true);
+  window.addEventListener('pointermove', onPointerMoveCapture, true);
+  window.addEventListener('pointerup', onPointerUpCapture, true);
+  window.addEventListener('pointercancel', onPointerCancelCapture, true);
+  window.addEventListener('blur', onWindowBlur);
+
+  return () => {
+    activePointerId = null;
+    window.removeEventListener('pointerdown', onPointerDownCapture, true);
+    window.removeEventListener('pointermove', onPointerMoveCapture, true);
+    window.removeEventListener('pointerup', onPointerUpCapture, true);
+    window.removeEventListener('pointercancel', onPointerCancelCapture, true);
+    window.removeEventListener('blur', onWindowBlur);
+  };
+}
+
 /* ================= Direct API Fast Load & Fast Save Interceptor ================= */
 function openFilePickerForFastLoad(): void {
   const input = document.createElement('input');
@@ -616,8 +761,9 @@ export function installFastLoadSaveInterceptor(): () => void {
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
+      // Invoke File System Access save picker in the synchronous user-gesture tick before dismissing menu
+      void runDirectDiskSaveWithApi(runtime.api, { lang: runtime.prefs.lang, showToast });
       sendEscape();
-      runDirectDiskSaveWithApi(runtime.api, { lang: runtime.prefs.lang, showToast });
     }
   };
 
@@ -739,7 +885,7 @@ function buildShapeGroupWidget() {
   const t = getMessages(runtime.prefs.lang);
   const wrap = el('div', { class: 'exq-shape-group' });
   const iconSlot = el('span', { class: 'exq-icon-slot' });
-  const caretSlot = svgIcon('caret', 10, '0 0 12 12', 2);
+  const caretSlot = svgIcon('caret', 10, '0 0 12 12', 1.5);
   caretSlot.classList.add('exq-caret');
 
   const trigger = el(
@@ -764,17 +910,21 @@ function buildShapeGroupWidget() {
     const btn = el(
       'button',
       { type: 'button', class: 'exq-pop-item', role: 'menuitem', 'data-exq-tool': item.id },
-      svgIcon(item.id, 15),
+      cloneNativeToolbarIcon(item.testId, item.id, 15, 1.5),
       el('span', null, label),
-      el('span', { class: 'exq-pop-shortcut' }, item.shortcut),
+      item.shortcut ? el('span', { class: 'exq-pop-shortcut' }, item.shortcut) : null,
     );
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       runtime.lastShapeOther = item.id;
       wrap.classList.remove('exq-open');
       trigger.setAttribute('aria-expanded', 'false');
-      clickNativeTool(item.testId);
-      scheduleSync();
+      if (item.id === 'redact') {
+        activateRedactTool();
+      } else {
+        clickNativeTool(item.testId);
+        scheduleSync();
+      }
     });
     itemButtons.set(item.id, btn);
     popover.append(btn);
@@ -796,7 +946,10 @@ function buildShapeGroupWidget() {
     if (activeId) runtime.lastShapeOther = activeId;
     if (renderedIconId !== runtime.lastShapeOther) {
       renderedIconId = runtime.lastShapeOther;
-      iconSlot.replaceChildren(svgIcon(renderedIconId, 16));
+      const meta = SHAPE_OTHER_ITEMS.find((it) => it.id === renderedIconId);
+      iconSlot.replaceChildren(
+        cloneNativeToolbarIcon(meta?.testId || '', renderedIconId, 16, 1.5),
+      );
     }
     trigger.classList.toggle('exq-active', !!activeId);
     for (const [id, btn] of itemButtons) {
@@ -841,7 +994,7 @@ export function syncToolbar(root: ParentNode = document): boolean {
         title: t.resetCanvasTitle,
         'aria-label': t.resetCanvasTitle,
       },
-      svgIcon('reset', 15),
+      svgIcon('reset', 16, '0 0 24 24', 1.5),
     );
     resetBtn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -876,8 +1029,12 @@ export function syncToolbar(root: ParentNode = document): boolean {
 }
 
 /* ================= Mobile A-2 Unified Toolbar & Persistent Duplicate/Delete ================= */
-function getActiveMobileShapeOtherId(): 'ellipse' | 'arrow' | 'line' | 'diamond' | null {
-  const activeType = silently(() => runtime.api?.getAppState()?.activeTool?.type);
+function getActiveMobileShapeOtherId(): 'ellipse' | 'arrow' | 'line' | 'diamond' | 'redact' | null {
+  const activeTool = silently(() => runtime.api?.getAppState()?.activeTool);
+  if (activeTool?.type === 'custom' && activeTool?.customType === REDACT_TOOL_CUSTOM_TYPE) {
+    return 'redact';
+  }
+  const activeType = activeTool?.type;
   if (
     activeType === 'ellipse' ||
     activeType === 'arrow' ||
@@ -893,7 +1050,7 @@ function buildMobileShapeGroupWidget() {
   const t = getMessages(runtime.prefs.lang);
   const wrap = el('div', { class: 'exq-shape-group exq-mobile-shape-group', 'data-exq-mobile-shape-group': '1' });
   const iconSlot = el('span', { class: 'exq-icon-slot' });
-  const caretSlot = svgIcon('caretUp', 10, '0 0 12 12', 2);
+  const caretSlot = svgIcon('caretUp', 10, '0 0 12 12', 1.5);
   caretSlot.classList.add('exq-caret');
 
   const trigger = el(
@@ -925,7 +1082,7 @@ function buildMobileShapeGroupWidget() {
         title: label,
         'aria-label': label,
       },
-      svgIcon(item.id, 16),
+      cloneNativeToolbarIcon(item.testId, item.id, 16, 1.5),
       el('span', { class: 'exq-pop-mobile-label' }, label),
     );
     btn.addEventListener('click', (e) => {
@@ -933,8 +1090,12 @@ function buildMobileShapeGroupWidget() {
       runtime.lastMobileShapeOther = item.id;
       wrap.classList.remove('exq-open');
       trigger.setAttribute('aria-expanded', 'false');
-      clickNativeTool(item.testId);
-      scheduleSync();
+      if (item.id === 'redact') {
+        activateRedactTool();
+      } else {
+        clickNativeTool(item.testId);
+        scheduleSync();
+      }
     });
     itemButtons.set(item.id, btn);
     popover.append(btn);
@@ -956,7 +1117,10 @@ function buildMobileShapeGroupWidget() {
     if (activeId) runtime.lastMobileShapeOther = activeId;
     if (renderedIconId !== runtime.lastMobileShapeOther) {
       renderedIconId = runtime.lastMobileShapeOther;
-      iconSlot.replaceChildren(svgIcon(renderedIconId, 16));
+      const meta = MOBILE_SHAPE_OTHER_ITEMS.find((it) => it.id === renderedIconId);
+      iconSlot.replaceChildren(
+        cloneNativeToolbarIcon(meta?.testId || '', renderedIconId, 16, 1.5),
+      );
     }
     trigger.classList.toggle('exq-active', !!activeId);
     for (const [id, btn] of itemButtons) {
@@ -992,7 +1156,7 @@ export function syncMobileToolbar(root: ParentNode = document): boolean {
         title: t.toolText,
         'aria-label': t.toolText,
       },
-      svgIcon('text', 16),
+      cloneNativeToolbarIcon('toolbar-text', 'text', 16, 1.5),
     );
     textBtn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -1010,7 +1174,7 @@ export function syncMobileToolbar(root: ParentNode = document): boolean {
         title: t.toolRectangle,
         'aria-label': t.toolRectangle,
       },
-      svgIcon('rectangle', 16),
+      cloneNativeToolbarIcon('toolbar-rectangle', 'rectangle', 16, 1.5),
     );
     rectBtn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -1049,8 +1213,7 @@ export function syncMobileToolbar(root: ParentNode = document): boolean {
 }
 
 function dispatchElementShortcut(action: 'duplicate' | 'delete'): void {
-  const isMac =
-    typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/i.test(navigator.platform || navigator.userAgent || '');
+  const isMac = isMacPlatform();
   silently(() => {
     if (action === 'delete') {
       document.dispatchEvent(
@@ -1489,7 +1652,7 @@ function buildQuickOptionsAccordion(): HTMLElement {
 
   const sep = el('div', { class: 'exq-extra-sep', 'aria-hidden': 'true' });
 
-  /* --- 1. Drawing Assist Accordion (default collapsed) --- */
+  /* --- Drawing Assist Accordion (default collapsed) --- */
   const assistWrap = el('div', {
     class: 'exq-acc-section' + (runtime.drawAssistAccOpen ? ' exq-acc-open' : ''),
     'data-exq-draw-assist': '1',
@@ -1559,173 +1722,8 @@ function buildQuickOptionsAccordion(): HTMLElement {
   }
   assistWrap.append(assistBtn, assistNest);
 
-  /* --- 2. Quick Settings Accordion (default collapsed) --- */
-  const quickWrap = el('div', {
-    class: 'exq-acc-section' + (runtime.accOpen ? ' exq-acc-open' : ''),
-    'data-exq-quick-settings': '1',
-  });
-  const chev = el('span', { class: 'exq-acc-chev' }, svgIcon('caret', 12, '0 0 12 12', 1.8));
-  const accBtn = el(
-    'button',
-    {
-      type: 'button',
-      class: 'exq-acc-flat-btn',
-      'data-exq-acc-toggle': '1',
-      'aria-expanded': String(runtime.accOpen),
-    },
-    svgIcon('sliders', 14),
-    el('span', null, t.quickSettings),
-    chev,
-  );
-
-  const nest = el('div', { class: 'exq-acc-nest' });
-  const switchMap = new Map<string, HTMLButtonElement>();
-
-  const penSwatch = el('span', { class: 'exq-bg-swatch', 'aria-hidden': 'true' });
-  const penPalette = el('div', { class: 'exq-bg-palette' });
-  const penChipMap = new Map<string, HTMLButtonElement>();
-
-  const bgSwatch = el('span', { class: 'exq-bg-swatch', 'aria-hidden': 'true' });
-  const bgPalette = el('div', { class: 'exq-bg-palette' });
-  const bgChipMap = new Map<string, HTMLButtonElement>();
-
-  const refreshQuick = () => {
-    quickWrap.classList.toggle('exq-acc-open', runtime.accOpen);
-    accBtn.setAttribute('aria-expanded', String(runtime.accOpen));
-    for (const [key, sw] of switchMap) {
-      const on = !!runtime.prefs.quickOpts[
-        key as 'autoResetOnOpen' | 'textAutoResize' | 'fastLoadSave' | 'modernContextMenu'
-      ];
-      sw.classList.toggle('exq-on', on);
-      sw.setAttribute('aria-pressed', String(on));
-    }
-    const curPen = getCurrentPenColor();
-    penSwatch.style.background = curPen;
-    penPalette.classList.toggle('exq-open', runtime.penPaletteOpen);
-    for (const [hex, chip] of penChipMap) {
-      chip.classList.toggle('exq-active', curPen === hex);
-    }
-
-    const curBg = getCurrentCanvasBg();
-    bgSwatch.style.background = curBg;
-    bgPalette.classList.toggle('exq-open', runtime.bgPaletteOpen);
-    for (const [hex, chip] of bgChipMap) {
-      chip.classList.toggle('exq-active', curBg === hex);
-    }
-  };
-
-  accBtn.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    runtime.accOpen = !runtime.accOpen;
-    refreshQuick();
-  });
-
-  for (const def of QUICK_OPT_DEFS) {
-    const label = t[def.msgKey];
-    const labelNode = el('span', { class: 'exq-opt-label' }, label);
-    const sw = el('button', {
-      type: 'button',
-      class: 'exq-switch',
-      'data-exq-quick-opt': def.key,
-      'aria-label': label,
-    });
-    const row = el('div', { class: 'exq-opt-row', role: 'menuitemcheckbox' }, labelNode, sw);
-    row.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const nextVal = !runtime.prefs.quickOpts[def.key];
-      runtime.prefs.quickOpts[def.key] = nextVal;
-      savePrefs(runtime.prefs);
-      refreshQuick();
-      showToast(`${label}: ${nextVal ? 'ON' : 'OFF'}`);
-    });
-    switchMap.set(def.key, sw);
-    nest.append(row);
-  }
-
-  // Single-row Pen Color control (default pink #c2255c)
-  const penRow = el(
-    'button',
-    { type: 'button', class: 'exq-bg-row', 'data-exq-pen-toggle': '1' },
-    el('span', null, t.penColor),
-    penSwatch,
-  );
-  penRow.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    runtime.penPaletteOpen = !runtime.penPaletteOpen;
-    if (runtime.penPaletteOpen) runtime.bgPaletteOpen = false;
-    refreshQuick();
-  });
-
-  for (const hex of PEN_COLOR_SWATCHES) {
-    const chip = el('button', {
-      type: 'button',
-      class: 'exq-bg-chip',
-      'data-exq-pen-color': hex,
-      title: hex,
-      'aria-label': `${t.penColorLabel} ${hex}`,
-    });
-    chip.style.background = hex;
-    chip.addEventListener('click', async (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      runtime.penPaletteOpen = false;
-      await applyPenColor(hex);
-      refreshQuick();
-    });
-    penChipMap.set(hex, chip);
-    penPalette.append(chip);
-  }
-
-  // Single-row Canvas Background control
-  const bgRow = el(
-    'button',
-    { type: 'button', class: 'exq-bg-row', 'data-exq-bg-toggle': '1' },
-    el('span', null, t.canvasBackground),
-    bgSwatch,
-  );
-  bgRow.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    runtime.bgPaletteOpen = !runtime.bgPaletteOpen;
-    if (runtime.bgPaletteOpen) runtime.penPaletteOpen = false;
-    refreshQuick();
-  });
-
-  for (const hex of CANVAS_BG_SWATCHES) {
-    const chip = el('button', {
-      type: 'button',
-      class: 'exq-bg-chip',
-      'data-exq-bg-color': hex,
-      title: hex,
-      'aria-label': `${t.bgColorLabel} ${hex}`,
-    });
-    chip.style.background = hex;
-    chip.addEventListener('click', async (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      runtime.bgPaletteOpen = false;
-      await applyCanvasBackground(hex);
-      refreshQuick();
-    });
-    bgChipMap.set(hex, chip);
-    bgPalette.append(chip);
-  }
-
-  nest.append(
-    el('div', { class: 'exq-extra-sep', 'aria-hidden': 'true' }),
-    penRow,
-    penPalette,
-    bgRow,
-    bgPalette,
-  );
-  quickWrap.append(accBtn, nest);
-
   refreshAssist();
-  refreshQuick();
-  root.append(sep, assistWrap, quickWrap);
+  root.append(sep, assistWrap);
   return root;
 }
 
@@ -2067,8 +2065,7 @@ export function clampContextMenuPopover(ul: Element): void {
 }
 
 function dispatchLayerShortcut(testId: (typeof CTX_LAYER_BAR_ITEMS)[number]['testId']): void {
-  const isMac =
-    typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/i.test(navigator.platform || navigator.userAgent || '');
+  const isMac = isMacPlatform();
   const isFront = testId === 'bringForward' || testId === 'bringToFront';
   const isEdge = testId === 'sendToBack' || testId === 'bringToFront';
   const code = isFront ? 'BracketRight' : 'BracketLeft';
@@ -2345,11 +2342,594 @@ export function syncTopRightBar(root: ParentNode = document): boolean {
   return true;
 }
 
+/* ================= Stroke <-> Background Fill Toggle (Item 6) ================= */
+const FILLABLE_ELEMENT_TYPES = new Set(['rectangle', 'ellipse', 'diamond', 'line', 'freedraw']);
+type ElementFillStyle = 'hachure' | 'cross-hatch' | 'solid' | 'zigzag';
+
+export function computeSwappedStrokeFill({
+  strokeColor,
+  backgroundColor,
+  fillStyle = 'hachure',
+  fallbackStrokeColor = DEFAULT_PEN_COLOR,
+  targetMode = 'toggle',
+}: {
+  strokeColor: string;
+  backgroundColor: string;
+  fillStyle?: string;
+  fallbackStrokeColor?: string;
+  targetMode?: 'toggle' | 'outline' | 'filled';
+}): {
+  strokeColor: string;
+  backgroundColor: string;
+  fillStyle: ElementFillStyle;
+} {
+  const stroke = (strokeColor || DEFAULT_PEN_COLOR).trim();
+  const bg = (backgroundColor || 'transparent').trim();
+  const fs = (fillStyle || 'hachure') as ElementFillStyle;
+  const strokeTransparent = stroke === 'transparent';
+  const bgTransparent = bg === 'transparent';
+
+  if (targetMode === 'outline') {
+    const nextStroke = !strokeTransparent ? stroke : !bgTransparent ? bg : fallbackStrokeColor;
+    return { strokeColor: nextStroke, backgroundColor: 'transparent', fillStyle: fs };
+  }
+
+  if (targetMode === 'filled') {
+    const nextBg = !bgTransparent ? bg : !strokeTransparent ? stroke : fallbackStrokeColor;
+    return {
+      strokeColor: 'transparent',
+      backgroundColor: nextBg,
+      fillStyle: fs === 'hachure' ? 'solid' : fs,
+    };
+  }
+
+  if (!strokeTransparent && bgTransparent) {
+    return {
+      strokeColor: 'transparent',
+      backgroundColor: stroke,
+      fillStyle: fs === 'hachure' ? 'solid' : fs,
+    };
+  }
+  if (strokeTransparent && !bgTransparent) {
+    return {
+      strokeColor: bg,
+      backgroundColor: 'transparent',
+      fillStyle: fs,
+    };
+  }
+  if (!strokeTransparent && !bgTransparent) {
+    return {
+      strokeColor: bg,
+      backgroundColor: stroke,
+      fillStyle: fs,
+    };
+  }
+  return {
+    strokeColor: fallbackStrokeColor,
+    backgroundColor: 'transparent',
+    fillStyle: fs,
+  };
+}
+
+function getSelectedFillableElements(api: ExcalidrawImperativeAPI): ExcalidrawElement[] {
+  const appState = api.getAppState();
+  const selectedIds = appState.selectedElementIds || {};
+  const elements = api.getSceneElements();
+  return elements.filter(
+    (item) =>
+      !item.isDeleted &&
+      Boolean(selectedIds[item.id]) &&
+      FILLABLE_ELEMENT_TYPES.has(item.type) &&
+      !isRedactElement(item),
+  );
+}
+
+export function getActiveStrokeFillState(api: ExcalidrawImperativeAPI | null): {
+  isFilledOnly: boolean;
+  hasAnyFill: boolean;
+  eligible: boolean;
+} {
+  if (!api) {
+    return { isFilledOnly: false, hasAnyFill: false, eligible: false };
+  }
+  const appState = api.getAppState();
+  const selectedIds = appState.selectedElementIds || {};
+  const hasAnySelected = Object.values(selectedIds).some(Boolean);
+  if (hasAnySelected) {
+    const fillable = getSelectedFillableElements(api);
+    if (fillable.length === 0) {
+      return { isFilledOnly: false, hasAnyFill: false, eligible: false };
+    }
+    const first = fillable[0];
+    return {
+      isFilledOnly: first.strokeColor === 'transparent' && first.backgroundColor !== 'transparent',
+      hasAnyFill: first.backgroundColor !== 'transparent',
+      eligible: true,
+    };
+  }
+
+  const activeType = appState.activeTool?.type;
+  const eligibleTool = activeType === 'rectangle' || activeType === 'ellipse' || activeType === 'diamond';
+  const stroke = appState.currentItemStrokeColor || DEFAULT_PEN_COLOR;
+  const bg = appState.currentItemBackgroundColor || 'transparent';
+  return {
+    isFilledOnly: stroke === 'transparent' && bg !== 'transparent',
+    hasAnyFill: bg !== 'transparent',
+    eligible: eligibleTool,
+  };
+}
+
+export function toggleFillOrSwapColorsWithApi(
+  api: ExcalidrawImperativeAPI | null,
+  {
+    lang = 'en',
+    showToast: toastFn,
+    defaultPenColor = DEFAULT_PEN_COLOR,
+    targetMode = 'toggle',
+  }: {
+    lang?: AppLang;
+    showToast?: (msg: string) => void;
+    defaultPenColor?: string;
+    targetMode?: 'toggle' | 'outline' | 'filled';
+  } = {},
+): boolean {
+  if (!api) return false;
+  const appState = api.getAppState();
+  const selectedIds = appState.selectedElementIds || {};
+  const hasAnySelected = Object.values(selectedIds).some(Boolean);
+
+  if (hasAnySelected) {
+    const fillableIds = new Set(getSelectedFillableElements(api).map((e) => e.id));
+    if (fillableIds.size === 0) return false;
+
+    let primaryStyle: { strokeColor: string; backgroundColor: string; fillStyle: ElementFillStyle } | null = null;
+    const now = Date.now();
+    const nextElements = api.getSceneElements().map((elItem) => {
+      if (!fillableIds.has(elItem.id)) return elItem;
+      const swapped = computeSwappedStrokeFill({
+        strokeColor: elItem.strokeColor,
+        backgroundColor: elItem.backgroundColor,
+        fillStyle: elItem.fillStyle,
+        fallbackStrokeColor: defaultPenColor,
+        targetMode,
+      });
+      if (!primaryStyle) primaryStyle = swapped;
+      return {
+        ...elItem,
+        strokeColor: swapped.strokeColor,
+        backgroundColor: swapped.backgroundColor,
+        fillStyle: swapped.fillStyle,
+        version: elItem.version + 1,
+        versionNonce: Math.floor(Math.random() * 2147483647) + 1,
+        updated: now,
+      };
+    });
+
+    if (!primaryStyle) return false;
+    const resolvedStyle = primaryStyle as {
+      strokeColor: string;
+      backgroundColor: string;
+      fillStyle: ElementFillStyle;
+    };
+
+    api.updateScene({
+      elements: nextElements,
+      appState: {
+        currentItemStrokeColor: resolvedStyle.strokeColor,
+        currentItemBackgroundColor: resolvedStyle.backgroundColor,
+        currentItemFillStyle: resolvedStyle.fillStyle,
+      },
+      captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+    });
+    toastFn?.(getMessages(lang).toastColorSwapped);
+    return true;
+  }
+
+  const nextStyle = computeSwappedStrokeFill({
+    strokeColor: appState.currentItemStrokeColor || defaultPenColor,
+    backgroundColor: appState.currentItemBackgroundColor || 'transparent',
+    fillStyle: appState.currentItemFillStyle || 'hachure',
+    fallbackStrokeColor: defaultPenColor,
+    targetMode,
+  });
+
+  api.updateScene({
+    appState: {
+      currentItemStrokeColor: nextStyle.strokeColor,
+      currentItemBackgroundColor: nextStyle.backgroundColor,
+      currentItemFillStyle: nextStyle.fillStyle,
+    },
+    captureUpdate: CaptureUpdateAction.NEVER,
+  });
+  toastFn?.(getMessages(lang).toastColorSwapped);
+  return true;
+}
+
+const fillToggleMounts = new WeakMap<Element, {
+  lang: AppLang;
+  wrap: HTMLElement;
+  btn: HTMLButtonElement;
+  iconSlot: HTMLElement;
+}>();
+const fillSegmentMounts = new WeakMap<Element, {
+  lang: AppLang;
+  wrap: HTMLElement;
+  outlineBtn: HTMLButtonElement;
+  filledBtn: HTMLButtonElement;
+}>();
+
+function updateFillToggleButtonState(
+  btn: HTMLButtonElement,
+  iconSlot: HTMLElement,
+  isFilled: boolean,
+): void {
+  btn.classList.toggle('exq-is-filled', isFilled);
+  btn.setAttribute('aria-pressed', String(isFilled));
+  iconSlot.replaceChildren(svgIcon(isFilled ? 'fillSolid' : 'fillOutline', 14, '0 0 24 24', 1.6));
+}
+
+function syncCompactFillToggle(container: Element, isMobile: boolean): boolean {
+  const strokeTrigger = container.querySelector('[data-openpopup="elementStroke"]');
+  const bgTrigger = container.querySelector('[data-openpopup="elementBackground"]');
+  const existing = fillToggleMounts.get(container);
+
+  if (!strokeTrigger || !bgTrigger) {
+    if (existing) {
+      existing.wrap.remove();
+      fillToggleMounts.delete(container);
+    }
+    return false;
+  }
+
+  const t = getMessages(runtime.prefs.lang);
+  const { isFilledOnly } = getActiveStrokeFillState(runtime.api);
+
+  let mounted = existing;
+  if (mounted && mounted.lang !== runtime.prefs.lang) {
+    mounted.wrap.remove();
+    fillToggleMounts.delete(container);
+    mounted = undefined;
+  }
+
+  if (!mounted || !mounted.wrap.isConnected) {
+    const iconSlot = el('span', { class: 'exq-fill-btn-icon', 'aria-hidden': 'true' });
+    const labelSpan = el('span', { class: 'exq-fill-btn-label' }, t.fillToggleShort);
+    const btn = el(
+      'button',
+      {
+        type: 'button',
+        class: `exq-fill-toggle-btn${isMobile ? ' exq-fill-toggle-btn--mobile' : ' exq-fill-toggle-btn--slim'}`,
+        'data-exq-fill-toggle': '1',
+        title: t.swapStrokeFillTitle,
+        'aria-label': t.swapStrokeFillTitle,
+        'aria-pressed': String(isFilledOnly),
+      },
+      iconSlot,
+      labelSpan,
+    );
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleFillOrSwapColorsWithApi(runtime.api, {
+        lang: runtime.prefs.lang,
+        showToast,
+        defaultPenColor: getCurrentPenColor(),
+        targetMode: 'toggle',
+      });
+      syncStylesPanelColorSwap();
+      scheduleSync();
+    });
+
+    const wrap = el(
+      'div',
+      { class: `compact-action-item exq-fill-compact-item${isMobile ? ' exq-fill-mobile-item' : ''}` },
+      btn,
+    );
+    const bgItem = bgTrigger.closest('.compact-action-item');
+    if (bgItem && bgItem.parentElement === container) {
+      container.insertBefore(wrap, bgItem.nextSibling);
+    } else {
+      container.append(wrap);
+    }
+    mounted = { lang: runtime.prefs.lang, wrap, btn, iconSlot };
+    fillToggleMounts.set(container, mounted);
+  }
+
+  updateFillToggleButtonState(mounted.btn, mounted.iconSlot, isFilledOnly);
+  return true;
+}
+
+function syncExpandedFillSegment(panelRoot: Element): boolean {
+  const strokeTrigger = panelRoot.querySelector('[data-openpopup="elementStroke"]');
+  const bgTrigger = panelRoot.querySelector('[data-openpopup="elementBackground"]');
+  const existing = fillSegmentMounts.get(panelRoot);
+
+  if (!strokeTrigger || !bgTrigger) {
+    if (existing) {
+      existing.wrap.remove();
+      fillSegmentMounts.delete(panelRoot);
+    }
+    return false;
+  }
+
+  const targetParent =
+    strokeTrigger.closest('.panelColumn') ||
+    panelRoot.querySelector('.panelColumn') ||
+    panelRoot;
+  const t = getMessages(runtime.prefs.lang);
+  const { isFilledOnly } = getActiveStrokeFillState(runtime.api);
+
+  let mounted = existing;
+  if (mounted && mounted.lang !== runtime.prefs.lang) {
+    mounted.wrap.remove();
+    fillSegmentMounts.delete(panelRoot);
+    mounted = undefined;
+  }
+
+  if (!mounted || !mounted.wrap.isConnected) {
+    const outlineBtn = el(
+      'button',
+      {
+        type: 'button',
+        role: 'radio',
+        class: 'exq-fill-seg-btn',
+        'data-exq-fill-mode': 'outline',
+        title: t.swapStrokeFillTitle,
+      },
+      svgIcon('fillOutline', 13, '0 0 24 24', 1.6),
+      el('span', null, t.fillToggleOutline),
+    );
+    const filledBtn = el(
+      'button',
+      {
+        type: 'button',
+        role: 'radio',
+        class: 'exq-fill-seg-btn',
+        'data-exq-fill-mode': 'filled',
+        title: t.swapStrokeFillTitle,
+      },
+      svgIcon('fillSolid', 13, '0 0 24 24', 1.6),
+      el('span', null, t.fillToggleFilled),
+    );
+
+    outlineBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleFillOrSwapColorsWithApi(runtime.api, {
+        lang: runtime.prefs.lang,
+        showToast,
+        defaultPenColor: getCurrentPenColor(),
+        targetMode: 'outline',
+      });
+      syncStylesPanelColorSwap();
+      scheduleSync();
+    });
+    filledBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleFillOrSwapColorsWithApi(runtime.api, {
+        lang: runtime.prefs.lang,
+        showToast,
+        defaultPenColor: getCurrentPenColor(),
+        targetMode: 'filled',
+      });
+      syncStylesPanelColorSwap();
+      scheduleSync();
+    });
+
+    const wrap = el(
+      'div',
+      {
+        class: 'exq-fill-segment',
+        'data-exq-fill-segment': '1',
+        role: 'radiogroup',
+        'aria-label': t.swapStrokeFillTitle,
+      },
+      outlineBtn,
+      filledBtn,
+    );
+    targetParent.insertBefore(wrap, targetParent.firstChild);
+    mounted = { lang: runtime.prefs.lang, wrap, outlineBtn, filledBtn };
+    fillSegmentMounts.set(panelRoot, mounted);
+  }
+
+  mounted.outlineBtn.classList.toggle('exq-active', !isFilledOnly);
+  mounted.outlineBtn.setAttribute('aria-checked', String(!isFilledOnly));
+  mounted.filledBtn.classList.toggle('exq-active', isFilledOnly);
+  mounted.filledBtn.setAttribute('aria-checked', String(isFilledOnly));
+  return true;
+}
+
+export function syncStylesPanelColorSwap(root: ParentNode = document): boolean {
+  let updated = false;
+  const slimContainer = root.querySelector('.App-menu_top__left .compact-shape-actions, .compact-shape-actions-island .compact-shape-actions');
+  if (slimContainer) {
+    updated = syncCompactFillToggle(slimContainer, false) || updated;
+  }
+
+  const mobileContainer = root.querySelector('.mobile-shape-actions > div:first-child');
+  if (mobileContainer) {
+    updated = syncCompactFillToggle(mobileContainer, true) || updated;
+  }
+
+  const expandedPanel = root.querySelector(
+    '.selected-shape-actions-container:not(.selected-shape-actions-container--compact) .App-menu__left, .selected-shape-actions-container:not(.selected-shape-actions-container--compact) .selected-shape-actions, .App-menu__left',
+  );
+  if (expandedPanel && !expandedPanel.closest('.compact-shape-actions-island') && !expandedPanel.closest('.exq-redact-full-island')) {
+    updated = syncExpandedFillSegment(expandedPanel) || updated;
+  }
+
+  return updated;
+}
+
+/* ================= Blur / Redact Drag Controller (Item 5) ================= */
+export function installRedactDragController(): () => void {
+  let dragState: {
+    pointerId: number;
+    startX: number;
+    startY: number;
+    curX: number;
+    curY: number;
+    shiftKey: boolean;
+    canvas: HTMLCanvasElement;
+    boxEl: HTMLElement;
+  } | null = null;
+  let spaceHeld = false;
+
+  const computeViewportBox = (s: NonNullable<typeof dragState>) => {
+    let dx = s.curX - s.startX;
+    let dy = s.curY - s.startY;
+    if (s.shiftKey) {
+      const size = Math.max(Math.abs(dx), Math.abs(dy));
+      dx = dx >= 0 ? size : -size;
+      dy = dy >= 0 ? size : -size;
+    }
+    const left = Math.min(s.startX, s.startX + dx);
+    const top = Math.min(s.startY, s.startY + dy);
+    const width = Math.abs(dx);
+    const height = Math.abs(dy);
+    return { left, top, width, height };
+  };
+
+  const clearDrag = () => {
+    if (!dragState) return;
+    dragState.boxEl.remove();
+    dragState = null;
+  };
+
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.code === 'Space' && !isEditableFocused()) {
+      spaceHeld = true;
+    }
+    if (e.key === 'Escape' && dragState) {
+      clearDrag();
+    }
+  };
+
+  const onKeyUp = (e: KeyboardEvent) => {
+    if (e.code === 'Space') {
+      spaceHeld = false;
+    }
+  };
+
+  const onPointerDown = (e: PointerEvent) => {
+    if (!runtime.api || runtime.isBusy || spaceHeld) return;
+    if (e.button !== 0 || e.altKey) return;
+    if (!isRedactToolActive()) return;
+    if (!(e.target instanceof HTMLCanvasElement) || !e.target.matches('canvas.interactive')) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+
+    const host = e.target.closest('.excalidraw') || document.body;
+    const boxEl = el('div', { class: 'exq-redact-rubberband', 'data-exq-redact-rubberband': '1' });
+    host.append(boxEl);
+
+    dragState = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      curX: e.clientX,
+      curY: e.clientY,
+      shiftKey: e.shiftKey,
+      canvas: e.target,
+      boxEl,
+    };
+
+    silently(() => e.target instanceof Element && e.target.setPointerCapture?.(e.pointerId));
+  };
+
+  const onPointerMove = (e: PointerEvent) => {
+    if (!dragState || e.pointerId !== dragState.pointerId) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+
+    dragState.curX = e.clientX;
+    dragState.curY = e.clientY;
+    dragState.shiftKey = e.shiftKey;
+
+    const { left, top, width, height } = computeViewportBox(dragState);
+    const hostRect = (dragState.boxEl.parentElement || document.body).getBoundingClientRect();
+    dragState.boxEl.style.left = `${Math.round(left - hostRect.left)}px`;
+    dragState.boxEl.style.top = `${Math.round(top - hostRect.top)}px`;
+    dragState.boxEl.style.width = `${Math.round(width)}px`;
+    dragState.boxEl.style.height = `${Math.round(height)}px`;
+  };
+
+  const onPointerUp = async (e: PointerEvent) => {
+    if (!dragState || e.pointerId !== dragState.pointerId) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+
+    dragState.curX = e.clientX;
+    dragState.curY = e.clientY;
+    dragState.shiftKey = e.shiftKey;
+    const { left, top, width, height } = computeViewportBox(dragState);
+    const canvas = dragState.canvas;
+    clearDrag();
+
+    if (width < 6 || height < 6 || !runtime.api) return;
+
+    const appState = runtime.api.getAppState();
+    const zoom = appState.zoom?.value || 1;
+    const canvasRect = canvas.getBoundingClientRect();
+    const sceneX = (left - canvasRect.left) / zoom - (appState.scrollX || 0);
+    const sceneY = (top - canvasRect.top) / zoom - (appState.scrollY || 0);
+    const sceneW = width / zoom;
+    const sceneH = height / zoom;
+    const wasLocked = Boolean(appState.activeTool?.locked);
+
+    runtime.isBusy = true;
+    try {
+      await createOrUpdateRedactElement({
+        api: runtime.api,
+        rect: { x: sceneX, y: sceneY, width: sceneW, height: sceneH },
+        mode: runtime.prefs.redactOpts.mode,
+        strength: runtime.prefs.redactOpts.strength,
+        selectResult: true,
+      });
+      if (!wasLocked) {
+        runtime.api.setActiveTool({ type: 'selection' });
+      }
+      scheduleSync();
+    } finally {
+      runtime.isBusy = false;
+    }
+  };
+
+  const onPointerCancel = (e: PointerEvent) => {
+    if (dragState && e.pointerId === dragState.pointerId) {
+      clearDrag();
+    }
+  };
+
+  window.addEventListener('keydown', onKeyDown, true);
+  window.addEventListener('keyup', onKeyUp, true);
+  window.addEventListener('pointerdown', onPointerDown, true);
+  window.addEventListener('pointermove', onPointerMove, true);
+  window.addEventListener('pointerup', onPointerUp, true);
+  window.addEventListener('pointercancel', onPointerCancel, true);
+
+  return () => {
+    clearDrag();
+    window.removeEventListener('keydown', onKeyDown, true);
+    window.removeEventListener('keyup', onKeyUp, true);
+    window.removeEventListener('pointerdown', onPointerDown, true);
+    window.removeEventListener('pointermove', onPointerMove, true);
+    window.removeEventListener('pointerup', onPointerUp, true);
+    window.removeEventListener('pointercancel', onPointerCancel, true);
+  };
+}
+
 /* ================= Sync Loop & Boot ================= */
 export function syncUI(): void {
   syncToolbar();
   syncMobileToolbar();
   syncMobileShapeActions();
+  syncStylesPanelColorSwap();
   syncTopRightBar();
   syncMainMenu();
   syncExtraToolsMenu();
@@ -2378,14 +2958,39 @@ export function bootQuickAnnotator(): () => void {
   }
 
   const cleanupTextGuard = installTextAutoResizeGuard();
+  const cleanupCtrlMultiSelect = installCtrlMultiSelectGuard();
   const cleanupFastLoadSave = installFastLoadSaveInterceptor();
   const cleanupPrimaryToolGuard = installPrimaryToolRestoreGuard();
+  const cleanupRedactDrag = installRedactDragController();
 
   const onDocClick = (e: MouseEvent) => {
     closeFloatingPopovers(e.target instanceof Node ? e.target : null);
   };
   const onDocKeyDown = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') closeFloatingPopovers(null);
+    if (e.key === 'Escape') {
+      closeFloatingPopovers(null);
+      return;
+    }
+    if (
+      e.shiftKey &&
+      !e.ctrlKey &&
+      !e.metaKey &&
+      !e.altKey &&
+      e.key.toLowerCase() === 'x' &&
+      !isEditableFocused()
+    ) {
+      const { eligible } = getActiveStrokeFillState(runtime.api);
+      if (eligible) {
+        e.preventDefault();
+        toggleFillOrSwapColorsWithApi(runtime.api, {
+          lang: runtime.prefs.lang,
+          showToast,
+          defaultPenColor: getCurrentPenColor(),
+          targetMode: 'toggle',
+        });
+        scheduleSync();
+      }
+    }
   };
 
   document.addEventListener('click', onDocClick);
@@ -2405,8 +3010,10 @@ export function bootQuickAnnotator(): () => void {
 
   return () => {
     cleanupTextGuard();
+    cleanupCtrlMultiSelect();
     cleanupFastLoadSave();
     cleanupPrimaryToolGuard();
+    cleanupRedactDrag();
     document.removeEventListener('click', onDocClick);
     document.removeEventListener('keydown', onDocKeyDown);
     observer?.disconnect();

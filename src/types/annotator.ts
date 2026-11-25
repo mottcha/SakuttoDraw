@@ -18,6 +18,13 @@ export interface ExportOpts {
 export type BoxSelectionPref = 'overlap' | 'contain';
 export type InputDevicePref = 'trackpad' | 'mouse';
 export type StylesPanelPref = 'auto' | 'compact' | 'full';
+export type RedactMode = 'mosaic' | 'blur' | 'blackout';
+export type RedactStrength = 'weak' | 'medium' | 'strong';
+
+export interface RedactOpts {
+  mode: RedactMode;
+  strength: RedactStrength;
+}
 
 export interface QuickOpts {
   autoResetOnOpen: boolean;
@@ -36,6 +43,7 @@ export interface Prefs {
   preferJpFont: boolean | null;
   exportOpts: ExportOpts;
   quickOpts: QuickOpts;
+  redactOpts: RedactOpts;
 }
 
 export type CjkLang = 'ja' | 'ko' | 'zh';

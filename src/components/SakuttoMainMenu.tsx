@@ -18,8 +18,19 @@ import {
   formatBytesToMB,
   isLanguageSetCached,
 } from '../annotator/cjkFontManager';
-import { applyLanguage, applyPreferJpFont, runtime, showToast } from '../annotator/quickAnnotator';
-import { resolvePreferJpFont, savePrefs } from '../services/storageBridge';
+import {
+  applyCanvasBackground,
+  applyLanguage,
+  applyPenColor,
+  applyPreferJpFont,
+  CANVAS_BG_SWATCHES,
+  getCurrentCanvasBg,
+  getCurrentPenColor,
+  QUICK_OPT_DEFS,
+  runtime,
+  showToast,
+} from '../annotator/quickAnnotator';
+import { PEN_COLOR_SWATCHES, resolvePreferJpFont, savePrefs } from '../services/storageBridge';
 
 export interface PreferencesLiveState {
   boxSelectionMode: BoxSelectionPref;
@@ -95,8 +106,23 @@ async function toggleLanguageFontCache(cjkLang: CjkLang, uiLang: AppLang): Promi
 function PrefIcon({
   name,
 }: {
-  name: 'overlap' | 'contain' | 'pan' | 'zoom' | 'zen' | 'view' | 'kanjiJp' | 'kanjiZh' | 'dl' | 'trash';
+  name: 'overlap' | 'contain' | 'pan' | 'zoom' | 'zen' | 'view' | 'kanjiJp' | 'kanjiZh' | 'dl' | 'trash' | 'sliders';
 }) {
+  if (name === 'sliders') {
+    return (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <line x1="4" y1="21" x2="4" y2="14" />
+        <line x1="4" y1="10" x2="4" y2="3" />
+        <line x1="12" y1="21" x2="12" y2="12" />
+        <line x1="12" y1="8" x2="12" y2="3" />
+        <line x1="20" y1="21" x2="20" y2="16" />
+        <line x1="20" y1="12" x2="20" y2="3" />
+        <line x1="2" y1="14" x2="6" y2="14" />
+        <line x1="10" y1="8" x2="14" y2="8" />
+        <line x1="18" y1="16" x2="22" y2="16" />
+      </svg>
+    );
+  }
   if (name === 'kanjiJp') {
     return (
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -226,6 +252,7 @@ function PreferencesVisualPanel({
       if (!(target instanceof Element)) return;
       if (
         target.closest('.excalidraw-main-menu-preferences-submenu') ||
+        target.closest('.exq-custom-settings-submenu') ||
         target.closest('.main-menu') ||
         target.closest('.main-menu-trigger')
       ) {
@@ -562,6 +589,160 @@ function CjkFontCacheSection({ lang }: { lang: AppLang }) {
   );
 }
 
+export function CustomSettingsVisualPanel({ lang }: { lang: AppLang }) {
+  const [, setTick] = useState(0);
+  const t = getMessages(lang);
+
+  const closeMenu = () => {
+    runtime.api?.updateScene({
+      appState: { openMenu: null },
+      captureUpdate: CaptureUpdateAction.NEVER,
+    });
+    if (typeof document !== 'undefined') {
+      document.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }),
+      );
+    }
+  };
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const onPointerDownOutside = (e: PointerEvent) => {
+      const target = e.target;
+      if (!(target instanceof Element)) return;
+      if (
+        target.closest('.exq-custom-settings-submenu') ||
+        target.closest('.excalidraw-main-menu-preferences-submenu') ||
+        target.closest('.main-menu') ||
+        target.closest('.main-menu-trigger')
+      ) {
+        return;
+      }
+      closeMenu();
+    };
+    document.addEventListener('pointerdown', onPointerDownOutside, true);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDownOutside, true);
+    };
+  }, []);
+
+  const curPen = getCurrentPenColor();
+  const curBg = getCurrentCanvasBg();
+
+  return (
+    <div
+      className="exq-pref-panel exq-custom-panel"
+      data-exq-custom-panel="1"
+      onClick={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
+    >
+      <div className="exq-pref-group">
+        <div className="exq-pref-group-header">
+          <div className="exq-pref-group-title">{t.customBehaviorTitle}</div>
+          <button
+            type="button"
+            className="exq-pref-close-btn"
+            data-exq-custom-close="1"
+            aria-label="Close"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              closeMenu();
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+        <div className="exq-custom-toggle-list" role="group" aria-label={t.customBehaviorTitle}>
+          {QUICK_OPT_DEFS.map((def) => {
+            const label = t[def.msgKey];
+            const on = !!runtime.prefs.quickOpts[def.key];
+            return (
+              <div
+                key={def.key}
+                role="menuitemcheckbox"
+                aria-checked={on}
+                className={`exq-custom-toggle-card${on ? ' exq-active' : ''}`}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const nextVal = !runtime.prefs.quickOpts[def.key];
+                  runtime.prefs.quickOpts[def.key] = nextVal;
+                  savePrefs(runtime.prefs);
+                  setTick((n) => n + 1);
+                  showToast(`${label}: ${nextVal ? 'ON' : 'OFF'}`);
+                }}
+              >
+                <span className="exq-custom-toggle-label">{label}</span>
+                <button
+                  type="button"
+                  className={`exq-switch${on ? ' exq-on' : ''}`}
+                  data-exq-quick-opt={def.key}
+                  aria-label={label}
+                  aria-pressed={on}
+                />
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="exq-pref-group">
+        <div className="exq-pref-group-title">{t.penColor}</div>
+        <div className="exq-custom-swatch-row" role="radiogroup" aria-label={t.penColorLabel}>
+          {PEN_COLOR_SWATCHES.map((hex) => (
+            <button
+              key={hex}
+              type="button"
+              role="radio"
+              aria-checked={curPen === hex}
+              className={`exq-custom-swatch${curPen === hex ? ' exq-active' : ''}`}
+              style={{ background: hex }}
+              data-exq-pen-color={hex}
+              title={hex}
+              aria-label={`${t.penColorLabel} ${hex}`}
+              onClick={async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                await applyPenColor(hex);
+                setTick((n) => n + 1);
+              }}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="exq-pref-group">
+        <div className="exq-pref-group-title">{t.canvasBackground}</div>
+        <div className="exq-custom-swatch-row" role="radiogroup" aria-label={t.bgColorLabel}>
+          {CANVAS_BG_SWATCHES.map((hex) => (
+            <button
+              key={hex}
+              type="button"
+              role="radio"
+              aria-checked={curBg === hex}
+              className={`exq-custom-swatch${curBg === hex ? ' exq-active' : ''}`}
+              style={{ background: hex }}
+              data-exq-bg-color={hex}
+              title={hex}
+              aria-label={`${t.bgColorLabel} ${hex}`}
+              onClick={async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                await applyCanvasBackground(hex);
+                setTick((n) => n + 1);
+              }}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export interface SakuttoMainMenuProps {
   lang: AppLang;
   themeMode: ThemeMode;
@@ -593,6 +774,17 @@ export function SakuttoMainMenu({
           onStylesPanelModeChange={onStylesPanelModeChange}
         />
       </MainMenu.DefaultItems.Preferences>
+      <MainMenu.Sub>
+        <MainMenu.Sub.Trigger
+          icon={<PrefIcon name="sliders" />}
+          className="exq-custom-settings-trigger"
+        >
+          {t.customSettings}
+        </MainMenu.Sub.Trigger>
+        <MainMenu.Sub.Content className="exq-custom-settings-submenu">
+          <CustomSettingsVisualPanel lang={lang} />
+        </MainMenu.Sub.Content>
+      </MainMenu.Sub>
       <MainMenu.DefaultItems.ToggleTheme
         allowSystemTheme={true}
         theme={themeMode}

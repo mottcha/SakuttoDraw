@@ -547,7 +547,19 @@ export async function applyCanvasBackgroundWithApi(
   return { ok: true, color: normalized };
 }
 
-export function runDirectDiskSaveWithApi(
+type SaveFilePickerWritable = {
+  write: (data: Blob | BufferSource | string) => Promise<void>;
+  close: () => Promise<void>;
+};
+type SaveFilePickerHandle = {
+  createWritable: () => Promise<SaveFilePickerWritable>;
+};
+type ShowSaveFilePickerFn = (options?: {
+  suggestedName?: string;
+  types?: Array<{ description?: string; accept: Record<string, string[]> }>;
+}) => Promise<SaveFilePickerHandle>;
+
+export async function runDirectDiskSaveWithApi(
   api: ExcalidrawImperativeAPI | null,
   {
     lang = 'en',
@@ -556,7 +568,7 @@ export function runDirectDiskSaveWithApi(
     lang?: AppLang;
     showToast?: (msg: string) => void;
   } = {},
-): boolean {
+): Promise<boolean> {
   if (!api) return false;
   const elements = api.getSceneElements();
   const appState = api.getAppState();
@@ -564,7 +576,36 @@ export function runDirectDiskSaveWithApi(
   const json = serializeAsJSON(elements, appState, files, 'local');
   const blob = new Blob([json], { type: MIME_TYPES.excalidraw });
   const baseName = (typeof api.getName === 'function' && api.getName()) || 'sakuttodraw';
-  triggerBlobDownload(blob, `${baseName}.excalidraw`);
+  const suggestedName = baseName.endsWith('.excalidraw') ? baseName : `${baseName}.excalidraw`;
+
+  const picker = (globalThis as { showSaveFilePicker?: ShowSaveFilePickerFn }).showSaveFilePicker;
+  if (typeof picker === 'function') {
+    try {
+      const handle = await picker({
+        suggestedName,
+        types: [
+          {
+            description: 'Excalidraw',
+            accept: {
+              'application/vnd.excalidraw+json': ['.excalidraw'],
+            },
+          },
+        ],
+      });
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      showToast?.(getMessages(lang).toastSceneSaved);
+      return true;
+    } catch (err) {
+      if ((err as { name?: string } | null)?.name === 'AbortError') {
+        return false;
+      }
+      // Fall back to direct blob download if File System Access API is blocked/unavailable
+    }
+  }
+
+  triggerBlobDownload(blob, suggestedName);
   showToast?.(getMessages(lang).toastSceneSaved);
   return true;
 }
