@@ -6,6 +6,7 @@ import type {
   ExportScale,
   InputDevicePref,
   Prefs,
+  StylesPanelPref,
   ThemeMode,
 } from '../types/annotator';
 import { detectBrowserLang, normalizeAppLang } from '../i18n/messages';
@@ -16,6 +17,7 @@ export const PEN_COLOR_SWATCHES = ['#c2255c', '#1e1e1e', '#e03131', '#1971c2', '
 export const LS_ELEMENTS_KEY = 'excalidraw';
 export const LS_STATE_KEY = 'excalidraw-state';
 export const LS_PREFS_KEY = 'exq-annotator-prefs';
+export const LS_DESKTOP_UI_MODE_KEY = 'excalidraw.desktopUIMode';
 export const FILES_DB_NAME = 'files-db';
 export const FILES_STORE_NAME = 'files-store';
 
@@ -24,6 +26,7 @@ export const DEFAULT_PREFS: Prefs = {
   themeMode: 'light',
   boxSelectionMode: 'overlap',
   inputDevice: 'trackpad',
+  stylesPanelMode: 'auto',
   exportOpts: {
     onlySelected: true,
     background: true,
@@ -71,6 +74,56 @@ export function normalizeInputDevice(value: unknown): InputDevicePref {
   return value === 'mouse' ? 'mouse' : 'trackpad';
 }
 
+export function normalizeStylesPanelMode(value: unknown): StylesPanelPref {
+  if (value === 'compact' || value === 'full') return value;
+  return 'auto';
+}
+
+export function sakuttoGetFormFactor(width: number, height: number): 'phone' | 'desktop' {
+  const isPhone = width <= 599 || (height < 500 && width < 1000);
+  return isPhone ? 'phone' : 'desktop';
+}
+
+export function resolveDesktopUIMode(
+  pref: StylesPanelPref,
+  width: number,
+  height: number,
+): 'compact' | 'full' {
+  if (pref === 'compact' || pref === 'full') return pref;
+  return width <= 1180 || height <= 650 ? 'compact' : 'full';
+}
+
+export function syncDesktopUIMode(
+  pref: StylesPanelPref,
+  options: {
+    width?: number;
+    height?: number;
+    storage?: Storage | null;
+    triggerResize?: boolean;
+  } = {},
+): 'compact' | 'full' {
+  const width = options.width ?? (typeof window !== 'undefined' ? window.innerWidth : 1440);
+  const height = options.height ?? (typeof window !== 'undefined' ? window.innerHeight : 900);
+  const storage =
+    options.storage !== undefined
+      ? options.storage
+      : typeof localStorage !== 'undefined'
+        ? localStorage
+        : null;
+  const resolved = resolveDesktopUIMode(pref, width, height);
+  if (storage) {
+    silently(() => {
+      if (storage.getItem(LS_DESKTOP_UI_MODE_KEY) !== resolved) {
+        storage.setItem(LS_DESKTOP_UI_MODE_KEY, resolved);
+      }
+    });
+  }
+  if (options.triggerResize && typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('resize'));
+  }
+  return resolved;
+}
+
 export function normalizeHexColor(value: unknown, fallback = DEFAULT_PEN_COLOR): string {
   if (typeof value !== 'string') return fallback;
   const trimmed = value.trim().toLowerCase();
@@ -103,6 +156,7 @@ export function loadPrefs(
     themeMode: DEFAULT_PREFS.themeMode,
     boxSelectionMode: DEFAULT_PREFS.boxSelectionMode,
     inputDevice: DEFAULT_PREFS.inputDevice,
+    stylesPanelMode: DEFAULT_PREFS.stylesPanelMode,
     exportOpts: { ...DEFAULT_PREFS.exportOpts },
     quickOpts: { ...DEFAULT_PREFS.quickOpts },
   };
@@ -142,6 +196,9 @@ export function loadPrefs(
       }
       if (saved.inputDevice === 'mouse' || saved.inputDevice === 'trackpad') {
         base.inputDevice = saved.inputDevice;
+      }
+      if (saved.stylesPanelMode === 'auto' || saved.stylesPanelMode === 'compact' || saved.stylesPanelMode === 'full') {
+        base.stylesPanelMode = saved.stylesPanelMode;
       }
       if (saved.exportOpts && typeof saved.exportOpts === 'object') {
         for (const k of ['onlySelected', 'background', 'darkMode', 'embedScene'] as const) {

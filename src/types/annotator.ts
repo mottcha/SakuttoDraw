@@ -17,6 +17,7 @@ export interface ExportOpts {
 
 export type BoxSelectionPref = 'overlap' | 'contain';
 export type InputDevicePref = 'trackpad' | 'mouse';
+export type StylesPanelPref = 'auto' | 'compact' | 'full';
 
 export interface QuickOpts {
   autoResetOnOpen: boolean;
@@ -31,6 +32,7 @@ export interface Prefs {
   themeMode: ThemeMode;
   boxSelectionMode: BoxSelectionPref;
   inputDevice: InputDevicePref;
+  stylesPanelMode: StylesPanelPref;
   exportOpts: ExportOpts;
   quickOpts: QuickOpts;
 }

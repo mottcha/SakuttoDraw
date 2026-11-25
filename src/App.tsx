@@ -4,7 +4,7 @@ import type { AppState, BinaryFiles, ExcalidrawImperativeAPI } from '@excalidraw
 import type { OrderedExcalidrawElement } from '@excalidraw/excalidraw/element/types';
 import '@excalidraw/excalidraw/index.css';
 import './styles/sakutto.css';
-import type { AppLang, BoxSelectionPref, InputDevicePref, ThemeMode } from './types/annotator';
+import type { AppLang, BoxSelectionPref, InputDevicePref, StylesPanelPref, ThemeMode } from './types/annotator';
 import { SakuttoMainMenu, type PreferencesLiveState } from './components/SakuttoMainMenu';
 import {
   attachExcalidrawAPI,
@@ -19,11 +19,16 @@ import {
   loadInitialSceneData,
   normalizeBoxSelectionMode,
   normalizeInputDevice,
+  sakuttoGetFormFactor,
   savePrefs,
   scheduleScenePersist,
+  syncDesktopUIMode,
 } from './services/storageBridge';
 
 let bootstrappedOnce = false;
+const EXCALIDRAW_UI_OPTIONS = {
+  getFormFactor: sakuttoGetFormFactor,
+};
 
 export function App() {
   const initialBootstrap = useMemo(() => {
@@ -32,11 +37,13 @@ export function App() {
       const initResult = bootstrapCleanCanvas();
       runtime.prefs = initResult.prefs;
     }
+    syncDesktopUIMode(runtime.prefs.stylesPanelMode);
     return {
       lang: runtime.prefs.lang,
       themeMode: runtime.prefs.themeMode,
       boxSelectionMode: runtime.prefs.boxSelectionMode,
       inputDevice: runtime.prefs.inputDevice,
+      stylesPanelMode: runtime.prefs.stylesPanelMode,
       initialDataPromise: loadInitialSceneData(),
     };
   }, []);
@@ -46,6 +53,7 @@ export function App() {
   const [prefState, setPrefState] = useState<PreferencesLiveState>(() => ({
     boxSelectionMode: initialBootstrap.boxSelectionMode,
     inputDevice: initialBootstrap.inputDevice,
+    stylesPanelMode: initialBootstrap.stylesPanelMode,
     zenModeEnabled: false,
     viewModeEnabled: false,
   }));
@@ -67,11 +75,16 @@ export function App() {
     setLangChangeListener((nextLang) => setLang(nextLang));
     const cleanup = bootQuickAnnotator();
     const onUnload = () => flushPendingScenePersist();
+    const onResize = () => {
+      syncDesktopUIMode(runtime.prefs.stylesPanelMode);
+    };
     window.addEventListener('pagehide', onUnload);
     window.addEventListener('beforeunload', onUnload);
+    window.addEventListener('resize', onResize, true);
     return () => {
       window.removeEventListener('pagehide', onUnload);
       window.removeEventListener('beforeunload', onUnload);
+      window.removeEventListener('resize', onResize, true);
       setLangChangeListener(null);
       cleanup();
       cancelPendingScenePersist();
@@ -85,6 +98,15 @@ export function App() {
     setThemeMode(nextTheme);
     runtime.prefs.themeMode = nextTheme;
     savePrefs(runtime.prefs);
+  }, []);
+
+  const handleStylesPanelModeChange = useCallback((nextMode: StylesPanelPref) => {
+    runtime.prefs.stylesPanelMode = nextMode;
+    savePrefs(runtime.prefs);
+    setPrefState((prev) =>
+      prev.stylesPanelMode === nextMode ? prev : { ...prev, stylesPanelMode: nextMode },
+    );
+    syncDesktopUIMode(nextMode, { triggerResize: true });
   }, []);
 
   const handleApi = useCallback((api: ExcalidrawImperativeAPI | null) => {
@@ -108,6 +130,7 @@ export function App() {
           return prev;
         }
         return {
+          ...prev,
           boxSelectionMode: nextBox,
           inputDevice: nextDevice,
           zenModeEnabled: nextZen,
@@ -127,11 +150,17 @@ export function App() {
         theme={resolvedTheme}
         onThemeChange={handleThemeChange}
         aiEnabled={false}
+        UIOptions={EXCALIDRAW_UI_OPTIONS}
         initialData={initialBootstrap.initialDataPromise}
         onExcalidrawAPI={handleApi}
         onChange={handleChange}
       >
-        <SakuttoMainMenu lang={lang} themeMode={themeMode} prefState={prefState} />
+        <SakuttoMainMenu
+          lang={lang}
+          themeMode={themeMode}
+          prefState={prefState}
+          onStylesPanelModeChange={handleStylesPanelModeChange}
+        />
       </Excalidraw>
     </div>
   );

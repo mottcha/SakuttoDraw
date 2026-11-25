@@ -6,6 +6,7 @@ import type {
   CjkLang,
   CjkSetStatus,
   InputDevicePref,
+  StylesPanelPref,
   ThemeMode,
 } from '../types/annotator';
 import { getMessages, SUPPORTED_LANGS } from '../i18n/messages';
@@ -23,6 +24,7 @@ import { savePrefs } from '../services/storageBridge';
 export interface PreferencesLiveState {
   boxSelectionMode: BoxSelectionPref;
   inputDevice: InputDevicePref;
+  stylesPanelMode: StylesPanelPref;
   zenModeEnabled: boolean;
   viewModeEnabled: boolean;
 }
@@ -168,9 +170,11 @@ function PrefIcon({ name }: { name: 'overlap' | 'contain' | 'pan' | 'zoom' | 'ze
 function PreferencesVisualPanel({
   lang,
   prefState,
+  onStylesPanelModeChange,
 }: {
   lang: AppLang;
   prefState: PreferencesLiveState;
+  onStylesPanelModeChange: (mode: StylesPanelPref) => void;
 }) {
   const t = getMessages(lang);
 
@@ -322,6 +326,31 @@ function PreferencesVisualPanel({
       </div>
 
       <div className="exq-pref-group">
+        <div className="exq-pref-group-title">{t.prefStylesPanelTitle}</div>
+        <div className="exq-pref-card-grid exq-pref-card-grid--3" role="radiogroup" aria-label={t.prefStylesPanelTitle}>
+          {(
+            [
+              ['auto', t.prefStylesPanelAuto],
+              ['compact', t.prefStylesPanelCompact],
+              ['full', t.prefStylesPanelFull],
+            ] as const
+          ).map(([mode, label]) => (
+            <button
+              key={mode}
+              type="button"
+              role="radio"
+              aria-checked={prefState.stylesPanelMode === mode}
+              className={`exq-pref-card${prefState.stylesPanelMode === mode ? ' exq-active' : ''}`}
+              data-exq-pref-styles-panel={mode}
+              onClick={() => onStylesPanelModeChange(mode)}
+            >
+              <span>{label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="exq-pref-group">
         <div className="exq-pref-group-title">{t.prefScreenModeTitle}</div>
         <div className="exq-pref-card-grid">
           <button
@@ -447,9 +476,15 @@ export interface SakuttoMainMenuProps {
   lang: AppLang;
   themeMode: ThemeMode;
   prefState: PreferencesLiveState;
+  onStylesPanelModeChange: (mode: StylesPanelPref) => void;
 }
 
-export function SakuttoMainMenu({ lang, themeMode, prefState }: SakuttoMainMenuProps) {
+export function SakuttoMainMenu({
+  lang,
+  themeMode,
+  prefState,
+  onStylesPanelModeChange,
+}: SakuttoMainMenuProps) {
   const t = getMessages(lang);
 
   return (
@@ -462,7 +497,11 @@ export function SakuttoMainMenu({ lang, themeMode, prefState }: SakuttoMainMenuP
       <MainMenu.DefaultItems.Preferences
         additionalItems={<CjkFontCacheSection lang={lang} />}
       >
-        <PreferencesVisualPanel lang={lang} prefState={prefState} />
+        <PreferencesVisualPanel
+          lang={lang}
+          prefState={prefState}
+          onStylesPanelModeChange={onStylesPanelModeChange}
+        />
       </MainMenu.DefaultItems.Preferences>
       <MainMenu.DefaultItems.ToggleTheme
         allowSystemTheme={true}

@@ -50,6 +50,10 @@ export interface MessageCatalog {
   prefScreenModeTitle: string;
   prefZenMode: string;
   prefViewMode: string;
+  prefStylesPanelTitle: string;
+  prefStylesPanelAuto: string;
+  prefStylesPanelCompact: string;
+  prefStylesPanelFull: string;
   languageLabel: string;
   offlineFontsTitle: string;
   cjkLangName: Record<CjkLang, string>;
@@ -127,6 +131,10 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     prefScreenModeTitle: 'Screen mode',
     prefZenMode: 'Zen',
     prefViewMode: 'View',
+    prefStylesPanelTitle: 'Style panel',
+    prefStylesPanelAuto: 'Auto',
+    prefStylesPanelCompact: 'Compact',
+    prefStylesPanelFull: 'Full',
     languageLabel: 'Language',
     offlineFontsTitle: 'Offline hand-drawn fonts',
     cjkLangName: { ja: 'Japanese', ko: 'Korean', zh: 'Chinese' },
@@ -202,6 +210,10 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     prefScreenModeTitle: '画面モード',
     prefZenMode: '集中',
     prefViewMode: '閲覧',
+    prefStylesPanelTitle: 'スタイルパネル',
+    prefStylesPanelAuto: '自動',
+    prefStylesPanelCompact: 'コンパクト',
+    prefStylesPanelFull: '標準',
     languageLabel: '言語',
     offlineFontsTitle: 'オフライン手書きフォント',
     cjkLangName: { ja: '日本語', ko: '韓国語', zh: '中国語' },
@@ -277,6 +289,10 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     prefScreenModeTitle: '显示模式',
     prefZenMode: '专注',
     prefViewMode: '浏览',
+    prefStylesPanelTitle: '样式面板',
+    prefStylesPanelAuto: '自动',
+    prefStylesPanelCompact: '紧凑',
+    prefStylesPanelFull: '标准',
     languageLabel: '语言',
     offlineFontsTitle: '离线手写字体',
     cjkLangName: { ja: '日语', ko: '韩语', zh: '中文' },
@@ -352,6 +368,10 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     prefScreenModeTitle: '顯示模式',
     prefZenMode: '專注',
     prefViewMode: '瀏覽',
+    prefStylesPanelTitle: '樣式面板',
+    prefStylesPanelAuto: '自動',
+    prefStylesPanelCompact: '精簡',
+    prefStylesPanelFull: '標準',
     languageLabel: '語言',
     offlineFontsTitle: '離線手寫字體',
     cjkLangName: { ja: '日文', ko: '韓文', zh: '中文' },
@@ -427,6 +447,10 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     prefScreenModeTitle: '화면 모드',
     prefZenMode: '집중',
     prefViewMode: '보기',
+    prefStylesPanelTitle: '스타일 패널',
+    prefStylesPanelAuto: '자동',
+    prefStylesPanelCompact: '컴팩트',
+    prefStylesPanelFull: '표준',
     languageLabel: '언어',
     offlineFontsTitle: '오프라인 손글씨 글꼴',
     cjkLangName: { ja: '일본어', ko: '한국어', zh: '중국어' },

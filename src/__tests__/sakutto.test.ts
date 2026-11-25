@@ -9,16 +9,20 @@ import {
   FILES_DB_NAME,
   flushPendingScenePersist,
   loadInitialSceneData,
+  LS_DESKTOP_UI_MODE_KEY,
   LS_ELEMENTS_KEY,
   LS_PREFS_KEY,
   LS_STATE_KEY,
   loadPrefs,
   normalizeFormat,
   normalizeScale,
+  resolveDesktopUIMode,
+  sakuttoGetFormFactor,
   saveFilesToIndexedDb,
   savePrefs,
   scheduleScenePersist,
   shouldSkipAutoReset,
+  syncDesktopUIMode,
 } from '../services/storageBridge';
 import {
   applyCanvasBackgroundWithApi,
@@ -655,5 +659,45 @@ describe('quickAnnotator DOM sync, language switcher, and textAutoResize guard r
     expect(document.querySelector('[data-exq-t3-row="1"]')).toBeTruthy();
     expect(document.querySelector('[data-exq-draw-assist="1"]')).toBeTruthy();
     expect(document.querySelector('[data-exq-quick-settings="1"]')).toBeTruthy();
+  });
+
+  it('resolves desktopUIMode cleanly for PC mini-windows and persists stylesPanelMode preference', () => {
+    // Phone breakpoint preserved; non-phone viewports stay desktop (no tablet side effects)
+    expect(sakuttoGetFormFactor(390, 844)).toBe('phone');
+    expect(sakuttoGetFormFactor(750, 480)).toBe('phone');
+    expect(sakuttoGetFormFactor(750, 520)).toBe('desktop');
+    expect(sakuttoGetFormFactor(800, 650)).toBe('desktop');
+    expect(sakuttoGetFormFactor(1440, 900)).toBe('desktop');
+
+    // Auto mode uses compact on PC mini-windows (including 500..599px height dead zone) and full on wide desktop
+    expect(resolveDesktopUIMode('auto', 750, 520)).toBe('compact');
+    expect(resolveDesktopUIMode('auto', 800, 650)).toBe('compact');
+    expect(resolveDesktopUIMode('auto', 1200, 600)).toBe('compact');
+    expect(resolveDesktopUIMode('auto', 1440, 900)).toBe('full');
+
+    // Explicit compact / full overrides ignore viewport dimensions
+    expect(resolveDesktopUIMode('compact', 1440, 900)).toBe('compact');
+    expect(resolveDesktopUIMode('full', 750, 520)).toBe('full');
+
+    // syncDesktopUIMode updates localStorage and dispatches resize only when requested
+    const resizeSpy = vi.fn();
+    window.addEventListener('resize', resizeSpy);
+    expect(syncDesktopUIMode('auto', { width: 750, height: 520, storage: localStorage })).toBe('compact');
+    expect(localStorage.getItem(LS_DESKTOP_UI_MODE_KEY)).toBe('compact');
+    expect(resizeSpy).toHaveBeenCalledTimes(0);
+
+    expect(
+      syncDesktopUIMode('full', { width: 750, height: 520, storage: localStorage, triggerResize: true }),
+    ).toBe('full');
+    expect(localStorage.getItem(LS_DESKTOP_UI_MODE_KEY)).toBe('full');
+    expect(resizeSpy).toHaveBeenCalledTimes(1);
+    window.removeEventListener('resize', resizeSpy);
+
+    // Persists stylesPanelMode across loadPrefs/savePrefs
+    const prefs = loadPrefs(localStorage);
+    expect(prefs.stylesPanelMode).toBe('auto');
+    prefs.stylesPanelMode = 'compact';
+    savePrefs(prefs, localStorage);
+    expect(loadPrefs(localStorage).stylesPanelMode).toBe('compact');
   });
 });

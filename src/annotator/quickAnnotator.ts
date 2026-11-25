@@ -294,6 +294,7 @@ export const runtime: {
     themeMode: DEFAULT_PREFS.themeMode,
     boxSelectionMode: DEFAULT_PREFS.boxSelectionMode,
     inputDevice: DEFAULT_PREFS.inputDevice,
+    stylesPanelMode: DEFAULT_PREFS.stylesPanelMode,
     exportOpts: { ...DEFAULT_PREFS.exportOpts },
     quickOpts: { ...DEFAULT_PREFS.quickOpts },
   },
