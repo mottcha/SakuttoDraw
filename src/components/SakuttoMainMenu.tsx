@@ -340,10 +340,25 @@ function PreferencesVisualPanel({
               type="button"
               role="radio"
               aria-checked={prefState.stylesPanelMode === mode}
-              className={`exq-pref-card${prefState.stylesPanelMode === mode ? ' exq-active' : ''}`}
+              className={`exq-pref-card exq-pref-card--compact3${prefState.stylesPanelMode === mode ? ' exq-active' : ''}`}
               data-exq-pref-styles-panel={mode}
               onClick={() => onStylesPanelModeChange(mode)}
             >
+              <svg width="18" height="13" viewBox="0 0 26 18" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+                <rect x="1" y="1" width="24" height="16" rx="2.5" opacity="0.45" />
+                {mode === 'full' ? (
+                  <rect x="3" y="3.5" width="9.5" height="11" rx="1.2" fill="currentColor" stroke="none" />
+                ) : (
+                  <rect x="3" y="3.5" width="3.5" height="11" rx="1" fill="currentColor" stroke="none" />
+                )}
+                {mode === 'auto' && (
+                  <path
+                    d="M11 9h9m-2.5-2.5L20 9l-2.5 2.5M13.5 6.5L11 9l2.5 2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                )}
+              </svg>
               <span>{label}</span>
             </button>
           ))}
