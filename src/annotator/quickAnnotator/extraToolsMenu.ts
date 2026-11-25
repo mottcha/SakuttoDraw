@@ -1,9 +1,15 @@
-// Extra tools ("more") menu injection, draw-assist and quick-option toggles.
+// Extra tools ("more") menu injection and draw-assist toggles.
 import { CaptureUpdateAction } from '@excalidraw/excalidraw';
+import {
+  EXCALIDRAW_SELECTORS,
+  EXCALIDRAW_TESTIDS,
+  testIdSelector,
+  toolbarTestIdSelector,
+} from '../../excalidraw/domContract';
 import { getMessages } from '../../i18n/messages';
-import { silently } from '../../services/storageBridge';
+import { silently } from '../../utils/common';
 import { DRAW_ASSIST_DEFS, EXTRA_T3_LEFT_ITEMS, EXTRA_T3_LOCK_ITEM } from './constants';
-import { el, svgIcon } from './dom';
+import { createAccordionSection, createSwitchRow, el, svgIcon } from './dom';
 import { clickNativeTool, runtime, scheduleSync, sendEscape, showToast } from './runtime';
 
 const extraMenuInjected = new WeakSet<Element>();
@@ -15,7 +21,9 @@ export async function activateLassoTool(): Promise<boolean> {
     scheduleSync();
     return true;
   }
-  const menuLasso = document.querySelector<HTMLElement>('.dropdown-menu-container [data-testid="toolbar-lasso"]');
+  const menuLasso = document.querySelector<HTMLElement>(
+    `${EXCALIDRAW_SELECTORS.dropdownMenuContainer} ${testIdSelector(EXCALIDRAW_TESTIDS.lasso)}`,
+  );
   if (menuLasso) {
     menuLasso.click();
     sendEscape();
@@ -25,7 +33,7 @@ export async function activateLassoTool(): Promise<boolean> {
   return false;
 }
 
-/* ================= Extra Tools Menu Injection (T3 Row + Drawing Assist + Quick Settings) ================= */
+/* ================= Extra Tools Menu Injection (T3 Row + Drawing Assist) ================= */
 function getDrawAssistValue(key: (typeof DRAW_ASSIST_DEFS)[number]['key']): boolean {
   const st = silently(() => runtime.api?.getAppState());
   if (!st) {
@@ -74,31 +82,11 @@ function buildQuickOptionsAccordion(): HTMLElement {
   root.addEventListener('click', (e) => e.stopPropagation());
 
   const sep = el('div', { class: 'exq-extra-sep', 'aria-hidden': 'true' });
-
-  /* --- Drawing Assist Accordion (default collapsed) --- */
-  const assistWrap = el('div', {
-    class: 'exq-acc-section' + (runtime.drawAssistAccOpen ? ' exq-acc-open' : ''),
-    'data-exq-draw-assist': '1',
-  });
-  const assistChev = el('span', { class: 'exq-acc-chev' }, svgIcon('caret', 12, '0 0 12 12', 1.8));
-  const assistBtn = el(
-    'button',
-    {
-      type: 'button',
-      class: 'exq-acc-flat-btn',
-      'data-exq-assist-toggle': '1',
-      'aria-expanded': String(runtime.drawAssistAccOpen),
-    },
-    svgIcon('drawAssist', 14),
-    el('span', null, t.drawAssist),
-    assistChev,
-  );
-  const assistNest = el('div', { class: 'exq-acc-nest' });
   const assistSwitchMap = new Map<(typeof DRAW_ASSIST_DEFS)[number]['key'], HTMLButtonElement>();
+  let acc: ReturnType<typeof createAccordionSection> | null = null;
 
   const refreshAssist = () => {
-    assistWrap.classList.toggle('exq-acc-open', runtime.drawAssistAccOpen);
-    assistBtn.setAttribute('aria-expanded', String(runtime.drawAssistAccOpen));
+    acc?.setOpen(runtime.drawAssistAccOpen);
     for (const [key, sw] of assistSwitchMap) {
       const on = getDrawAssistValue(key);
       sw.classList.toggle('exq-on', on);
@@ -106,47 +94,38 @@ function buildQuickOptionsAccordion(): HTMLElement {
     }
   };
 
-  assistBtn.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    runtime.drawAssistAccOpen = !runtime.drawAssistAccOpen;
-    refreshAssist();
+  acc = createAccordionSection({
+    rootClass: 'exq-acc-section',
+    rootAttrs: { 'data-exq-draw-assist': '1' },
+    toggleAttr: 'data-exq-assist-toggle',
+    iconName: 'drawAssist',
+    label: t.drawAssist,
+    initialOpen: runtime.drawAssistAccOpen,
+    onToggle: (nextOpen) => {
+      runtime.drawAssistAccOpen = nextOpen;
+      refreshAssist();
+    },
   });
 
   for (const def of DRAW_ASSIST_DEFS) {
     const label = t[def.msgKey];
-    const sw = el('button', {
-      type: 'button',
-      class: 'exq-switch',
-      'data-exq-assist-opt': def.key,
-      'aria-label': label,
+    const { row, switchBtn } = createSwitchRow({
+      label,
+      optAttr: 'data-exq-assist-opt',
+      optValue: def.key,
+      shortcut: def.shortcut || undefined,
+      onClick: () => {
+        const nextVal = toggleDrawAssistOption(def.key);
+        refreshAssist();
+        showToast(`${label}: ${nextVal ? 'ON' : 'OFF'}`);
+      },
     });
-    const rightGroup = el(
-      'span',
-      { class: 'exq-opt-right' },
-      def.shortcut ? el('span', { class: 'exq-opt-shortcut', 'aria-hidden': 'true' }, def.shortcut) : null,
-      sw,
-    );
-    const row = el(
-      'div',
-      { class: 'exq-opt-row', role: 'menuitemcheckbox' },
-      el('span', { class: 'exq-opt-label' }, label),
-      rightGroup,
-    );
-    row.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const nextVal = toggleDrawAssistOption(def.key);
-      refreshAssist();
-      showToast(`${label}: ${nextVal ? 'ON' : 'OFF'}`);
-    });
-    assistSwitchMap.set(def.key, sw);
-    assistNest.append(row);
+    assistSwitchMap.set(def.key, switchBtn);
+    acc.nest.append(row);
   }
-  assistWrap.append(assistBtn, assistNest);
 
   refreshAssist();
-  root.append(sep, assistWrap);
+  root.append(sep, acc.root);
   return root;
 }
 
@@ -161,15 +140,15 @@ function makeExtraT3Button(
     item.id === 'lasso'
       ? activeTool?.type === 'lasso' ||
         !!(
-          root.querySelector('.dropdown-menu-container [data-testid="toolbar-lasso"].active') ||
-          root.querySelector('.tool-popover-content [data-testid="toolbar-lasso"].ToolIcon--checked') ||
-          root.querySelector('.App-toolbar [data-testid="toolbar-lasso"].ToolIcon--checked')
+          root.querySelector(`${EXCALIDRAW_SELECTORS.dropdownMenuContainer} ${testIdSelector(EXCALIDRAW_TESTIDS.lasso)}.active`) ||
+          root.querySelector(`${EXCALIDRAW_SELECTORS.toolPopoverContent} ${testIdSelector(EXCALIDRAW_TESTIDS.lasso)}.ToolIcon--checked`) ||
+          root.querySelector(`${toolbarTestIdSelector(EXCALIDRAW_TESTIDS.lasso)}.ToolIcon--checked`)
         )
       : item.id === 'lock'
         ? !!activeTool?.locked ||
-          !!root.querySelector(`.App-toolbar [data-testid="${item.testId}"]`)?.classList.contains('ToolIcon--checked')
+          !!root.querySelector(toolbarTestIdSelector(item.testId))?.classList.contains('ToolIcon--checked')
         : activeTool?.type === (item.id === 'sticky' ? 'stickynote' : item.id) ||
-          !!root.querySelector(`.App-toolbar [data-testid="${item.testId}"]`)?.classList.contains('ToolIcon--checked');
+          !!root.querySelector(toolbarTestIdSelector(item.testId))?.classList.contains('ToolIcon--checked');
 
   const titleText = item.shortcut ? `${label} (${item.shortcut})` : label;
   const btn = el(
@@ -249,9 +228,7 @@ function makeExtraMenuProxyItem(
 }
 
 export function syncExtraToolsMenu(root: ParentNode = document): boolean {
-  const menu = root.querySelector(
-    '.dropdown-menu-container:has([data-testid="toolbar-image"], [data-testid="toolbar-laser"])',
-  );
+  const menu = root.querySelector(EXCALIDRAW_SELECTORS.extraToolsMenuContainer);
   if (!menu || extraMenuInjected.has(menu)) return false;
 
   const firstNative = menu.firstElementChild;
@@ -270,16 +247,15 @@ export function syncExtraToolsMenu(root: ParentNode = document): boolean {
   // recover them inside Extra Tools whenever Excalidraw moved them out of the dropdown (>=356px / >=396px).
   if (root.querySelector('.mobile-toolbar')) {
     const t = getMessages(runtime.prefs.lang);
-    if (!menu.querySelector('[data-testid="toolbar-image"]')) {
-      topFrag.append(makeExtraMenuProxyItem('imgSave', t.toolImage, 'toolbar-image', 'image'));
+    if (!menu.querySelector(testIdSelector(EXCALIDRAW_TESTIDS.image))) {
+      topFrag.append(makeExtraMenuProxyItem('imgSave', t.toolImage, EXCALIDRAW_TESTIDS.image, 'image'));
     }
-    if (!menu.querySelector('[data-testid="toolbar-frame"]')) {
-      topFrag.append(makeExtraMenuProxyItem('frame', t.toolFrame, 'toolbar-frame', 'frame'));
+    if (!menu.querySelector(testIdSelector(EXCALIDRAW_TESTIDS.frame))) {
+      topFrag.append(makeExtraMenuProxyItem('frame', t.toolFrame, EXCALIDRAW_TESTIDS.frame, 'frame'));
     }
   }
 
   menu.insertBefore(topFrag, firstNative);
-
   menu.append(buildQuickOptionsAccordion());
 
   extraMenuInjected.add(menu);

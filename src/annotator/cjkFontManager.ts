@@ -1,6 +1,6 @@
 import rawManifest from '../generated/cjkFontManifest.json';
 import type { CjkFontManifest, CjkLang } from '../types/annotator';
-import { silently } from '../services/storageBridge';
+import { silently } from '../utils/common';
 
 export const CJK_FONT_CACHE_NAME = 'sakuttodraw-cjk-fonts';
 export const LS_CJK_INSTALLED_KEY = 'exq-cjk-installed-sets';

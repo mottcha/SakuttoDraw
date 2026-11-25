@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { AppLang } from '../types/annotator';
+import { EXCALIDRAW_SELECTORS } from '../excalidraw/domContract';
 import { getMessages } from '../i18n/messages';
 import { REDACT_COLOR_SWATCHES } from '../services/storageBridge';
+import { Icon } from './Icon';
+import { useOutsideDismiss } from './useOutsideDismiss';
 
 export interface SakuttoRedactPanelProps {
   lang: AppLang;
@@ -11,6 +14,11 @@ export interface SakuttoRedactPanelProps {
   color: string;
   onColorChange: (color: string) => void;
 }
+
+const REDACT_DISMISS_IGNORE_SELECTORS = [
+  '[data-exq-redact-root="1"]',
+  '[data-exq-redact-flyout="1"]',
+] as const;
 
 function RedactSwatchContent({
   lang,
@@ -47,26 +55,23 @@ function RedactSwatchContent({
                 onClose?.();
               }}
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
+              <Icon name="close" size={13} strokeWidth={2.2} />
             </button>
           )}
         </div>
       )}
       <div className="exq-redact-color-grid" role="radiogroup" aria-label={t.redactColorTitle}>
         {REDACT_COLOR_SWATCHES.map((hex) => {
-          const active = normalized === hex;
+          const isSelected = normalized === hex;
           return (
             <button
               key={hex}
               type="button"
               role="radio"
-              aria-checked={active}
+              aria-checked={isSelected}
               aria-label={`${t.redactColorTitle} ${hex}`}
               title={hex}
-              className={`exq-redact-color-swatch${active ? ' exq-active' : ''}`}
+              className={`exq-redact-color-swatch${isSelected ? ' exq-active' : ''}`}
               data-exq-redact-color={hex}
               style={{ background: hex }}
               onClick={() => onColorChange(hex)}
@@ -100,9 +105,9 @@ export function SakuttoRedactPanel({
     const resolveTarget = () => {
       if (typeof document === 'undefined') return null;
       if (uiLayout === 'phone') {
-        return document.querySelector('.mobile-shape-actions > div:first-child');
+        return document.querySelector(EXCALIDRAW_SELECTORS.mobileStyleActionsLeft);
       }
-      return document.querySelector('.App-menu_top__left');
+      return document.querySelector(EXCALIDRAW_SELECTORS.desktopMenuTopLeft);
     };
 
     const updateTarget = () => {
@@ -111,41 +116,48 @@ export function SakuttoRedactPanel({
     };
 
     updateTarget();
+
+    let rafId: number | null = null;
+    const scheduleUpdate = () => {
+      if (rafId !== null) return;
+      if (typeof requestAnimationFrame === 'function') {
+        rafId = requestAnimationFrame(() => {
+          rafId = null;
+          updateTarget();
+        });
+      } else {
+        updateTarget();
+      }
+    };
+
     const timer = setTimeout(updateTarget, 30);
-    const mo =
-      typeof MutationObserver !== 'undefined' && document.body
-        ? new MutationObserver(updateTarget)
+    const observeRoot =
+      typeof document !== 'undefined'
+        ? document.querySelector(EXCALIDRAW_SELECTORS.root) || document.body
         : null;
-    mo?.observe(document.body, { childList: true, subtree: true });
+    const mo =
+      typeof MutationObserver !== 'undefined' && observeRoot
+        ? new MutationObserver(scheduleUpdate)
+        : null;
+    if (observeRoot) {
+      mo?.observe(observeRoot, { childList: true, subtree: true });
+    }
 
     return () => {
       clearTimeout(timer);
+      if (rafId !== null && typeof cancelAnimationFrame === 'function') {
+        cancelAnimationFrame(rafId);
+      }
       mo?.disconnect();
     };
   }, [active, uiLayout]);
 
-  useEffect(() => {
-    if (!popoverOpen || typeof document === 'undefined') return;
-    const onPointerDown = (e: PointerEvent) => {
-      const target = e.target;
-      if (
-        target instanceof Element &&
-        (target.closest('[data-exq-redact-root="1"]') || target.closest('[data-exq-redact-flyout="1"]'))
-      ) {
-        return;
-      }
-      setPopoverOpen(false);
-    };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setPopoverOpen(false);
-    };
-    document.addEventListener('pointerdown', onPointerDown, true);
-    document.addEventListener('keydown', onKeyDown, true);
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown, true);
-      document.removeEventListener('keydown', onKeyDown, true);
-    };
-  }, [popoverOpen]);
+  useOutsideDismiss({
+    active: popoverOpen,
+    ignoreSelectors: REDACT_DISMISS_IGNORE_SELECTORS,
+    onDismiss: () => setPopoverOpen(false),
+    closeOnEscape: true,
+  });
 
   useEffect(() => {
     if (!popoverOpen || uiLayout !== 'phone' || typeof window === 'undefined') {
@@ -251,7 +263,7 @@ export function SakuttoRedactPanel({
 
   const portalContainer =
     typeof document !== 'undefined'
-      ? document.querySelector('.excalidraw') || document.body
+      ? document.querySelector(EXCALIDRAW_SELECTORS.root) || document.body
       : null;
 
   return (

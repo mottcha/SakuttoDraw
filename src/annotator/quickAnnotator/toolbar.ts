@@ -1,10 +1,16 @@
 // Desktop / mobile toolbar shape-group widgets and mobile shape actions.
 import type { AppLang } from '../../types/annotator';
-import { getMessages } from '../../i18n/messages';
-import { silently } from '../../services/storageBridge';
-import { deleteSelectedElementsWithApi, duplicateSelectedElementsWithApi } from '../apiActions';
+import {
+  EXCALIDRAW_SELECTORS,
+  EXCALIDRAW_TESTIDS,
+  testIdSelector,
+} from '../../excalidraw/domContract';
+import { getMessages, type MessageCatalog } from '../../i18n/messages';
+import { silently } from '../../utils/common';
+import { deleteSelectedElementsWithApi, duplicateSelectedElementsWithApi } from '../elementOps';
+import { runInstantReset } from './actions';
 import { MOBILE_SHAPE_OTHER_ITEMS, REDACT_TOOL_CUSTOM_TYPE, SHAPE_OTHER_ITEMS } from './constants';
-import { cloneNativeToolbarIcon, el, svgIcon } from './dom';
+import { cloneNativeToolbarIcon, el, getButtonIconSignature, svgIcon } from './dom';
 import {
   activateRedactTool,
   clickNativeTool,
@@ -13,22 +19,20 @@ import {
   runtime,
   scheduleSync,
 } from './runtime';
-import { getButtonIconSignature } from './guards';
-import { runInstantReset } from './topRightBar';
 
 const toolbarMounts = new WeakMap<Element, {
   lang: AppLang;
   d1: HTMLElement;
   d2: HTMLElement;
   d3: HTMLElement;
-  widget: ReturnType<typeof buildShapeGroupWidget>;
+  widget: { wrap: HTMLElement; trigger: HTMLButtonElement; update: () => void };
   resetBtn: HTMLButtonElement;
 }>();
 const mobileToolbarMounts = new WeakMap<Element, {
   lang: AppLang;
   textBtn: HTMLButtonElement;
   rectBtn: HTMLButtonElement;
-  widget: ReturnType<typeof buildMobileShapeGroupWidget>;
+  widget: { wrap: HTMLElement; trigger: HTMLButtonElement; update: () => void };
 }>();
 const mobileShapeActionsMounts = new WeakMap<Element, {
   lang: AppLang;
@@ -38,21 +42,61 @@ const mobileShapeActionsMounts = new WeakMap<Element, {
   delBtn: HTMLButtonElement;
 }>();
 
-/* ================= Toolbar Group (Shape Other + Reset + Dividers) ================= */
-function buildShapeGroupWidget() {
+interface ShapeGroupItemDef<TId extends string> {
+  readonly id: TId;
+  readonly testId: string;
+  readonly msgKey: keyof MessageCatalog;
+  readonly shortcut: string;
+}
+
+function createShapeGroupWidget<TId extends string>({
+  items,
+  wrapClass,
+  wrapAttrs = {},
+  triggerClass,
+  triggerTitle,
+  caretIcon,
+  popoverClass,
+  itemClass,
+  itemDataAttr,
+  iconSize,
+  labelClass,
+  showShortcut,
+  includeLabelTitle,
+  getActiveId,
+  getLastSelected,
+  setLastSelected,
+}: {
+  items: readonly ShapeGroupItemDef<TId>[];
+  wrapClass: string;
+  wrapAttrs?: Record<string, string>;
+  triggerClass: string;
+  triggerTitle: string;
+  caretIcon: 'caret' | 'caretUp';
+  popoverClass: string;
+  itemClass: string;
+  itemDataAttr: string;
+  iconSize: number;
+  labelClass: string | null;
+  showShortcut: boolean;
+  includeLabelTitle: boolean;
+  getActiveId: () => TId | null;
+  getLastSelected: () => TId;
+  setLastSelected: (id: TId) => void;
+}) {
   const t = getMessages(runtime.prefs.lang);
-  const wrap = el('div', { class: 'exq-shape-group' });
+  const wrap = el('div', { class: wrapClass, ...wrapAttrs });
   const iconSlot = el('span', { class: 'exq-icon-slot' });
-  const caretSlot = svgIcon('caret', 10, '0 0 12 12', 1.5);
+  const caretSlot = svgIcon(caretIcon, 10, '0 0 12 12', 1.5);
   caretSlot.classList.add('exq-caret');
 
   const trigger = el(
     'button',
     {
       type: 'button',
-      class: 'exq-shape-trigger',
-      title: t.shapeGroupTitle,
-      'aria-label': t.shapeGroupTitle,
+      class: triggerClass,
+      title: triggerTitle,
+      'aria-label': triggerTitle,
       'aria-haspopup': 'menu',
       'aria-expanded': 'false',
     },
@@ -60,21 +104,32 @@ function buildShapeGroupWidget() {
     caretSlot,
   );
 
-  const popover = el('div', { class: 'exq-popover', role: 'menu' });
-  const itemButtons = new Map<string, HTMLButtonElement>();
+  const popover = el('div', { class: popoverClass, role: 'menu' });
+  const itemButtons = new Map<TId, HTMLButtonElement>();
 
-  for (const item of SHAPE_OTHER_ITEMS) {
-    const label = t[item.msgKey];
+  for (const item of items) {
+    const label = String(t[item.msgKey]);
+    const itemAttrs: Record<string, string> = {
+      type: 'button',
+      class: itemClass,
+      role: 'menuitem',
+      [itemDataAttr]: item.id,
+    };
+    if (includeLabelTitle) {
+      itemAttrs.title = label;
+      itemAttrs['aria-label'] = label;
+    }
+
     const btn = el(
       'button',
-      { type: 'button', class: 'exq-pop-item', role: 'menuitem', 'data-exq-tool': item.id },
-      cloneNativeToolbarIcon(item.testId, item.id, 15, 1.5),
-      el('span', null, label),
-      item.shortcut ? el('span', { class: 'exq-pop-shortcut' }, item.shortcut) : null,
+      itemAttrs,
+      cloneNativeToolbarIcon(item.testId, item.id, iconSize, 1.5),
+      el('span', labelClass ? { class: labelClass } : null, label),
+      showShortcut && item.shortcut ? el('span', { class: 'exq-pop-shortcut' }, item.shortcut) : null,
     );
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      runtime.lastShapeOther = item.id;
+      setLastSelected(item.id);
       wrap.classList.remove('exq-open');
       trigger.setAttribute('aria-expanded', 'false');
       if (item.id === 'redact') {
@@ -98,13 +153,14 @@ function buildShapeGroupWidget() {
 
   wrap.append(trigger, popover);
 
-  let renderedIconId: string | null = null;
+  let renderedIconId: TId | null = null;
   const update = () => {
-    const activeId = getActiveNativeToolId();
-    if (activeId) runtime.lastShapeOther = activeId;
-    if (renderedIconId !== runtime.lastShapeOther) {
-      renderedIconId = runtime.lastShapeOther;
-      const meta = SHAPE_OTHER_ITEMS.find((it) => it.id === renderedIconId);
+    const activeId = getActiveId();
+    if (activeId) setLastSelected(activeId);
+    const currentLast = getLastSelected();
+    if (renderedIconId !== currentLast) {
+      renderedIconId = currentLast;
+      const meta = items.find((it) => it.id === renderedIconId);
       iconSlot.replaceChildren(
         cloneNativeToolbarIcon(meta?.testId || '', renderedIconId, 16, 1.5),
       );
@@ -119,9 +175,28 @@ function buildShapeGroupWidget() {
   return { wrap, trigger, update };
 }
 
+function updateExtraToolsTriggerIndicators(stackOrBar: Element, queryDomFallback: boolean): void {
+  const extraBtn = stackOrBar.querySelector(EXCALIDRAW_SELECTORS.extraToolsTrigger);
+  if (!extraBtn) return;
+  const activeTool = silently(() => runtime.api?.getAppState()?.activeTool);
+  const eraserChecked =
+    activeTool?.type === 'eraser' ||
+    (queryDomFallback && !!stackOrBar.querySelector(testIdSelector(EXCALIDRAW_TESTIDS.eraser))?.classList.contains('ToolIcon--checked'));
+  const stickyChecked =
+    activeTool?.type === 'stickynote' ||
+    (queryDomFallback && !!stackOrBar.querySelector(testIdSelector(EXCALIDRAW_TESTIDS.stickynote))?.classList.contains('ToolIcon--checked'));
+  const lassoChecked = activeTool?.type === 'lasso';
+  const lockChecked =
+    !!activeTool?.locked ||
+    (queryDomFallback && !!stackOrBar.querySelector(testIdSelector(EXCALIDRAW_TESTIDS.lock))?.classList.contains('ToolIcon--checked'));
+  extraBtn.classList.toggle('exq-eraser-active', eraserChecked || stickyChecked || lassoChecked);
+  extraBtn.classList.toggle('exq-lock-active', lockChecked);
+}
+
+/* ================= Desktop Toolbar Group (Shape Other + Reset + Dividers) ================= */
 export function syncToolbar(root: ParentNode = document): boolean {
-  const stack = root.querySelector('.App-toolbar .Stack_horizontal');
-  const selBtn = stack?.querySelector('[data-testid="toolbar-selection"]');
+  const stack = root.querySelector(EXCALIDRAW_SELECTORS.toolbarStack);
+  const selBtn = stack?.querySelector(testIdSelector(EXCALIDRAW_TESTIDS.selection));
   if (!stack || !selBtn) return false;
   if (!runtime.primarySelIconSig) {
     runtime.primarySelIconSig = getButtonIconSignature(selBtn);
@@ -142,7 +217,25 @@ export function syncToolbar(root: ParentNode = document): boolean {
     const d1 = el('div', { class: 'App-toolbar__divider exq-divider exq-div-1', 'aria-hidden': 'true' });
     const d2 = el('div', { class: 'App-toolbar__divider exq-divider exq-div-2', 'aria-hidden': 'true' });
     const d3 = el('div', { class: 'App-toolbar__divider exq-divider exq-div-3', 'aria-hidden': 'true' });
-    const widget = buildShapeGroupWidget();
+    const widget = createShapeGroupWidget({
+      items: SHAPE_OTHER_ITEMS,
+      wrapClass: 'exq-shape-group',
+      triggerClass: 'exq-shape-trigger',
+      triggerTitle: t.shapeGroupTitle,
+      caretIcon: 'caret',
+      popoverClass: 'exq-popover',
+      itemClass: 'exq-pop-item',
+      itemDataAttr: 'data-exq-tool',
+      iconSize: 15,
+      labelClass: null,
+      showShortcut: true,
+      includeLabelTitle: false,
+      getActiveId: () => getActiveNativeToolId(),
+      getLastSelected: () => runtime.lastShapeOther,
+      setLastSelected: (id) => {
+        runtime.lastShapeOther = id;
+      },
+    });
     const resetBtn = el(
       'button',
       {
@@ -166,23 +259,7 @@ export function syncToolbar(root: ParentNode = document): boolean {
     mounted.widget.update();
   }
 
-  const extraBtn = stack.querySelector('.App-toolbar__extra-tools-trigger');
-  if (extraBtn) {
-    const activeTool = silently(() => runtime.api?.getAppState()?.activeTool);
-    const eraserChecked =
-      activeTool?.type === 'eraser' ||
-      !!stack.querySelector('[data-testid="toolbar-eraser"]')?.classList.contains('ToolIcon--checked');
-    const stickyChecked =
-      activeTool?.type === 'stickynote' ||
-      !!stack.querySelector('[data-testid="toolbar-stickynote"]')?.classList.contains('ToolIcon--checked');
-    const lassoChecked = activeTool?.type === 'lasso';
-    const lockChecked =
-      !!activeTool?.locked ||
-      !!stack.querySelector('[data-testid="toolbar-lock"]')?.classList.contains('ToolIcon--checked');
-    extraBtn.classList.toggle('exq-eraser-active', eraserChecked || stickyChecked || lassoChecked);
-    extraBtn.classList.toggle('exq-lock-active', lockChecked);
-  }
-
+  updateExtraToolsTriggerIndicators(stack, true);
   return true;
 }
 
@@ -204,94 +281,8 @@ function getActiveMobileShapeOtherId(): 'ellipse' | 'arrow' | 'line' | 'diamond'
   return null;
 }
 
-function buildMobileShapeGroupWidget() {
-  const t = getMessages(runtime.prefs.lang);
-  const wrap = el('div', { class: 'exq-shape-group exq-mobile-shape-group', 'data-exq-mobile-shape-group': '1' });
-  const iconSlot = el('span', { class: 'exq-icon-slot' });
-  const caretSlot = svgIcon('caretUp', 10, '0 0 12 12', 1.5);
-  caretSlot.classList.add('exq-caret');
-
-  const trigger = el(
-    'button',
-    {
-      type: 'button',
-      class: 'exq-shape-trigger exq-mobile-shape-trigger',
-      title: t.mobileShapeGroupTitle,
-      'aria-label': t.mobileShapeGroupTitle,
-      'aria-haspopup': 'menu',
-      'aria-expanded': 'false',
-    },
-    iconSlot,
-    caretSlot,
-  );
-
-  const popover = el('div', { class: 'exq-popover exq-popover--up', role: 'menu' });
-  const itemButtons = new Map<string, HTMLButtonElement>();
-
-  for (const item of MOBILE_SHAPE_OTHER_ITEMS) {
-    const label = t[item.msgKey];
-    const btn = el(
-      'button',
-      {
-        type: 'button',
-        class: 'exq-pop-item exq-pop-item--mobile',
-        role: 'menuitem',
-        'data-exq-mobile-shape': item.id,
-        title: label,
-        'aria-label': label,
-      },
-      cloneNativeToolbarIcon(item.testId, item.id, 16, 1.5),
-      el('span', { class: 'exq-pop-mobile-label' }, label),
-    );
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      runtime.lastMobileShapeOther = item.id;
-      wrap.classList.remove('exq-open');
-      trigger.setAttribute('aria-expanded', 'false');
-      if (item.id === 'redact') {
-        activateRedactTool();
-      } else {
-        clickNativeTool(item.testId);
-        scheduleSync();
-      }
-    });
-    itemButtons.set(item.id, btn);
-    popover.append(btn);
-  }
-
-  trigger.addEventListener('click', (e) => {
-    e.stopPropagation();
-    const willOpen = !wrap.classList.contains('exq-open');
-    closeFloatingPopovers(wrap);
-    wrap.classList.toggle('exq-open', willOpen);
-    trigger.setAttribute('aria-expanded', String(willOpen));
-  });
-
-  wrap.append(trigger, popover);
-
-  let renderedIconId: string | null = null;
-  const update = () => {
-    const activeId = getActiveMobileShapeOtherId();
-    if (activeId) runtime.lastMobileShapeOther = activeId;
-    if (renderedIconId !== runtime.lastMobileShapeOther) {
-      renderedIconId = runtime.lastMobileShapeOther;
-      const meta = MOBILE_SHAPE_OTHER_ITEMS.find((it) => it.id === renderedIconId);
-      iconSlot.replaceChildren(
-        cloneNativeToolbarIcon(meta?.testId || '', renderedIconId, 16, 1.5),
-      );
-    }
-    trigger.classList.toggle('exq-active', !!activeId);
-    for (const [id, btn] of itemButtons) {
-      btn.classList.toggle('exq-active', activeId === id);
-    }
-  };
-
-  update();
-  return { wrap, trigger, update };
-}
-
 export function syncMobileToolbar(root: ParentNode = document): boolean {
-  const bar = root.querySelector('.App-toolbar .mobile-toolbar');
+  const bar = root.querySelector(EXCALIDRAW_SELECTORS.mobileToolbar);
   if (!bar) return false;
 
   let mounted = mobileToolbarMounts.get(bar);
@@ -314,12 +305,12 @@ export function syncMobileToolbar(root: ParentNode = document): boolean {
         title: t.toolText,
         'aria-label': t.toolText,
       },
-      cloneNativeToolbarIcon('toolbar-text', 'text', 16, 1.5),
+      cloneNativeToolbarIcon(EXCALIDRAW_TESTIDS.text, 'text', 16, 1.5),
     );
     textBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       closeFloatingPopovers(null);
-      clickNativeTool('toolbar-text');
+      clickNativeTool(EXCALIDRAW_TESTIDS.text);
       scheduleSync();
     });
 
@@ -332,16 +323,35 @@ export function syncMobileToolbar(root: ParentNode = document): boolean {
         title: t.toolRectangle,
         'aria-label': t.toolRectangle,
       },
-      cloneNativeToolbarIcon('toolbar-rectangle', 'rectangle', 16, 1.5),
+      cloneNativeToolbarIcon(EXCALIDRAW_TESTIDS.rectangle, 'rectangle', 16, 1.5),
     );
     rectBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       closeFloatingPopovers(null);
-      clickNativeTool('toolbar-rectangle');
+      clickNativeTool(EXCALIDRAW_TESTIDS.rectangle);
       scheduleSync();
     });
 
-    const widget = buildMobileShapeGroupWidget();
+    const widget = createShapeGroupWidget({
+      items: MOBILE_SHAPE_OTHER_ITEMS,
+      wrapClass: 'exq-shape-group exq-mobile-shape-group',
+      wrapAttrs: { 'data-exq-mobile-shape-group': '1' },
+      triggerClass: 'exq-shape-trigger exq-mobile-shape-trigger',
+      triggerTitle: t.mobileShapeGroupTitle,
+      caretIcon: 'caretUp',
+      popoverClass: 'exq-popover exq-popover--up',
+      itemClass: 'exq-pop-item exq-pop-item--mobile',
+      itemDataAttr: 'data-exq-mobile-shape',
+      iconSize: 16,
+      labelClass: 'exq-pop-mobile-label',
+      showShortcut: false,
+      includeLabelTitle: true,
+      getActiveId: getActiveMobileShapeOtherId,
+      getLastSelected: () => runtime.lastMobileShapeOther,
+      setLastSelected: (id) => {
+        runtime.lastMobileShapeOther = id;
+      },
+    });
     bar.append(textBtn, rectBtn, widget.wrap);
     mounted = { lang: runtime.prefs.lang, textBtn, rectBtn, widget };
     mobileToolbarMounts.set(bar, mounted);
@@ -350,23 +360,14 @@ export function syncMobileToolbar(root: ParentNode = document): boolean {
   }
 
   // Show fallback Text button only when Excalidraw collapses native toolbar-text (<316px)
-  const hasNativeText = !!bar.querySelector(':scope > [data-testid="toolbar-text"]');
+  const hasNativeText = !!bar.querySelector(`:scope > ${testIdSelector(EXCALIDRAW_TESTIDS.text)}`);
   mounted.textBtn.style.display = hasNativeText ? 'none' : '';
 
   const activeTool = silently(() => runtime.api?.getAppState()?.activeTool);
   mounted.textBtn.classList.toggle('exq-active', activeTool?.type === 'text');
   mounted.rectBtn.classList.toggle('exq-active', activeTool?.type === 'rectangle');
 
-  const extraBtn = bar.querySelector('.App-toolbar__extra-tools-trigger');
-  if (extraBtn) {
-    const eraserChecked = activeTool?.type === 'eraser';
-    const stickyChecked = activeTool?.type === 'stickynote';
-    const lassoChecked = activeTool?.type === 'lasso';
-    const lockChecked = !!activeTool?.locked;
-    extraBtn.classList.toggle('exq-eraser-active', eraserChecked || stickyChecked || lassoChecked);
-    extraBtn.classList.toggle('exq-lock-active', lockChecked);
-  }
-
+  updateExtraToolsTriggerIndicators(bar, false);
   return true;
 }
 
@@ -380,7 +381,7 @@ function hasAnySelectedElement(): boolean {
 }
 
 export function syncMobileShapeActions(root: ParentNode = document): boolean {
-  const bar = root.querySelector('.mobile-shape-actions');
+  const bar = root.querySelector(EXCALIDRAW_SELECTORS.mobileStyleActions);
   if (!bar) return false;
 
   const directDivs = Array.from(bar.children).filter((c) => c.tagName === 'DIV');

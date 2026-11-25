@@ -11,17 +11,15 @@ import type {
   StylesPanelPref,
   ThemeMode,
 } from './types/annotator';
-import { SakuttoMainMenu, type PreferencesLiveState } from './components/SakuttoMainMenu';
-import { SakuttoRedactPanel } from './components/SakuttoRedactPanel';
+import { applyJapaneseGlyphOverride } from './annotator/jpGlyphOverride';
+import { REDACT_TOOL_CUSTOM_TYPE } from './annotator/quickAnnotator/constants';
+import { restoreTempFillIfToolChanged } from './annotator/quickAnnotator/fillSwap';
+import { bootQuickAnnotator } from './annotator/quickAnnotator/index';
 import {
   attachExcalidrawAPI,
-  bootQuickAnnotator,
-  bootstrapCleanCanvas,
-  REDACT_TOOL_CUSTOM_TYPE,
-  restoreTempFillIfToolChanged,
   runtime,
   setLangChangeListener,
-} from './annotator/quickAnnotator';
+} from './annotator/quickAnnotator/runtime';
 import {
   clearRedactStyleIsolationState,
   getRedactMeta,
@@ -29,7 +27,11 @@ import {
   syncRedactStyleIsolation,
   updateRedactElementsColor,
 } from './annotator/redactProcessor';
+import type { PreferencesLiveState } from './components/PreferencesPanel';
+import { SakuttoMainMenu } from './components/SakuttoMainMenu';
+import { SakuttoRedactPanel } from './components/SakuttoRedactPanel';
 import {
+  bootstrapCleanCanvas,
   cancelPendingScenePersist,
   flushPendingScenePersist,
   loadInitialSceneData,
@@ -42,7 +44,6 @@ import {
   scheduleScenePersist,
   syncDesktopUIMode,
 } from './services/storageBridge';
-import { applyJapaneseGlyphOverride } from './annotator/jpGlyphOverride';
 
 type RedactUiLayout = 'full' | 'compact' | 'phone';
 

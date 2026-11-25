@@ -1,6 +1,7 @@
-import type { BinaryFileData, BinaryFiles, ExcalidrawInitialDataState } from '@excalidraw/excalidraw/types';
+import type { BinaryFiles, ExcalidrawInitialDataState } from '@excalidraw/excalidraw/types';
 import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types';
 import type {
+  AppLang,
   BoxSelectionPref,
   ExportFormat,
   ExportScale,
@@ -10,6 +11,12 @@ import type {
   ThemeMode,
 } from '../types/annotator';
 import { detectBrowserLang, normalizeAppLang } from '../i18n/messages';
+import { normalizeHexColor, silently } from '../utils/common';
+import {
+  clearIndexedDbFiles,
+  loadFilesFromIndexedDb,
+  saveFilesToIndexedDb,
+} from './filesDb';
 
 export const DEFAULT_PINK = '#c2255c';
 export const DEFAULT_PEN_COLOR = DEFAULT_PINK;
@@ -20,8 +27,6 @@ export const LS_ELEMENTS_KEY = 'excalidraw';
 export const LS_STATE_KEY = 'excalidraw-state';
 export const LS_PREFS_KEY = 'exq-annotator-prefs';
 export const LS_DESKTOP_UI_MODE_KEY = 'excalidraw.desktopUIMode';
-export const FILES_DB_NAME = 'files-db';
-export const FILES_STORE_NAME = 'files-store';
 
 export const DEFAULT_PREFS: Prefs = {
   lang: 'en',
@@ -50,13 +55,19 @@ export const DEFAULT_PREFS: Prefs = {
   },
 };
 
-export const silently = <T>(fn: () => T): T | undefined => {
-  try {
-    return fn();
-  } catch {
-    return undefined;
-  }
-};
+export function createDefaultPrefs(lang: AppLang = DEFAULT_PREFS.lang): Prefs {
+  return {
+    lang,
+    themeMode: DEFAULT_PREFS.themeMode,
+    boxSelectionMode: DEFAULT_PREFS.boxSelectionMode,
+    inputDevice: DEFAULT_PREFS.inputDevice,
+    stylesPanelMode: DEFAULT_PREFS.stylesPanelMode,
+    preferJpFont: DEFAULT_PREFS.preferJpFont,
+    exportOpts: { ...DEFAULT_PREFS.exportOpts },
+    quickOpts: { ...DEFAULT_PREFS.quickOpts },
+    redactOpts: { ...DEFAULT_PREFS.redactOpts },
+  };
+}
 
 export function resolvePreferJpFont(prefs: Pick<Prefs, 'lang' | 'preferJpFont'>): boolean {
   if (typeof prefs.preferJpFont === 'boolean') {
@@ -137,15 +148,6 @@ export function syncDesktopUIMode(
   return resolved;
 }
 
-export function normalizeHexColor(value: unknown, fallback = DEFAULT_PEN_COLOR): string {
-  if (typeof value !== 'string') return fallback;
-  const trimmed = value.trim().toLowerCase();
-  if (/^#[0-9a-f]{6}$/.test(trimmed) || /^#[0-9a-f]{3}$/.test(trimmed)) {
-    return trimmed;
-  }
-  return fallback;
-}
-
 export function resolveTheme(themeMode: ThemeMode): 'light' | 'dark' {
   if (themeMode === 'dark') return 'dark';
   if (themeMode === 'system') {
@@ -161,39 +163,46 @@ export function shouldSkipAutoReset(hash: unknown): boolean {
   return /^#(json|room|addLibrary)=/i.test(String(hash || ''));
 }
 
+export function readSavedAppState(
+  storage: Storage | null = typeof localStorage !== 'undefined' ? localStorage : null,
+): Record<string, unknown> {
+  if (!storage) return {};
+  const raw = silently(() => storage.getItem(LS_STATE_KEY));
+  if (!raw) return {};
+  const parsed = silently(() => JSON.parse(raw));
+  return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
+}
+
+export function patchSavedAppState(
+  patch: Record<string, unknown> | ((prev: Record<string, unknown>) => Record<string, unknown>),
+  storage: Storage | null = typeof localStorage !== 'undefined' ? localStorage : null,
+): void {
+  if (!storage) return;
+  silently(() => {
+    const prev = readSavedAppState(storage);
+    const delta = typeof patch === 'function' ? patch(prev) : patch;
+    storage.setItem(LS_STATE_KEY, JSON.stringify({ ...prev, ...delta }));
+  });
+}
+
 export function loadPrefs(
   storage: Storage | null = typeof localStorage !== 'undefined' ? localStorage : null,
 ): Prefs {
-  const base: Prefs = {
-    lang: detectBrowserLang(),
-    themeMode: DEFAULT_PREFS.themeMode,
-    boxSelectionMode: DEFAULT_PREFS.boxSelectionMode,
-    inputDevice: DEFAULT_PREFS.inputDevice,
-    stylesPanelMode: DEFAULT_PREFS.stylesPanelMode,
-    preferJpFont: DEFAULT_PREFS.preferJpFont,
-    exportOpts: { ...DEFAULT_PREFS.exportOpts },
-    quickOpts: { ...DEFAULT_PREFS.quickOpts },
-    redactOpts: { ...DEFAULT_PREFS.redactOpts },
-  };
+  const base = createDefaultPrefs(detectBrowserLang());
   if (!storage) return base;
 
-  const rawState = silently(() => storage.getItem(LS_STATE_KEY));
-  if (rawState) {
-    const st = silently(() => JSON.parse(rawState));
-    if (st && typeof st === 'object') {
-      if (st.theme === 'dark' || st.theme === 'light') base.themeMode = st.theme;
-      if (st.boxSelectionMode === 'contain' || st.boxSelectionMode === 'overlap') {
-        base.boxSelectionMode = st.boxSelectionMode;
-      }
-      if (st.inputDevice === 'mouse' || st.inputDevice === 'trackpad') {
-        base.inputDevice = st.inputDevice;
-      }
-      if (typeof st.exportBackground === 'boolean') base.exportOpts.background = st.exportBackground;
-      if (typeof st.exportWithDarkMode === 'boolean') base.exportOpts.darkMode = st.exportWithDarkMode;
-      if (typeof st.exportEmbedScene === 'boolean') base.exportOpts.embedScene = st.exportEmbedScene;
-      base.exportOpts.scale = normalizeScale(st.exportScale);
-    }
+  const st = readSavedAppState(storage);
+  if (st.theme === 'dark' || st.theme === 'light') base.themeMode = st.theme;
+  if (st.boxSelectionMode === 'contain' || st.boxSelectionMode === 'overlap') {
+    base.boxSelectionMode = st.boxSelectionMode;
   }
+  if (st.inputDevice === 'mouse' || st.inputDevice === 'trackpad') {
+    base.inputDevice = st.inputDevice;
+  }
+  if (typeof st.exportBackground === 'boolean') base.exportOpts.background = st.exportBackground;
+  if (typeof st.exportWithDarkMode === 'boolean') base.exportOpts.darkMode = st.exportWithDarkMode;
+  if (typeof st.exportEmbedScene === 'boolean') base.exportOpts.embedScene = st.exportEmbedScene;
+  base.exportOpts.scale = normalizeScale(st.exportScale);
 
   const rawPrefs = silently(() => storage.getItem(LS_PREFS_KEY));
   if (rawPrefs) {
@@ -259,139 +268,17 @@ export function savePrefs(
 ): void {
   if (!storage) return;
   silently(() => storage.setItem(LS_PREFS_KEY, JSON.stringify(prefs)));
-  silently(() => {
-    const raw = storage.getItem(LS_STATE_KEY);
-    const st = raw ? JSON.parse(raw) : {};
-    st.boxSelectionMode = normalizeBoxSelectionMode(prefs.boxSelectionMode);
-    st.inputDevice = normalizeInputDevice(prefs.inputDevice);
-    st.exportBackground = prefs.exportOpts.background;
-    st.exportWithDarkMode = prefs.exportOpts.darkMode;
-    st.exportEmbedScene = prefs.exportOpts.embedScene;
-    st.exportScale = normalizeScale(prefs.exportOpts.scale);
-    storage.setItem(LS_STATE_KEY, JSON.stringify(st));
-  });
-}
-
-export const FILES_DB_VERSION = 2;
-
-function openFilesDb(idb: IDBFactory): Promise<IDBDatabase | null> {
-  return new Promise((resolve) => {
-    try {
-      const req = idb.open(FILES_DB_NAME, FILES_DB_VERSION);
-      req.onupgradeneeded = () => {
-        const db = req.result;
-        if (!db.objectStoreNames.contains(FILES_STORE_NAME)) {
-          db.createObjectStore(FILES_STORE_NAME, { keyPath: 'id' });
-        }
-      };
-      req.onerror = () => resolve(null);
-      req.onsuccess = () => resolve(req.result);
-    } catch {
-      resolve(null);
-    }
-  });
-}
-
-export async function clearIndexedDbFiles(
-  idb: IDBFactory | null = typeof indexedDB !== 'undefined' ? indexedDB : null,
-): Promise<boolean> {
-  if (!idb || typeof idb.open !== 'function') return false;
-  const db = await openFilesDb(idb);
-  if (!db) return false;
-  return new Promise((resolve) => {
-    try {
-      if (!db.objectStoreNames?.contains(FILES_STORE_NAME)) {
-        db.close();
-        return resolve(false);
-      }
-      const tx = db.transaction(FILES_STORE_NAME, 'readwrite');
-      tx.objectStore(FILES_STORE_NAME).clear();
-      tx.oncomplete = () => {
-        db.close();
-        resolve(true);
-      };
-      tx.onerror = () => {
-        db.close();
-        resolve(false);
-      };
-    } catch {
-      silently(() => db.close());
-      resolve(false);
-    }
-  });
-}
-
-export async function loadFilesFromIndexedDb(
-  idb: IDBFactory | null = typeof indexedDB !== 'undefined' ? indexedDB : null,
-): Promise<BinaryFiles> {
-  if (!idb || typeof idb.open !== 'function') return {};
-  const db = await openFilesDb(idb);
-  if (!db) return {};
-  return new Promise((resolve) => {
-    try {
-      if (!db.objectStoreNames.contains(FILES_STORE_NAME)) {
-        db.close();
-        return resolve({});
-      }
-      const tx = db.transaction(FILES_STORE_NAME, 'readonly');
-      const store = tx.objectStore(FILES_STORE_NAME);
-      const req = store.getAll();
-      req.onsuccess = () => {
-        const files: BinaryFiles = {};
-        for (const item of (req.result || []) as BinaryFileData[]) {
-          if (item && item.id) {
-            files[item.id] = item;
-          }
-        }
-        db.close();
-        resolve(files);
-      };
-      req.onerror = () => {
-        db.close();
-        resolve({});
-      };
-    } catch {
-      silently(() => db.close());
-      resolve({});
-    }
-  });
-}
-
-export async function saveFilesToIndexedDb(
-  files: BinaryFiles,
-  idb: IDBFactory | null = typeof indexedDB !== 'undefined' ? indexedDB : null,
-): Promise<boolean> {
-  if (!idb || typeof idb.open !== 'function') return false;
-  const entries = Object.values(files || {});
-  if (entries.length === 0) return true;
-  const db = await openFilesDb(idb);
-  if (!db) return false;
-  return new Promise((resolve) => {
-    try {
-      if (!db.objectStoreNames.contains(FILES_STORE_NAME)) {
-        db.close();
-        return resolve(false);
-      }
-      const tx = db.transaction(FILES_STORE_NAME, 'readwrite');
-      const store = tx.objectStore(FILES_STORE_NAME);
-      for (const file of entries) {
-        if (file && file.id) {
-          store.put(file);
-        }
-      }
-      tx.oncomplete = () => {
-        db.close();
-        resolve(true);
-      };
-      tx.onerror = () => {
-        db.close();
-        resolve(false);
-      };
-    } catch {
-      silently(() => db.close());
-      resolve(false);
-    }
-  });
+  patchSavedAppState(
+    {
+      boxSelectionMode: normalizeBoxSelectionMode(prefs.boxSelectionMode),
+      inputDevice: normalizeInputDevice(prefs.inputDevice),
+      exportBackground: prefs.exportOpts.background,
+      exportWithDarkMode: prefs.exportOpts.darkMode,
+      exportEmbedScene: prefs.exportOpts.embedScene,
+      exportScale: normalizeScale(prefs.exportOpts.scale),
+    },
+    storage,
+  );
 }
 
 export function bootstrapCleanCanvas({
@@ -415,16 +302,7 @@ export function bootstrapCleanCanvas({
     return { skipped: true, prefs, autoReset: false, pinkApplied: false };
   }
 
-  let state: Record<string, unknown> = {};
-  const rawState = silently(() => storage.getItem(LS_STATE_KEY));
-  if (rawState) {
-    const parsed = silently(() => JSON.parse(rawState));
-    if (parsed && typeof parsed === 'object') state = parsed;
-  }
-
   let autoReset = false;
-  let pinkApplied = false;
-
   if (prefs.quickOpts.autoResetOnOpen) {
     silently(() => storage.setItem(LS_ELEMENTS_KEY, '[]'));
     void clearIndexedDbFiles(idb);
@@ -432,17 +310,21 @@ export function bootstrapCleanCanvas({
   }
 
   const penColor = normalizeHexColor(prefs.quickOpts.defaultPenColor, DEFAULT_PEN_COLOR);
-  state.currentItemStrokeColor = penColor;
-  pinkApplied = penColor === DEFAULT_PINK;
+  const pinkApplied = penColor === DEFAULT_PINK;
 
-  state.showWelcomeScreen = false;
-  state.boxSelectionMode = normalizeBoxSelectionMode(prefs.boxSelectionMode);
-  state.inputDevice = normalizeInputDevice(prefs.inputDevice);
-  state.exportBackground = prefs.exportOpts.background;
-  state.exportWithDarkMode = prefs.exportOpts.darkMode;
-  state.exportEmbedScene = prefs.exportOpts.embedScene;
-  state.exportScale = normalizeScale(prefs.exportOpts.scale);
-  silently(() => storage.setItem(LS_STATE_KEY, JSON.stringify(state)));
+  patchSavedAppState(
+    {
+      currentItemStrokeColor: penColor,
+      showWelcomeScreen: false,
+      boxSelectionMode: normalizeBoxSelectionMode(prefs.boxSelectionMode),
+      inputDevice: normalizeInputDevice(prefs.inputDevice),
+      exportBackground: prefs.exportOpts.background,
+      exportWithDarkMode: prefs.exportOpts.darkMode,
+      exportEmbedScene: prefs.exportOpts.embedScene,
+      exportScale: normalizeScale(prefs.exportOpts.scale),
+    },
+    storage,
+  );
 
   return { skipped: false, prefs, autoReset, pinkApplied };
 }
@@ -453,7 +335,6 @@ export async function loadInitialSceneData(
 ): Promise<ExcalidrawInitialDataState> {
   const prefs = loadPrefs(storage);
   let elements: ExcalidrawElement[] = [];
-  let savedState: Record<string, unknown> = {};
 
   if (storage) {
     const rawEls = silently(() => storage.getItem(LS_ELEMENTS_KEY));
@@ -463,15 +344,9 @@ export async function loadInitialSceneData(
         elements = parsedEls.filter((e) => e && !e.isDeleted);
       }
     }
-    const rawSt = silently(() => storage.getItem(LS_STATE_KEY));
-    if (rawSt) {
-      const parsedSt = silently(() => JSON.parse(rawSt));
-      if (parsedSt && typeof parsedSt === 'object') {
-        savedState = parsedSt;
-      }
-    }
   }
 
+  const savedState = readSavedAppState(storage);
   const files = elements.length > 0 ? await loadFilesFromIndexedDb(idb) : {};
   const defaultPenColor = normalizeHexColor(prefs.quickOpts.defaultPenColor, DEFAULT_PEN_COLOR);
 
@@ -510,11 +385,8 @@ export function persistSceneSnapshot(
     const nonDeleted = elements.filter((el) => !el.isDeleted);
     storage.setItem(LS_ELEMENTS_KEY, JSON.stringify(nonDeleted));
   });
-  silently(() => {
-    const raw = storage.getItem(LS_STATE_KEY);
-    const prev = raw ? JSON.parse(raw) : {};
-    const nextState = {
-      ...prev,
+  patchSavedAppState(
+    (prev) => ({
       viewBackgroundColor: appState.viewBackgroundColor ?? prev.viewBackgroundColor ?? '#ffffff',
       currentItemStrokeColor:
         appState.currentItemStrokeColor ?? prev.currentItemStrokeColor ?? DEFAULT_PEN_COLOR,
@@ -529,9 +401,9 @@ export function persistSceneSnapshot(
       exportEmbedScene: appState.exportEmbedScene ?? prev.exportEmbedScene ?? false,
       exportScale: normalizeScale(appState.exportScale ?? prev.exportScale ?? 1),
       theme: appState.theme ?? prev.theme ?? 'light',
-    };
-    storage.setItem(LS_STATE_KEY, JSON.stringify(nextState));
-  });
+    }),
+    storage,
+  );
   if (files && Object.keys(files).length > 0) {
     void saveFilesToIndexedDb(files, idb);
   }

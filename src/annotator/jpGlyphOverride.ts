@@ -1,111 +1,24 @@
-import { CaptureUpdateAction, FONT_FAMILY, Fonts } from '@excalidraw/excalidraw';
+import { CaptureUpdateAction, FONT_FAMILY } from '@excalidraw/excalidraw';
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 import rawJpManifest from '../generated/jpFontManifest.json';
 import type { JpFontManifest } from '../types/annotator';
+import {
+  clearXiaolaiLoadedCache,
+  type ExcalidrawFontFaceLike,
+  findXiaolaiFamilyId,
+  getDefaultRegisteredFonts,
+  type RegisteredFontsMap,
+  XIAOLAI_FAMILY_NAME,
+} from '../excalidraw/fontsAdapter';
+import { nextElementNonce } from '../utils/common';
+import { parseUnicodeRangeToSet, subtractUnicodeRange } from '../utils/unicodeRange';
 import { resolveFontAssetUrl } from './cjkFontManager';
 
-export const XIAOLAI_FALLBACK_FAMILY_ID = 100;
-export const XIAOLAI_FAMILY_NAME = 'Xiaolai';
-
 export const jpFontManifest: JpFontManifest = rawJpManifest as JpFontManifest;
-
-type RegisteredFontsMap = typeof Fonts.registered;
-type RegisteredFontEntry = RegisteredFontsMap extends Map<number, infer V> ? V : never;
-type ExcalidrawFontFaceLike = RegisteredFontEntry['fontFaces'][number];
 
 let originalXiaolaiFacesSnapshot: ExcalidrawFontFaceLike[] | null = null;
 let lastAppliedEnabled: boolean | null = null;
 let cachedJpCodePointSet: Set<number> | null = null;
-
-export function parseUnicodeRangeToSet(unicodeRange: string | undefined): Set<number> {
-  const result = new Set<number>();
-  const raw = (unicodeRange || '').trim();
-  if (!raw) return result;
-
-  for (const part of raw.split(',')) {
-    const token = part.trim().replace(/^U\+/i, '');
-    if (!token) continue;
-    if (token.includes('-')) {
-      const [startHex, endHex] = token.split('-');
-      const start = parseInt(startHex, 16);
-      const end = parseInt(endHex, 16);
-      if (!Number.isNaN(start) && !Number.isNaN(end) && start <= end) {
-        for (let cp = start; cp <= end; cp++) result.add(cp);
-      }
-    } else if (token.includes('?')) {
-      const start = parseInt(token.replace(/\?/g, '0'), 16);
-      const end = parseInt(token.replace(/\?/g, 'F'), 16);
-      if (!Number.isNaN(start) && !Number.isNaN(end) && start <= end) {
-        for (let cp = start; cp <= end; cp++) result.add(cp);
-      }
-    } else {
-      const cp = parseInt(token, 16);
-      if (!Number.isNaN(cp)) result.add(cp);
-    }
-  }
-  return result;
-}
-
-export function serializeCodePointsToUnicodeRange(codePoints: Iterable<number>): string {
-  const sorted = Array.from(new Set(codePoints)).sort((a, b) => a - b);
-  if (sorted.length === 0) return '';
-
-  const tokens: string[] = [];
-  let runStart = sorted[0];
-  let runEnd = sorted[0];
-
-  for (let i = 1; i < sorted.length; i++) {
-    const cp = sorted[i];
-    if (cp === runEnd + 1) {
-      runEnd = cp;
-    } else {
-      tokens.push(
-        runStart === runEnd
-          ? `U+${runStart.toString(16)}`
-          : `U+${runStart.toString(16)}-${runEnd.toString(16)}`,
-      );
-      runStart = cp;
-      runEnd = cp;
-    }
-  }
-  tokens.push(
-    runStart === runEnd
-      ? `U+${runStart.toString(16)}`
-      : `U+${runStart.toString(16)}-${runEnd.toString(16)}`,
-  );
-  return tokens.join(',');
-}
-
-export function subtractUnicodeRange(
-  unicodeRange: string | undefined,
-  excludeSet: ReadonlySet<number>,
-): string | null {
-  const raw = (unicodeRange || '').trim();
-  if (!raw || raw.toUpperCase() === 'U+0-10FFFF') {
-    return raw || 'U+0-10FFFF';
-  }
-  const source = parseUnicodeRangeToSet(raw);
-  if (source.size === 0) return null;
-
-  const remaining: number[] = [];
-  for (const cp of source) {
-    if (!excludeSet.has(cp)) {
-      remaining.push(cp);
-    }
-  }
-  if (remaining.length === 0) return null;
-  return serializeCodePointsToUnicodeRange(remaining);
-}
-
-export function rangesIntersect(rangeA: string | undefined, rangeB: string | undefined): boolean {
-  const setA = parseUnicodeRangeToSet(rangeA);
-  if (setA.size === 0) return false;
-  const setB = parseUnicodeRangeToSet(rangeB);
-  for (const cp of setA) {
-    if (setB.has(cp)) return true;
-  }
-  return false;
-}
 
 export function getJpCoveredCodePoints(manifest: JpFontManifest = jpFontManifest): Set<number> {
   if (manifest === jpFontManifest && cachedJpCodePointSet) {
@@ -159,19 +72,6 @@ function createFontFaceEntry(
   } as unknown as ExcalidrawFontFaceLike;
 }
 
-function findXiaolaiFamilyId(registeredFonts: RegisteredFontsMap): number | null {
-  if (registeredFonts.has(XIAOLAI_FALLBACK_FAMILY_ID)) {
-    return XIAOLAI_FALLBACK_FAMILY_ID;
-  }
-  for (const [id, entry] of registeredFonts.entries()) {
-    const fam = entry.fontFaces[0]?.fontFace?.family;
-    if (fam === XIAOLAI_FAMILY_NAME || fam === `"${XIAOLAI_FAMILY_NAME}"`) {
-      return id;
-    }
-  }
-  return null;
-}
-
 function syncDocumentFonts(
   oldFaces: readonly ExcalidrawFontFaceLike[],
   newFaces: readonly ExcalidrawFontFaceLike[],
@@ -198,31 +98,10 @@ function syncDocumentFonts(
   }
 }
 
-function clearXiaolaiLoadedCache(): void {
-  const cache = (Fonts as unknown as { loadedFontsCache?: Set<string> }).loadedFontsCache;
-  if (!cache || typeof cache.forEach !== 'function') return;
-  for (const sig of Array.from(cache)) {
-    if (sig.startsWith(`${XIAOLAI_FAMILY_NAME}-`) || sig.startsWith(`"${XIAOLAI_FAMILY_NAME}"-`)) {
-      cache.delete(sig);
-    }
-  }
-}
-
 export function resetJpGlyphOverrideStateForTests(): void {
   originalXiaolaiFacesSnapshot = null;
   lastAppliedEnabled = null;
   cachedJpCodePointSet = null;
-}
-
-function getDefaultRegisteredFonts(): RegisteredFontsMap | null {
-  if (typeof FontFace === 'undefined') {
-    return null;
-  }
-  try {
-    return Fonts.registered;
-  } catch {
-    return null;
-  }
 }
 
 /**
@@ -369,7 +248,7 @@ export async function refreshSceneHandDrawnTextFonts(
         return {
           ...el,
           version: el.version + 1,
-          versionNonce: Math.floor(Math.random() * 2147483647),
+          versionNonce: nextElementNonce(),
         };
       }
     }

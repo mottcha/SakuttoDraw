@@ -1,0 +1,113 @@
+html,
+body,
+#root,
+.sakutto-app-root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Inherit Excalidraw UI font across all custom buttons/controls (browser UA resets button font-family) */
+.excalidraw [class*="exq-"] button,
+.excalidraw button[class*="exq-"],
+.excalidraw select[class*="exq-"],
+.context-menu.exq-ctx-rich button {
+  font-family: inherit;
+}
+
+/* Shared Switch & Scale Controls */
+.exq-switch {
+  position: relative;
+  width: 30px;
+  height: 17px;
+  border-radius: 999px;
+  background: var(--color-gray-40, rgba(140, 140, 155, 0.45));
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 0.14s ease;
+}
+.exq-switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 13px;
+  height: 13px;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
+  transition: transform 0.14s ease;
+}
+.exq-switch.exq-on { background: var(--color-primary, #6965db); }
+.exq-switch.exq-on::after { transform: translateX(13px); }
+
+.exq-scale-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 8px;
+  font-size: 12px;
+  color: var(--text-primary-color, #1b1b1f);
+  transition: opacity 0.14s ease;
+}
+.exq-scale-row.exq-disabled {
+  opacity: 0.42;
+  pointer-events: none;
+}
+.exq-scale-seg {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  border-radius: 7px;
+  background: var(--color-surface-low, rgba(128, 128, 148, 0.14));
+  gap: 2px;
+}
+.exq-scale-seg button {
+  height: 24px;
+  min-width: 30px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-secondary-color, #686878);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.exq-scale-seg.exq-fmt-seg button {
+  min-width: 44px;
+}
+.exq-scale-seg button:hover { color: var(--text-primary-color, #1b1b1f); }
+.exq-scale-seg button.exq-active {
+  background: var(--color-primary, #6965db);
+  color: #ffffff;
+}
+
+/* Lightweight Toast */
+.exq-toast {
+  position: fixed;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%) translateY(10px);
+  padding: 7px 14px;
+  border-radius: 8px;
+  background: var(--text-primary-color, #1b1b1f);
+  color: var(--island-bg-color, #ffffff);
+  font-size: 12.5px;
+  font-weight: 600;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 99999;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.exq-toast.exq-toast-show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}

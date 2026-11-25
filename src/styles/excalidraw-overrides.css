@@ -1,0 +1,80 @@
+/* === Hide unwanted Excalidraw UI (locale-independent) === */
+/* Welcome screen, corner hints, toolbar bottom hint, and selection/pen sub-popovers */
+.welcome-screen-center,
+.welcome-screen-decor,
+.HintViewer,
+.tool-popover-content {
+  display: none !important;
+}
+
+/* Right-click context menu: hide unwanted items (must stay in sync with CTX_HIDDEN_TESTIDS) */
+.context-menu > li[data-testid="wrapSelectionInFrame"],
+.context-menu > li[data-testid="copyAsPng"],
+.context-menu > li[data-testid="copyAsSvg"],
+.context-menu > li[data-testid="copyText"],
+.context-menu > li[data-testid="copyAsText"],
+.context-menu > li[data-testid="copyStyles"],
+.context-menu > li[data-testid="pasteStyles"],
+.context-menu > li[data-testid="addToLibrary"],
+.context-menu > li[data-testid="sendBackward"],
+.context-menu > li[data-testid="bringForward"],
+.context-menu > li[data-testid="gridMode"],
+.context-menu > li[data-testid="objectsSnapMode"],
+.context-menu > li[data-testid="arrowBinding"],
+.context-menu > li[data-testid="midpointSnapping"],
+.context-menu > li[data-testid="zenMode"],
+.context-menu > li[data-testid="viewMode"],
+.context-menu > li[data-testid="minimap"],
+.context-menu > li[data-testid="stats"],
+.context-menu > hr.exq-ctx-hr-hidden {
+  display: none !important;
+}
+
+/* Main hamburger menu: hide native export/collab/palette/search/help/reset/links/canvas-bg */
+.dropdown-menu-container [data-testid="image-export-button"],
+.dropdown-menu-container [data-testid="collab-button"],
+.dropdown-menu-container [data-testid="command-palette-button"],
+.dropdown-menu-container [data-testid="search-menu-button"],
+.dropdown-menu-container [data-testid="help-menu-item"],
+.dropdown-menu-container [data-testid="clear-canvas-button"],
+.dropdown-menu-container > a.dropdown-menu-item,
+.dropdown-menu-container > div:empty:has(+ a.dropdown-menu-item),
+.dropdown-menu-container .dropdown-menu-group:has(a.dropdown-menu-item),
+.dropdown-menu-container > div:empty:has(+ .dropdown-menu-group a.dropdown-menu-item),
+.dropdown-menu-container > hr:has(+ .dropdown-menu-group a.dropdown-menu-item),
+.dropdown-menu-container > div:has([data-testid="canvas-background-label"]) {
+  display: none !important;
+}
+
+/* Extra tools menu (desktop & mobile): keep only T3 bar, Image, Frame, Laser, Drawing Assist */
+.dropdown-menu-container:has([data-testid="toolbar-image"], [data-testid="toolbar-laser"]) > [data-testid="toolbar-lasso"],
+.dropdown-menu-container:has([data-testid="toolbar-image"], [data-testid="toolbar-laser"]) > [data-testid="toolbar-stickynote"],
+.dropdown-menu-container:has([data-testid="toolbar-image"], [data-testid="toolbar-laser"]) > [data-testid="toolbar-embeddable"],
+.dropdown-menu-container:has([data-testid="toolbar-image"], [data-testid="toolbar-laser"]) > [data-testid="toolbar-autoshape"],
+.dropdown-menu-container:has([data-testid="toolbar-image"], [data-testid="toolbar-laser"]) > [data-testid="toolbar-bucketfill"],
+.excalidraw.excalidraw--mobile .dropdown-menu-container:has([data-testid="toolbar-laser"]) > [data-testid="toolbar-text"],
+.dropdown-menu-container:has([data-testid="toolbar-image"], [data-testid="toolbar-laser"]) > [data-testid="toolbar-laser"] ~ *:not(.exq-extra-options-root) {
+  display: none !important;
+}
+
+/* Top-right native clutter (desktop & mobile) */
+.layer-ui__wrapper__top-right .plus-banner,
+.layer-ui__wrapper__top-right .collab-button,
+.layer-ui__wrapper__top-right .sidebar-trigger__label-element,
+.layer-ui__wrapper__top-right [data-testid="sidebar-trigger"],
+.excalidraw-ui-top-right .default-sidebar-trigger,
+.excalidraw-ui-top-right .sidebar-trigger__label-element,
+.excalidraw-ui-top-right [data-testid="sidebar-trigger"] {
+  display: none !important;
+}
+
+/* Bottom-left zoom & minimap (keep Undo/Redo) */
+.layer-ui__wrapper__footer-left .zoom-actions {
+  display: none !important;
+}
+
+/* Bottom-right encryption shield & help icon */
+.encrypted-icon,
+.layer-ui__wrapper__footer-right .help-icon {
+  display: none !important;
+}

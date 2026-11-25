@@ -1,6 +1,12 @@
 // Event guards: text auto-resize, Ctrl multi-select, fast load/save, primary tool restore.
-import { silently } from '../../services/storageBridge';
+import {
+  EXCALIDRAW_SELECTORS,
+  EXCALIDRAW_TESTIDS,
+  testIdSelector,
+} from '../../excalidraw/domContract';
+import { isMacPlatform, silently } from '../../utils/common';
 import { runDirectDiskSaveWithApi, runDirectFileLoadWithApi } from '../apiActions';
+import { getButtonIconSignature, isEditableFocused } from './dom';
 import {
   focusActiveTextWysiwyg,
   isTextToolActive,
@@ -22,10 +28,15 @@ export function installTextAutoResizeGuard(): () => void {
     touchTextPointerId = null;
   };
 
+  const resetAllTextGuardState = () => {
+    downPos = null;
+    clearPendingTouchFocus();
+  };
+
   const onPointerDownCapture = (e: PointerEvent) => {
     if (e.button !== 0 || e.altKey) return;
     if (!isTextToolActive()) return;
-    if (!(e.target instanceof Element) || !e.target.matches('canvas.interactive')) return;
+    if (!(e.target instanceof Element) || !e.target.matches(EXCALIDRAW_SELECTORS.interactiveCanvas)) return;
 
     // On touch devices, never swallow pointermove or rewrite pointerup coordinates;
     // instead arm a synchronous WYSIWYG focus assist on pointerup/touchend so mobile virtual keyboards reliably open.
@@ -95,33 +106,28 @@ export function installTextAutoResizeGuard(): () => void {
   window.addEventListener('pointermove', onPointerMove, true);
   window.addEventListener('pointerup', onPointerUp, true);
   window.addEventListener('pointercancel', onPointerCancel, true);
+  window.addEventListener('blur', resetAllTextGuardState);
 
   return () => {
-    clearPendingTouchFocus();
+    resetAllTextGuardState();
     window.removeEventListener('pointerdown', onPointerDownCapture, true);
     window.removeEventListener('pointerdown', onPointerDownBubble, false);
     window.removeEventListener('pointermove', onPointerMove, true);
     window.removeEventListener('pointerup', onPointerUp, true);
     window.removeEventListener('pointercancel', onPointerCancel, true);
+    window.removeEventListener('blur', resetAllTextGuardState);
   };
 }
 
 /* ================= Ctrl+Click Multi-Select Guard ================= */
-export function isMacPlatform(): boolean {
-  return (
-    typeof navigator !== 'undefined' &&
-    /Mac|iPod|iPhone|iPad/i.test(navigator.platform || navigator.userAgent || '')
-  );
-}
-
 function isSelectionToolActive(root: ParentNode = document): boolean {
   if (runtime.api) {
     const t = silently(() => runtime.api?.getAppState()?.activeTool?.type);
     if (t) return t === 'selection';
   }
   return !!(
-    root.querySelector('.App-toolbar [data-testid="toolbar-selection"].ToolIcon--checked') ||
-    root.querySelector('.App-toolbar [data-exq-mobile-tool="selection"].exq-active')
+    root.querySelector(`${EXCALIDRAW_SELECTORS.toolbar} ${testIdSelector(EXCALIDRAW_TESTIDS.selection)}.ToolIcon--checked`) ||
+    root.querySelector(`${EXCALIDRAW_SELECTORS.toolbar} [data-exq-mobile-tool="selection"].exq-active`)
   );
 }
 
@@ -145,7 +151,7 @@ export function installCtrlMultiSelectGuard(): () => void {
     if (e.button !== 0 || e.altKey) return;
     const isMac = isMacPlatform();
     if (!(isMac ? e.metaKey : e.ctrlKey)) return;
-    if (!(e.target instanceof Element) || !e.target.matches('canvas.interactive')) return;
+    if (!(e.target instanceof Element) || !e.target.matches(EXCALIDRAW_SELECTORS.interactiveCanvas)) return;
     if (!isSelectionToolActive()) return;
 
     const st = silently(() => runtime.api?.getAppState());
@@ -212,31 +218,39 @@ function openFilePickerForFastLoad(): void {
   input.type = 'file';
   input.accept = '.excalidraw,.json,application/json,image/*';
   input.style.display = 'none';
-  input.addEventListener('change', async () => {
-    const file = input.files?.[0];
-    input.remove();
-    if (!file) return;
-    await runDirectFileLoadWithApi(runtime.api, file, {
-      lang: runtime.prefs.lang,
-      showToast,
-      defaultPenColor: runtime.prefs.quickOpts.defaultPenColor,
-    });
-  });
+  input.addEventListener(
+    'change',
+    async () => {
+      const file = input.files?.[0];
+      input.remove();
+      if (!file) return;
+      await runDirectFileLoadWithApi(runtime.api, file, {
+        lang: runtime.prefs.lang,
+        showToast,
+        defaultPenColor: runtime.prefs.quickOpts.defaultPenColor,
+      });
+    },
+    { once: true },
+  );
+  input.addEventListener('cancel', () => input.remove(), { once: true });
   document.body?.append(input);
   input.click();
 }
 
 export function installFastLoadSaveInterceptor(): () => void {
+  const loadSel = testIdSelector(EXCALIDRAW_TESTIDS.loadButton);
+  const saveSel = testIdSelector(EXCALIDRAW_TESTIDS.jsonExport);
+
   const onClick = (e: MouseEvent) => {
     if (!runtime.prefs.quickOpts.fastLoadSave || runtime.isBusy || !runtime.api) return;
     if (!(e.target instanceof Element)) return;
-    if (e.target.closest('[data-testid="load-button"]')) {
+    if (e.target.closest(loadSel)) {
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
       sendEscape();
       openFilePickerForFastLoad();
-    } else if (e.target.closest('[data-testid="json-export-button"]')) {
+    } else if (e.target.closest(saveSel)) {
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
@@ -277,26 +291,14 @@ function withInternalToolClick<T>(fn: () => T): T {
   }
 }
 
-export function getButtonIconSignature(btn: Element | null): string {
-  if (!btn || typeof btn.querySelectorAll !== 'function') return '';
-  return Array.from(btn.querySelectorAll('svg path, svg circle, svg rect, svg polyline, svg line'))
-    .map((n) => n.getAttribute('d') || n.tagName)
-    .join('|');
-}
-
-export function isEditableFocused(): boolean {
-  const active = document.activeElement as HTMLElement | null;
-  if (!active) return false;
-  const tag = active.tagName;
-  return tag === 'INPUT' || tag === 'TEXTAREA' || !!active.isContentEditable;
-}
-
 export async function restorePrimaryFreedraw(): Promise<boolean> {
   if (runtime.api) {
     runtime.api.setActiveTool({ type: 'freedraw' });
     return true;
   }
-  const popFree = document.querySelector<HTMLElement>('.tool-popover-content [data-testid="toolbar-freedraw"]');
+  const popFree = document.querySelector<HTMLElement>(
+    `${EXCALIDRAW_SELECTORS.toolPopoverContent} ${testIdSelector(EXCALIDRAW_TESTIDS.freedraw)}`,
+  );
   if (popFree) {
     withInternalToolClick(() => popFree.click());
     return true;
@@ -315,8 +317,12 @@ export async function restorePrimarySelection(selBtn?: Element | null): Promise<
     runtime.api.setActiveTool({ type: 'selection' });
     return true;
   }
-  const popSel = document.querySelector<HTMLElement>('.tool-popover-content [data-testid="toolbar-selection"]');
-  const lassoChecked = !!document.querySelector('.tool-popover-content [data-testid="toolbar-lasso"].ToolIcon--checked');
+  const popSel = document.querySelector<HTMLElement>(
+    `${EXCALIDRAW_SELECTORS.toolPopoverContent} ${testIdSelector(EXCALIDRAW_TESTIDS.selection)}`,
+  );
+  const lassoChecked = !!document.querySelector(
+    `${EXCALIDRAW_SELECTORS.toolPopoverContent} ${testIdSelector(EXCALIDRAW_TESTIDS.lasso)}.ToolIcon--checked`,
+  );
   if (popSel && lassoChecked) {
     withInternalToolClick(() => popSel.click());
     return true;
@@ -333,14 +339,14 @@ export function installPrimaryToolRestoreGuard(): () => void {
   const onClick = (e: MouseEvent) => {
     if (internalToolClickDepth > 0 || runtime.isBusy) return;
     if (!(e.target instanceof Element)) return;
-    const tbBtn = e.target.closest('.App-toolbar .Stack_horizontal > button[data-testid]');
+    const tbBtn = e.target.closest(EXCALIDRAW_SELECTORS.toolbarPrimaryButton);
     if (!tbBtn) return;
     const tid = tbBtn.getAttribute('data-testid');
-    if (tid === 'toolbar-freedraw') {
+    if (tid === EXCALIDRAW_TESTIDS.freedraw) {
       setTimeout(() => {
         void restorePrimaryFreedraw();
       }, 20);
-    } else if (tid === 'toolbar-selection') {
+    } else if (tid === EXCALIDRAW_TESTIDS.selection) {
       setTimeout(() => {
         void restorePrimarySelection(tbBtn);
       }, 20);

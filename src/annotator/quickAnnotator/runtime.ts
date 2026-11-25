@@ -1,7 +1,14 @@
 // Shared runtime state (Excalidraw API / prefs), language switching, toast, and native tool helpers.
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 import type { AppLang, Prefs } from '../../types/annotator';
-import { DEFAULT_PREFS, resolvePreferJpFont, savePrefs, silently } from '../../services/storageBridge';
+import {
+  EXCALIDRAW_SELECTORS,
+  EXCALIDRAW_TESTIDS,
+  TESTID_TO_TOOL_TYPE,
+  toolbarTestIdSelector,
+} from '../../excalidraw/domContract';
+import { createDefaultPrefs, resolvePreferJpFont, savePrefs } from '../../services/storageBridge';
+import { silently } from '../../utils/common';
 import { applyJapaneseGlyphOverride, refreshSceneHandDrawnTextFonts } from '../jpGlyphOverride';
 import { REDACT_TOOL_CUSTOM_TYPE, SHAPE_OTHER_ITEMS } from './constants';
 import { el } from './dom';
@@ -19,17 +26,7 @@ export const runtime: {
   onLangChange: ((lang: AppLang) => void) | null;
 } = {
   api: null,
-  prefs: {
-    lang: DEFAULT_PREFS.lang,
-    themeMode: DEFAULT_PREFS.themeMode,
-    boxSelectionMode: DEFAULT_PREFS.boxSelectionMode,
-    inputDevice: DEFAULT_PREFS.inputDevice,
-    stylesPanelMode: DEFAULT_PREFS.stylesPanelMode,
-    preferJpFont: DEFAULT_PREFS.preferJpFont,
-    exportOpts: { ...DEFAULT_PREFS.exportOpts },
-    quickOpts: { ...DEFAULT_PREFS.quickOpts },
-    redactOpts: { ...DEFAULT_PREFS.redactOpts },
-  },
+  prefs: createDefaultPrefs(),
   lastShapeOther: 'arrow',
   lastMobileShapeOther: 'ellipse',
   isBusy: false,
@@ -39,9 +36,9 @@ export const runtime: {
   primarySelIconSig: '',
   onLangChange: null,
 };
+
 let syncScheduled = false;
-// The sync handler is registered by the entry module (index.ts) so that feature
-// modules can request a UI re-sync without importing the entry module (no cycles).
+// Registered by index.ts so feature modules can request re-sync without importing index.ts (no cycles).
 let syncHandler: (() => void) | null = null;
 
 export function setSyncHandler(handler: (() => void) | null): void {
@@ -137,7 +134,7 @@ export function getActiveNativeToolId(root: ParentNode = document): 'arrow' | 'l
   }
   for (const item of SHAPE_OTHER_ITEMS) {
     if (item.id === 'redact') continue;
-    const btn = root.querySelector(`.App-toolbar [data-testid="${item.testId}"]`);
+    const btn = root.querySelector(toolbarTestIdSelector(item.testId));
     if (btn?.classList.contains('ToolIcon--checked')) return item.id;
   }
   return null;
@@ -145,26 +142,13 @@ export function getActiveNativeToolId(root: ParentNode = document): 'arrow' | 'l
 
 export function clickNativeTool(testId: string, root: ParentNode = document): boolean {
   if (runtime.api) {
-    const map: Record<string, string> = {
-      'toolbar-rectangle': 'rectangle',
-      'toolbar-ellipse': 'ellipse',
-      'toolbar-text': 'text',
-      'toolbar-image': 'image',
-      'toolbar-frame': 'frame',
-      'toolbar-arrow': 'arrow',
-      'toolbar-line': 'line',
-      'toolbar-diamond': 'diamond',
-      'toolbar-eraser': 'eraser',
-      'toolbar-stickynote': 'stickynote',
-      'toolbar-lasso': 'lasso',
-    };
-    const toolType = map[testId];
+    const toolType = TESTID_TO_TOOL_TYPE[testId];
     if (toolType) {
       runtime.api.setActiveTool({ type: toolType as never });
       return true;
     }
   }
-  const btn = root.querySelector<HTMLElement>(`.App-toolbar [data-testid="${testId}"]`);
+  const btn = root.querySelector<HTMLElement>(toolbarTestIdSelector(testId));
   if (btn) {
     btn.click();
     return true;
@@ -172,20 +156,20 @@ export function clickNativeTool(testId: string, root: ParentNode = document): bo
   return false;
 }
 
-/* ================= Text Tool Auto-Resize Guard ================= */
+/* ================= Text Tool Auto-Resize Guard Helpers ================= */
 export function isTextToolActive(root: ParentNode = document): boolean {
   if (runtime.api) {
     const t = silently(() => runtime.api?.getAppState()?.activeTool?.type);
     if (t) return t === 'text';
   }
   return !!(
-    root.querySelector('.App-toolbar [data-testid="toolbar-text"].ToolIcon--checked') ||
-    root.querySelector('.App-toolbar [data-exq-mobile-tool="text"].exq-active')
+    root.querySelector(`${toolbarTestIdSelector(EXCALIDRAW_TESTIDS.text)}.ToolIcon--checked`) ||
+    root.querySelector(`${EXCALIDRAW_SELECTORS.toolbar} [data-exq-mobile-tool="text"].exq-active`)
   );
 }
 
 export function focusActiveTextWysiwyg(): boolean {
-  const editable = document.querySelector<HTMLTextAreaElement>('textarea.excalidraw-wysiwyg');
+  const editable = document.querySelector<HTMLTextAreaElement>(EXCALIDRAW_SELECTORS.wysiwygTextarea);
   if (!editable) return false;
   if (document.activeElement !== editable) {
     silently(() => editable.focus({ preventScroll: true }));

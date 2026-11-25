@@ -1,9 +1,9 @@
 // Pointer drag controller for the redact (mosaic / blur / blackout) tool.
-import { silently } from '../../services/storageBridge';
+import { EXCALIDRAW_SELECTORS } from '../../excalidraw/domContract';
+import { silently } from '../../utils/common';
 import { createOrUpdateRedactElement } from '../redactProcessor';
-import { el } from './dom';
+import { el, isEditableFocused } from './dom';
 import { isRedactToolActive, runtime, scheduleSync } from './runtime';
-import { isEditableFocused } from './guards';
 
 /* ================= Blur / Redact Drag Controller (Item 5) ================= */
 export function installRedactDragController(): () => void {
@@ -55,17 +55,22 @@ export function installRedactDragController(): () => void {
     }
   };
 
+  const onWindowBlur = () => {
+    spaceHeld = false;
+    clearDrag();
+  };
+
   const onPointerDown = (e: PointerEvent) => {
     if (!runtime.api || runtime.isBusy || spaceHeld) return;
     if (e.button !== 0 || e.altKey) return;
     if (!isRedactToolActive()) return;
-    if (!(e.target instanceof HTMLCanvasElement) || !e.target.matches('canvas.interactive')) return;
+    if (!(e.target instanceof HTMLCanvasElement) || !e.target.matches(EXCALIDRAW_SELECTORS.interactiveCanvas)) return;
 
     e.preventDefault();
     e.stopPropagation();
     e.stopImmediatePropagation();
 
-    const host = e.target.closest('.excalidraw') || document.body;
+    const host = e.target.closest(EXCALIDRAW_SELECTORS.root) || document.body;
     const boxEl = el('div', { class: 'exq-redact-rubberband', 'data-exq-redact-rubberband': '1' });
     host.append(boxEl);
 
@@ -150,15 +155,18 @@ export function installRedactDragController(): () => void {
 
   window.addEventListener('keydown', onKeyDown, true);
   window.addEventListener('keyup', onKeyUp, true);
+  window.addEventListener('blur', onWindowBlur);
   window.addEventListener('pointerdown', onPointerDown, true);
   window.addEventListener('pointermove', onPointerMove, true);
   window.addEventListener('pointerup', onPointerUp, true);
   window.addEventListener('pointercancel', onPointerCancel, true);
 
   return () => {
+    spaceHeld = false;
     clearDrag();
     window.removeEventListener('keydown', onKeyDown, true);
     window.removeEventListener('keyup', onKeyUp, true);
+    window.removeEventListener('blur', onWindowBlur);
     window.removeEventListener('pointerdown', onPointerDown, true);
     window.removeEventListener('pointermove', onPointerMove, true);
     window.removeEventListener('pointerup', onPointerUp, true);

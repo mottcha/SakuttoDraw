@@ -3,12 +3,14 @@ import { CaptureUpdateAction } from '@excalidraw/excalidraw';
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types';
 import type { AppLang } from '../../types/annotator';
+import { EXCALIDRAW_SELECTORS } from '../../excalidraw/domContract';
 import { getMessages } from '../../i18n/messages';
 import { DEFAULT_PEN_COLOR } from '../../services/storageBridge';
+import { nextElementNonce } from '../../utils/common';
 import { isRedactElement } from '../redactProcessor';
+import { getCurrentPenColor } from './actions';
 import { el, svgIcon } from './dom';
 import { runtime, scheduleSync, showToast } from './runtime';
-import { getCurrentPenColor } from './mainMenu';
 
 /* ================= Stroke <-> Background Fill Toggle (Item 6) ================= */
 const FILLABLE_ELEMENT_TYPES = new Set(['rectangle', 'ellipse', 'diamond', 'line', 'freedraw']);
@@ -185,7 +187,7 @@ export function toggleFillOrSwapColorsWithApi(
     const fillableIds = new Set(getSelectedFillableElements(api).map((e) => e.id));
     if (fillableIds.size === 0) return false;
 
-    let primaryStyle: { strokeColor: string; backgroundColor: string; fillStyle: ElementFillStyle } | null = null;
+    let updatedAny = false;
     const now = Date.now();
     const nextElements = api.getSceneElements().map((elItem) => {
       if (!fillableIds.has(elItem.id)) return elItem;
@@ -196,24 +198,19 @@ export function toggleFillOrSwapColorsWithApi(
         fallbackStrokeColor: defaultPenColor,
         targetMode,
       });
-      if (!primaryStyle) primaryStyle = swapped;
+      updatedAny = true;
       return {
         ...elItem,
         strokeColor: swapped.strokeColor,
         backgroundColor: swapped.backgroundColor,
         fillStyle: swapped.fillStyle,
         version: elItem.version + 1,
-        versionNonce: Math.floor(Math.random() * 2147483647) + 1,
+        versionNonce: nextElementNonce(),
         updated: now,
       };
     });
 
-    if (!primaryStyle) return false;
-    const resolvedStyle = primaryStyle as {
-      strokeColor: string;
-      backgroundColor: string;
-      fillStyle: ElementFillStyle;
-    };
+    if (!updatedAny) return false;
 
     api.updateScene({
       elements: nextElements,
@@ -281,8 +278,8 @@ function updateFillToggleButtonState(
 }
 
 function syncCompactFillToggle(container: Element, isMobile: boolean): boolean {
-  const strokeTrigger = container.querySelector('[data-openpopup="elementStroke"]');
-  const bgTrigger = container.querySelector('[data-openpopup="elementBackground"]');
+  const strokeTrigger = container.querySelector(EXCALIDRAW_SELECTORS.strokePopupTrigger);
+  const bgTrigger = container.querySelector(EXCALIDRAW_SELECTORS.bgPopupTrigger);
   const existing = fillToggleMounts.get(container);
   const { isFilledOnly, eligible } = getActiveStrokeFillState(runtime.api);
 
@@ -337,7 +334,7 @@ function syncCompactFillToggle(container: Element, isMobile: boolean): boolean {
       { class: `compact-action-item exq-fill-compact-item${isMobile ? ' exq-fill-mobile-item' : ''}` },
       btn,
     );
-    const bgItem = bgTrigger.closest('.compact-action-item');
+    const bgItem = bgTrigger.closest(EXCALIDRAW_SELECTORS.compactActionItem);
     if (bgItem && bgItem.parentElement === container) {
       container.insertBefore(wrap, bgItem.nextSibling);
     } else {
@@ -356,12 +353,12 @@ export function syncStylesPanelColorSwap(root: ParentNode = document): boolean {
   root.querySelectorAll('[data-exq-fill-segment="1"]').forEach((node) => node.remove());
 
   let updated = false;
-  const slimContainer = root.querySelector('.App-menu_top__left .compact-shape-actions, .compact-shape-actions-island .compact-shape-actions');
+  const slimContainer = root.querySelector(EXCALIDRAW_SELECTORS.slimStyleActions);
   if (slimContainer) {
     updated = syncCompactFillToggle(slimContainer, false) || updated;
   }
 
-  const mobileContainer = root.querySelector('.mobile-shape-actions > div:first-child');
+  const mobileContainer = root.querySelector(EXCALIDRAW_SELECTORS.mobileStyleActionsLeft);
   if (mobileContainer) {
     updated = syncCompactFillToggle(mobileContainer, true) || updated;
   }

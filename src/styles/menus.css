@@ -1,0 +1,392 @@
+/* === Extra Tools T3 Bar, Main Menu Export Accordion, Preferences & Custom Settings === */
+.exq-extra-sep {
+  height: 1px;
+  background: var(--default-border-color, rgba(0, 0, 0, 0.1));
+  margin: 4px 2px;
+}
+
+/* Extra-tools T3 toolbar-matched top icon row ([Eraser][Sticky][Lasso] | [Lock]) */
+.exq-extra-tb-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 3px;
+  gap: 2px;
+}
+.exq-extra-tb-btn {
+  flex: 1;
+  height: 36px;
+  padding: 0;
+  border: none;
+  border-radius: var(--border-radius-lg, 8px);
+  background: transparent;
+  color: var(--icon-fill-color, var(--text-primary-color, #1b1b1f));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease, transform 0.08s ease;
+}
+.exq-extra-tb-btn:hover { background: var(--button-hover-bg, #f1f0ff); }
+.exq-extra-tb-btn:active { transform: scale(0.95); }
+.exq-extra-tb-btn.exq-active {
+  background: var(--color-surface-primary-container, #e0dfff);
+  color: var(--color-on-primary-container, #030064);
+}
+.exq-extra-tb-key {
+  position: absolute;
+  right: 5px;
+  bottom: 2px;
+  font-size: 9px;
+  opacity: 0.5;
+  pointer-events: none;
+}
+.exq-extra-tb-vdiv {
+  width: 1px;
+  height: 18px;
+  background: var(--default-border-color, rgba(0, 0, 0, 0.1));
+  margin: 0 3px;
+  flex-shrink: 0;
+}
+
+/* Unified Flat Accordion (L1-A & Drawing Assist: no border, no card bg, left guide line) */
+.dropdown-menu-container:has(.exq-main-export-root) {
+  width: 244px !important;
+  min-width: 244px !important;
+}
+.dropdown-menu-container:has(.exq-extra-options-root) {
+  min-width: 276px !important;
+}
+
+.exq-extra-options-root,
+.exq-main-export-root {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.exq-acc-flat-btn {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  height: 31px;
+  padding: 0 9px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-primary-color, #1b1b1f);
+  font-size: 0.875rem;
+  font-weight: 400;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.12s ease;
+}
+.exq-acc-flat-btn:hover { background: var(--button-hover-bg, #f1f0ff); }
+.exq-acc-chev {
+  margin-left: auto;
+  color: var(--text-secondary-color, #686878);
+  display: inline-flex;
+  transition: transform 0.14s ease;
+}
+.exq-acc-open > .exq-acc-flat-btn .exq-acc-chev { transform: rotate(180deg); }
+
+.exq-acc-nest {
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  margin: 2px 0 2px 15px;
+  padding-left: 6px;
+  border-left: 1.5px solid var(--default-border-color, rgba(0, 0, 0, 0.1));
+}
+.exq-acc-open > .exq-acc-nest { display: flex; }
+
+.exq-opt-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 28px;
+  padding: 2px 8px;
+  border-radius: 7px;
+  font-size: 12px;
+  color: var(--text-primary-color, #1b1b1f);
+  cursor: pointer;
+  user-select: none;
+}
+.exq-opt-row:hover { background: var(--button-hover-bg, #f1f0ff); }
+.exq-opt-label { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.exq-opt-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+}
+.exq-opt-shortcut {
+  font-size: 10.5px;
+  color: var(--text-secondary-color, #686878);
+  opacity: 0.72;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Language dropdown inside MainMenu */
+.exq-main-lang-item {
+  height: auto !important;
+  padding: 4px 8px 6px !important;
+}
+.exq-main-lang-select {
+  width: 100%;
+}
+
+/* Preferences & Custom Settings submenu layout */
+.excalidraw .excalidraw-main-menu-preferences-submenu,
+.excalidraw .exq-custom-settings-submenu {
+  width: 344px;
+  min-width: 344px;
+  max-width: min(344px, calc(100vw - 24px)) !important;
+}
+.excalidraw.excalidraw--mobile .excalidraw-main-menu-preferences-submenu,
+.excalidraw.excalidraw--mobile .exq-custom-settings-submenu {
+  width: min(320px, calc(100vw - 24px));
+  min-width: 0;
+}
+.exq-custom-toggle-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.exq-custom-toggle-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 9px;
+  min-height: 36px;
+  padding: 5px 9px;
+  border-radius: 9px;
+  border: 1px solid var(--default-border-color, rgba(128, 128, 148, 0.22));
+  background: var(--color-surface-low, rgba(128, 128, 148, 0.06));
+  color: var(--text-primary-color, #1b1b1f);
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+.exq-custom-toggle-card:hover {
+  background: var(--button-hover-bg, #f1f0ff);
+}
+.exq-custom-toggle-card.exq-active {
+  border-color: color-mix(in srgb, var(--color-primary, #6965db) 42%, transparent);
+  background: color-mix(in srgb, var(--color-primary, #6965db) 8%, transparent);
+}
+.exq-custom-toggle-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid var(--default-border-color, rgba(128, 128, 148, 0.2));
+  background: var(--island-bg-color, #ffffff);
+  color: var(--text-secondary-color, #686878);
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+.exq-custom-toggle-card.exq-active .exq-custom-toggle-icon {
+  border-color: color-mix(in srgb, var(--color-primary, #6965db) 32%, transparent);
+  background: color-mix(in srgb, var(--color-primary, #6965db) 16%, transparent);
+  color: var(--color-primary, #6965db);
+}
+.exq-custom-toggle-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  line-height: 1.25;
+}
+.exq-custom-swatch-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 2px 2px 0;
+  flex-wrap: wrap;
+}
+.exq-custom-swatch {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1.5px solid rgba(128, 128, 148, 0.36);
+  cursor: pointer;
+  transition: transform 0.1s ease, outline-color 0.1s ease;
+}
+.exq-custom-swatch:hover {
+  transform: scale(1.06);
+}
+.exq-custom-swatch.exq-active {
+  outline: 2px solid var(--color-primary, #6965db);
+  outline-offset: 2px;
+}
+.exq-pref-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 4px 6px 6px;
+}
+.exq-pref-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.exq-pref-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.exq-pref-group-title {
+  padding: 0 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary-color, #686878);
+  user-select: none;
+}
+.exq-pref-group-title--icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.exq-pref-close-btn {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary-color, #686878);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+.exq-pref-close-btn:hover {
+  background: var(--button-hover-bg, rgba(105, 101, 219, 0.14));
+  color: var(--text-primary-color, #1b1b1f);
+}
+.exq-pref-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.exq-pref-card-grid--3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.exq-pref-card {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--default-border-color, rgba(128, 128, 148, 0.22));
+  background: var(--color-surface-low, rgba(128, 128, 148, 0.06));
+  color: var(--text-primary-color, #1b1b1f);
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+.exq-pref-card--compact3 {
+  font-size: 11px;
+  gap: 4px;
+  padding: 5px 4px;
+}
+.exq-pref-card:hover {
+  background: var(--button-hover-bg, #f1f0ff);
+}
+.exq-pref-card.exq-active {
+  border-color: var(--color-primary, #6965db);
+  background: color-mix(in srgb, var(--color-primary, #6965db) 12%, transparent);
+  color: var(--color-primary, #6965db);
+  font-weight: 600;
+}
+.exq-pref-shortcut {
+  font-size: 9.5px;
+  opacity: 0.62;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.exq-pref-fonts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 6px 6px;
+}
+.exq-font-section-title {
+  padding: 2px 2px 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary-color, #686878);
+  user-select: none;
+}
+.exq-font-chip-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.exq-font-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 44px;
+  padding: 5px 4px;
+  border-radius: 8px;
+  border: 1px solid var(--default-border-color, rgba(128, 128, 148, 0.22));
+  background: var(--color-surface-low, rgba(128, 128, 148, 0.06));
+  color: var(--text-primary-color, #1b1b1f);
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.exq-font-chip:hover:not(:disabled) {
+  background: var(--color-primary, #6965db);
+  color: #ffffff;
+  border-color: transparent;
+}
+.exq-font-chip:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+.exq-font-chip-name {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.exq-font-chip-sub {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 9.5px;
+  opacity: 0.68;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.exq-font-chip:hover:not(:disabled) .exq-font-chip-sub {
+  opacity: 0.95;
+}
+.exq-font-chip.exq-font-chip--installed {
+  background: rgba(217, 45, 32, 0.1);
+  color: #d92d20;
+  border-color: rgba(217, 45, 32, 0.28);
+}
+.exq-font-chip.exq-font-chip--installed:hover:not(:disabled) {
+  background: #d92d20;
+  color: #ffffff;
+  border-color: transparent;
+}

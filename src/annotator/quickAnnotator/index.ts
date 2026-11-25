@@ -1,5 +1,23 @@
-// Quick annotator entry point: UI sync scheduling, boot, and public re-exports.
+// Quick annotator entry point: UI sync loop and boot lifecycle.
+import { EXCALIDRAW_SELECTORS } from '../../excalidraw/domContract';
 import { loadPrefs } from '../../services/storageBridge';
+import { getCurrentPenColor } from './actions';
+import { syncContextMenu } from './contextMenu';
+import { isEditableFocused } from './dom';
+import { syncExtraToolsMenu } from './extraToolsMenu';
+import {
+  getActiveStrokeFillState,
+  syncStylesPanelColorSwap,
+  toggleFillOrSwapColorsWithApi,
+} from './fillSwap';
+import {
+  installCtrlMultiSelectGuard,
+  installFastLoadSaveInterceptor,
+  installPrimaryToolRestoreGuard,
+  installTextAutoResizeGuard,
+} from './guards';
+import { syncMainMenu } from './mainMenu';
+import { installRedactDragController } from './redactDrag';
 import {
   closeFloatingPopovers,
   runtime,
@@ -7,24 +25,8 @@ import {
   setSyncHandler,
   showToast,
 } from './runtime';
-import {
-  installCtrlMultiSelectGuard,
-  installFastLoadSaveInterceptor,
-  installPrimaryToolRestoreGuard,
-  installTextAutoResizeGuard,
-  isEditableFocused,
-} from './guards';
 import { syncMobileShapeActions, syncMobileToolbar, syncToolbar } from './toolbar';
-import { getCurrentPenColor, syncMainMenu } from './mainMenu';
-import { syncExtraToolsMenu } from './extraToolsMenu';
-import { syncContextMenu } from './contextMenu';
 import { syncTopRightBar } from './topRightBar';
-import {
-  getActiveStrokeFillState,
-  syncStylesPanelColorSwap,
-  toggleFillOrSwapColorsWithApi,
-} from './fillSwap';
-import { installRedactDragController } from './redactDrag';
 
 let observer: MutationObserver | null = null;
 
@@ -44,6 +46,7 @@ export function syncUI(): void {
 setSyncHandler(syncUI);
 
 export function bootQuickAnnotator(): () => void {
+  setSyncHandler(syncUI);
   runtime.prefs = loadPrefs();
   if (typeof document !== 'undefined' && document.documentElement) {
     document.documentElement.lang = runtime.prefs.lang;
@@ -89,9 +92,20 @@ export function bootQuickAnnotator(): () => void {
   document.addEventListener('keydown', onDocKeyDown);
 
   syncUI();
-  const target = document.body || document.documentElement;
+  const target =
+    document.querySelector(`.sakutto-app-root, ${EXCALIDRAW_SELECTORS.root}`) ||
+    document.body ||
+    document.documentElement;
   if (target) {
-    observer = new MutationObserver(scheduleSync);
+    observer = new MutationObserver((mutations) => {
+      const hasRelevantMutation = mutations.some((m) => {
+        const targetEl = m.target instanceof Element ? m.target : m.target.parentElement;
+        return !targetEl?.closest('.exq-toast');
+      });
+      if (hasRelevantMutation) {
+        scheduleSync();
+      }
+    });
     observer.observe(target, {
       childList: true,
       subtree: true,
@@ -112,76 +126,3 @@ export function bootQuickAnnotator(): () => void {
     observer = null;
   };
 }
-
-// Public API (kept identical to the former single-file quickAnnotator.ts)
-export {
-  CANVAS_BG_SWATCHES,
-  DRAW_ASSIST_DEFS,
-  EXPORT_TOGGLE_DEFS,
-  EXTRA_T3_LEFT_ITEMS,
-  EXTRA_T3_LOCK_ITEM,
-  MOBILE_SHAPE_OTHER_ITEMS,
-  QUICK_OPT_DEFS,
-  REDACT_TOOL_CUSTOM_TYPE,
-  SHAPE_OTHER_ITEMS,
-} from './constants';
-export { cloneNativeToolbarIcon } from './dom';
-export {
-  activateRedactTool,
-  applyLanguage,
-  applyPreferJpFont,
-  attachExcalidrawAPI,
-  isRedactToolActive,
-  runtime,
-  scheduleSync,
-  setLangChangeListener,
-  setSyncHandler,
-  showToast,
-} from './runtime';
-export {
-  installCtrlMultiSelectGuard,
-  installFastLoadSaveInterceptor,
-  installPrimaryToolRestoreGuard,
-  installTextAutoResizeGuard,
-  restorePrimaryFreedraw,
-  restorePrimarySelection,
-} from './guards';
-export { syncMobileShapeActions, syncMobileToolbar, syncToolbar } from './toolbar';
-export {
-  applyCanvasBackground,
-  applyPenColor,
-  getCurrentCanvasBg,
-  getCurrentPenColor,
-  syncMainMenu,
-} from './mainMenu';
-export { activateLassoTool, syncExtraToolsMenu } from './extraToolsMenu';
-export { clampContextMenuPopover, syncContextMenu } from './contextMenu';
-export { runInstantExport, runInstantReset, syncTopRightBar } from './topRightBar';
-export {
-  clearTempFillSnapshot,
-  computeSwappedStrokeFill,
-  getActiveStrokeFillState,
-  restoreTempFillIfToolChanged,
-  syncStylesPanelColorSwap,
-  toggleFillOrSwapColorsWithApi,
-} from './fillSwap';
-export { installRedactDragController } from './redactDrag';
-export {
-  DEFAULT_PINK,
-  DEFAULT_PREFS,
-  DEFAULT_REDACT_COLOR,
-  REDACT_COLOR_SWATCHES,
-  bootstrapCleanCanvas,
-  clearIndexedDbFiles,
-  loadPrefs,
-  normalizeFormat,
-  normalizeScale,
-  savePrefs,
-  shouldSkipAutoReset,
-} from '../../services/storageBridge';
-export {
-  deleteSelectedElementsWithApi,
-  duplicateSelectedElementsWithApi,
-  filterTargetElementsForExport,
-  inlinePreSplitFontsIntoSvg,
-} from '../apiActions';

@@ -1,52 +1,13 @@
-// Top-right instant export / reset buttons.
+// Top-right 2-button instant export bar ([Copy] [Save]).
 import type { AppLang } from '../../types/annotator';
+import { EXCALIDRAW_SELECTORS } from '../../excalidraw/domContract';
 import { getMessages } from '../../i18n/messages';
-import { resolvePreferJpFont } from '../../services/storageBridge';
-import { runInstantExportWithApi, runInstantResetWithApi } from '../apiActions';
+import { runInstantExport } from './actions';
 import { el, svgIcon } from './dom';
-import { closeFloatingPopovers, runtime, showToast } from './runtime';
+import { runtime } from './runtime';
 
 const rightBarMounts = new WeakMap<Element, { lang: AppLang; wrap: HTMLElement }>();
 
-/* ================= Direct API Instant Export & Instant Reset ================= */
-export async function runInstantExport(
-  mode: 'copy' | 'png',
-  triggerBtn?: HTMLButtonElement | null,
-) {
-  if (runtime.isBusy) return { ok: false, reason: 'busy' };
-  runtime.isBusy = true;
-  if (triggerBtn) triggerBtn.disabled = true;
-
-  try {
-    closeFloatingPopovers(null);
-    return await runInstantExportWithApi(runtime.api, mode, runtime.prefs.exportOpts, {
-      lang: runtime.prefs.lang,
-      preferJpFont: resolvePreferJpFont(runtime.prefs),
-      showToast,
-    });
-  } finally {
-    runtime.isBusy = false;
-    if (triggerBtn) triggerBtn.disabled = false;
-  }
-}
-
-export async function runInstantReset(triggerBtn?: HTMLButtonElement | null) {
-  if (runtime.isBusy) return { ok: false, reason: 'busy' };
-  runtime.isBusy = true;
-  if (triggerBtn) triggerBtn.disabled = true;
-
-  try {
-    closeFloatingPopovers(null);
-    return await runInstantResetWithApi(runtime.api, runtime.prefs, {
-      showToast,
-    });
-  } finally {
-    runtime.isBusy = false;
-    if (triggerBtn) triggerBtn.disabled = false;
-  }
-}
-
-/* ================= Top-Right 2-Button Export Bar ([Copy] [Save]) ================= */
 function buildRightBarWidget() {
   const t = getMessages(runtime.prefs.lang);
   const wrap = el('div', { class: 'exq-right-wrap', 'data-exq-right-bar': '1' });
@@ -75,12 +36,18 @@ function buildRightBarWidget() {
     svgIcon('download', 15),
   );
 
+  let copyDoneTimer: ReturnType<typeof setTimeout> | null = null;
   copyBtn.addEventListener('click', async () => {
     const res = await runInstantExport('copy', copyBtn);
     if (res?.ok) {
+      if (copyDoneTimer !== null) {
+        clearTimeout(copyDoneTimer);
+      }
       copyBtn.classList.add('exq-done');
       copyBtn.replaceChildren(svgIcon('check', 15, '0 0 24 24', 2.5));
-      setTimeout(() => {
+      copyDoneTimer = setTimeout(() => {
+        copyDoneTimer = null;
+        if (!copyBtn.isConnected) return;
         copyBtn.classList.remove('exq-done');
         copyBtn.replaceChildren(svgIcon('copy', 15));
       }, 1100);
@@ -98,9 +65,7 @@ function buildRightBarWidget() {
 }
 
 export function syncTopRightBar(root: ParentNode = document): boolean {
-  const container =
-    root.querySelector('.layer-ui__wrapper__top-right') ||
-    root.querySelector('.excalidraw-ui-top-right');
+  const container = root.querySelector(EXCALIDRAW_SELECTORS.topRightContainer);
   if (!container) return false;
 
   let mounted = rightBarMounts.get(container);

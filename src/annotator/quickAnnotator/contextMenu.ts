@@ -1,34 +1,13 @@
 // Right-click context menu quick bar / layer bar and popover clamping.
+import { CTX_HIDDEN_TESTIDS, EXCALIDRAW_SELECTORS } from '../../excalidraw/domContract';
 import { getMessages } from '../../i18n/messages';
-import { silently } from '../../services/storageBridge';
+import { isMacPlatform, silently } from '../../utils/common';
 import { el, svgIcon } from './dom';
 import { runtime, sendEscape } from './runtime';
-import { isMacPlatform } from './guards';
 
 const contextMenuProcessed = new WeakSet<Element>();
 
 /* ================= Context Menu Cleanup & Rich UI (Design 1) ================= */
-const CTX_HIDDEN_TESTIDS = new Set([
-  'wrapSelectionInFrame',
-  'copyAsPng',
-  'copyAsSvg',
-  'copyText',
-  'copyAsText',
-  'copyStyles',
-  'pasteStyles',
-  'addToLibrary',
-  'sendBackward',
-  'bringForward',
-  'gridMode',
-  'objectsSnapMode',
-  'arrowBinding',
-  'midpointSnapping',
-  'zenMode',
-  'viewMode',
-  'minimap',
-  'stats',
-]);
-
 const CTX_QUICK_BAR_ITEMS = [
   { testId: 'cut', icon: 'cut', msgKey: 'ctxCut', shortcut: 'Ctrl+X', danger: false },
   { testId: 'copy', icon: 'copy', msgKey: 'ctxCopy', shortcut: 'Ctrl+C', danger: false },
@@ -177,7 +156,7 @@ function buildContextQuickBar(
 }
 
 export function clampContextMenuPopover(ul: Element): void {
-  const popover = ul.closest<HTMLElement>('.context-menu-popover');
+  const popover = ul.closest<HTMLElement>(EXCALIDRAW_SELECTORS.contextMenuPopover);
   if (!popover) return;
   const vw = typeof window !== 'undefined' ? window.innerWidth : 0;
   const vh = typeof window !== 'undefined' ? window.innerHeight : 0;
@@ -267,7 +246,7 @@ function buildContextLayerBar(
         nativeBtn.click();
         return;
       }
-      const liveZBtns = document.querySelectorAll<HTMLElement>('.zIndexButton');
+      const liveZBtns = document.querySelectorAll<HTMLElement>(EXCALIDRAW_SELECTORS.zIndexButton);
       if (liveZBtns[def.zIdx]) {
         liveZBtns[def.zIdx].click();
         sendEscape();
@@ -289,11 +268,11 @@ function buildContextLayerBar(
 }
 
 export function syncContextMenu(root: ParentNode = document): boolean {
-  const ul = root.querySelector('.context-menu');
+  const ul = root.querySelector(EXCALIDRAW_SELECTORS.contextMenu);
   if (!ul || contextMenuProcessed.has(ul)) return false;
 
   const isMobile = Boolean(
-    ul.closest('.excalidraw--mobile') || root.querySelector('.excalidraw--mobile'),
+    ul.closest(EXCALIDRAW_SELECTORS.mobileRoot) || root.querySelector(EXCALIDRAW_SELECTORS.mobileRoot),
   );
   let useMobileB2 = false;
 

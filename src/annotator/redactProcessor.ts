@@ -7,7 +7,8 @@ import type {
   ExcalidrawElement,
   OrderedExcalidrawElement,
 } from '@excalidraw/excalidraw/element/types';
-import { DEFAULT_PEN_COLOR, DEFAULT_REDACT_COLOR, normalizeHexColor } from '../services/storageBridge';
+import { DEFAULT_PEN_COLOR, DEFAULT_REDACT_COLOR } from '../services/storageBridge';
+import { nextElementNonce, normalizeHexColor } from '../utils/common';
 
 export interface SakuttoRedactMeta {
   v: 1;
@@ -46,10 +47,6 @@ export function getRedactMeta(el: ExcalidrawElement | null | undefined): Sakutto
     REDACT_BLACKOUT_COLOR,
   );
   return { v: 1, color };
-}
-
-function nextNonce(): number {
-  return Math.floor(Math.random() * 2147483647) + 1;
 }
 
 function buildBlackoutElement(rect: RedactRect, color: string): OrderedExcalidrawElement {
@@ -119,7 +116,7 @@ export function createOrUpdateRedactElement({
       roughness: 0,
       roundness: null,
       version: existingEl.version + 1,
-      versionNonce: nextNonce(),
+      versionNonce: nextElementNonce(),
       updated: Date.now(),
       customData: { ...existingEl.customData, sakuttoRedact: nextMeta },
     };
@@ -170,7 +167,7 @@ export function updateRedactElementsColor({
       roughness: 0,
       roundness: null,
       version: el.version + 1,
-      versionNonce: nextNonce(),
+      versionNonce: nextElementNonce(),
       updated: now,
       customData: { ...el.customData, sakuttoRedact: nextMeta },
     };

@@ -39,7 +39,6 @@ export interface MessageCatalog {
   assistShowGrid: string;
   assistArrowBinding: string;
   assistMidpointSnap: string;
-  quickSettings: string;
   customSettings: string;
   customBehaviorTitle: string;
   optAutoResetOnOpen: string;
@@ -66,7 +65,6 @@ export interface MessageCatalog {
   languageLabel: string;
   prefPreferJpFont: string;
   offlineFontsTitle: string;
-  redactSettingsTitle: string;
   redactColorTitle: string;
   fillToggleShort: string;
   swapStrokeFillTitle: string;
@@ -136,7 +134,6 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     assistShowGrid: 'Show grid',
     assistArrowBinding: 'Bind arrows to shapes',
     assistMidpointSnap: 'Snap arrows to midpoint',
-    quickSettings: 'Quick settings',
     customSettings: 'Custom settings',
     customBehaviorTitle: 'Behavior',
     optAutoResetOnOpen: 'Reset canvas on open',
@@ -163,7 +160,6 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     languageLabel: 'Language',
     prefPreferJpFont: 'Preferred kanji font',
     offlineFontsTitle: 'Offline hand-drawn fonts',
-    redactSettingsTitle: 'Blackout settings',
     redactColorTitle: 'Fill color',
     fillToggleShort: 'Fill',
     swapStrokeFillTitle: 'Toggle fill / swap stroke & background (Shift+X)',
@@ -231,7 +227,6 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     assistShowGrid: 'グリッドを表示',
     assistArrowBinding: '矢印を図形に結合',
     assistMidpointSnap: '矢印を中点にスナップ',
-    quickSettings: 'クイック設定',
     customSettings: 'カスタム設定',
     customBehaviorTitle: '動作設定',
     optAutoResetOnOpen: '起動時にキャンバスをリセット',
@@ -258,7 +253,6 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     languageLabel: '言語',
     prefPreferJpFont: '優先漢字フォント',
     offlineFontsTitle: 'オフライン手書きフォント',
-    redactSettingsTitle: '黒塗り設定',
     redactColorTitle: '塗りつぶし色',
     fillToggleShort: '塗潰',
     swapStrokeFillTitle: '塗りつぶし切替・ストロークと背景色を入替 (Shift+X)',
@@ -326,7 +320,6 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     assistShowGrid: '显示网格',
     assistArrowBinding: '箭头绑定到图形',
     assistMidpointSnap: '箭头吸附到中点',
-    quickSettings: '快捷设置',
     customSettings: '自定义设置',
     customBehaviorTitle: '行为设置',
     optAutoResetOnOpen: '打开时重置画布',
@@ -353,7 +346,6 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     languageLabel: '语言',
     prefPreferJpFont: '优先汉字字体',
     offlineFontsTitle: '离线手写字体',
-    redactSettingsTitle: '涂黑设置',
     redactColorTitle: '填充颜色',
     fillToggleShort: '填充',
     swapStrokeFillTitle: '切换填充/交换描边与背景色 (Shift+X)',
@@ -421,7 +413,6 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     assistShowGrid: '顯示格線',
     assistArrowBinding: '箭頭綁定至圖形',
     assistMidpointSnap: '箭頭吸附至中點',
-    quickSettings: '快速設定',
     customSettings: '自訂設定',
     customBehaviorTitle: '行為設定',
     optAutoResetOnOpen: '開啟時重設畫布',
@@ -448,7 +439,6 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     languageLabel: '語言',
     prefPreferJpFont: '優先漢字字體',
     offlineFontsTitle: '離線手寫字體',
-    redactSettingsTitle: '塗黑設定',
     redactColorTitle: '填滿顏色',
     fillToggleShort: '填滿',
     swapStrokeFillTitle: '切換填滿/交換筆畫與背景色 (Shift+X)',
@@ -516,7 +506,6 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     assistShowGrid: '그리드 표시',
     assistArrowBinding: '화살표를 도형에 결합',
     assistMidpointSnap: '화살표를 중점에 스냅',
-    quickSettings: '빠른 설정',
     customSettings: '사용자 설정',
     customBehaviorTitle: '동작 설정',
     optAutoResetOnOpen: '시작 시 캔버스 초기화',
@@ -543,7 +532,6 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     languageLabel: '언어',
     prefPreferJpFont: '우선 한자 글꼴',
     offlineFontsTitle: '오프라인 손글씨 글꼴',
-    redactSettingsTitle: '검은 가리기 설정',
     redactColorTitle: '채우기 색상',
     fillToggleShort: '채움',
     swapStrokeFillTitle: '채우기 전환 / 선과 배경색 바꾸기 (Shift+X)',

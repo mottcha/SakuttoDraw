@@ -1,31 +1,32 @@
 // Static definitions (tool groups, swatches, option defs) shared by the injected UI.
+import { EXCALIDRAW_TESTIDS } from '../../excalidraw/domContract';
 
 export const REDACT_TOOL_CUSTOM_TYPE = 'sakutto-redact';
 
 export const SHAPE_OTHER_ITEMS = [
-  { id: 'arrow', testId: 'toolbar-arrow', msgKey: 'toolArrow', shortcut: 'A' },
-  { id: 'line', testId: 'toolbar-line', msgKey: 'toolLine', shortcut: 'L' },
-  { id: 'diamond', testId: 'toolbar-diamond', msgKey: 'toolDiamond', shortcut: 'D' },
+  { id: 'arrow', testId: EXCALIDRAW_TESTIDS.arrow, msgKey: 'toolArrow', shortcut: 'A' },
+  { id: 'line', testId: EXCALIDRAW_TESTIDS.line, msgKey: 'toolLine', shortcut: 'L' },
+  { id: 'diamond', testId: EXCALIDRAW_TESTIDS.diamond, msgKey: 'toolDiamond', shortcut: 'D' },
   { id: 'redact', testId: 'toolbar-redact', msgKey: 'toolRedact', shortcut: '' },
 ] as const;
 
 export const MOBILE_SHAPE_OTHER_ITEMS = [
-  { id: 'ellipse', testId: 'toolbar-ellipse', msgKey: 'toolEllipse', shortcut: 'O' },
-  { id: 'arrow', testId: 'toolbar-arrow', msgKey: 'toolArrow', shortcut: 'A' },
-  { id: 'line', testId: 'toolbar-line', msgKey: 'toolLine', shortcut: 'L' },
-  { id: 'diamond', testId: 'toolbar-diamond', msgKey: 'toolDiamond', shortcut: 'D' },
+  { id: 'ellipse', testId: EXCALIDRAW_TESTIDS.ellipse, msgKey: 'toolEllipse', shortcut: 'O' },
+  { id: 'arrow', testId: EXCALIDRAW_TESTIDS.arrow, msgKey: 'toolArrow', shortcut: 'A' },
+  { id: 'line', testId: EXCALIDRAW_TESTIDS.line, msgKey: 'toolLine', shortcut: 'L' },
+  { id: 'diamond', testId: EXCALIDRAW_TESTIDS.diamond, msgKey: 'toolDiamond', shortcut: 'D' },
   { id: 'redact', testId: 'toolbar-redact', msgKey: 'toolRedact', shortcut: '' },
 ] as const;
 
 export const EXTRA_T3_LEFT_ITEMS = [
-  { id: 'eraser', testId: 'toolbar-eraser', msgKey: 'toolEraser', shortcut: 'E' },
-  { id: 'sticky', testId: 'toolbar-stickynote', msgKey: 'toolSticky', shortcut: 'N' },
-  { id: 'lasso', testId: 'toolbar-lasso', msgKey: 'toolLasso', shortcut: '' },
+  { id: 'eraser', testId: EXCALIDRAW_TESTIDS.eraser, msgKey: 'toolEraser', shortcut: 'E' },
+  { id: 'sticky', testId: EXCALIDRAW_TESTIDS.stickynote, msgKey: 'toolSticky', shortcut: 'N' },
+  { id: 'lasso', testId: EXCALIDRAW_TESTIDS.lasso, msgKey: 'toolLasso', shortcut: '' },
 ] as const;
 
 export const EXTRA_T3_LOCK_ITEM = {
   id: 'lock',
-  testId: 'toolbar-lock',
+  testId: EXCALIDRAW_TESTIDS.lock,
   msgKey: 'toolLock',
   shortcut: 'Q',
 } as const;
