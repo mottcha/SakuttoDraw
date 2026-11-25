@@ -588,6 +588,72 @@ describe('quickAnnotator DOM sync, language switcher, and textAutoResize guard r
     expect(document.querySelector('.exq-ctx-item-icon')).toBeNull();
   });
 
+  it('renders icons for wrapTextInContainer, all visible context menu items, and switches lock/unlock icon accurately', () => {
+    applyLanguage('ja-JP');
+    runtime.prefs.quickOpts.modernContextMenu = true;
+
+    const visibleTestIds = [
+      'selectAllElementsInFrame',
+      'removeAllElementsFromFrame',
+      'cropEditor',
+      'group',
+      'autoResize',
+      'unbindText',
+      'bindText',
+      'wrapTextInContainer',
+      'ungroup',
+      'flipHorizontal',
+      'flipVertical',
+      'toggleLinearEditor',
+      'hyperlink',
+      'copyElementLink',
+      'toggleElementLock',
+      'unlockAllElements',
+      'selectAll',
+    ];
+
+    attachExcalidrawAPI({
+      getAppState: () => ({ selectedElementIds: { 'el-1': true } }),
+      getSceneElements: () => [{ id: 'el-1', locked: false }],
+    } as unknown as ExcalidrawImperativeAPI);
+
+    document.body.innerHTML = `
+      <ul class="context-menu">
+        <li data-testid="cut"><button class="context-menu-item">切り取り</button></li>
+        <li data-testid="deleteSelectedElements"><button class="context-menu-item">削除</button></li>
+        ${visibleTestIds.map((tid) => `<li data-testid="${tid}"><button class="context-menu-item">${tid}</button></li>`).join('\n')}
+      </ul>
+    `;
+
+    expect(syncContextMenu()).toBe(true);
+    for (const tid of visibleTestIds) {
+      const svg = document.querySelector(`li[data-testid="${tid}"] .exq-ctx-item-icon svg`);
+      expect(svg, `missing SVG icon for ${tid}`).toBeTruthy();
+      expect(svg?.children.length, `empty SVG icon for ${tid}`).toBeGreaterThan(0);
+    }
+
+    const lockedIconHtml = document.querySelector('li[data-testid="toggleElementLock"] .exq-ctx-item-icon svg')?.innerHTML;
+
+    // When selected element is locked, toggleElementLock must display the unlock icon even with cut/delete present
+    attachExcalidrawAPI({
+      getAppState: () => ({ selectedElementIds: { 'el-1': true } }),
+      getSceneElements: () => [{ id: 'el-1', locked: true }],
+    } as unknown as ExcalidrawImperativeAPI);
+
+    document.body.innerHTML = `
+      <ul class="context-menu">
+        <li data-testid="cut"><button class="context-menu-item">切り取り</button></li>
+        <li data-testid="deleteSelectedElements"><button class="context-menu-item">削除</button></li>
+        <li data-testid="toggleElementLock"><button class="context-menu-item">ロック解除</button></li>
+      </ul>
+    `;
+
+    expect(syncContextMenu()).toBe(true);
+    const unlockedIconHtml = document.querySelector('li[data-testid="toggleElementLock"] .exq-ctx-item-icon svg')?.innerHTML;
+    expect(unlockedIconHtml).toBeTruthy();
+    expect(unlockedIconHtml).not.toBe(lockedIconHtml);
+  });
+
   it('auto-heals broken v1 IndexedDB without files-store and preserves images across reload when autoResetOnOpen is OFF', async () => {
     const fakeIdb = new IDBFactory();
 

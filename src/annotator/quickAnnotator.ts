@@ -222,6 +222,11 @@ const ICON_DEFS: Record<string, Array<[string, Record<string, string | number>]>
     ['polyline', { points: '16 16 14 18 16 20' }],
     ['line', { x1: 3, y1: 18, x2: 10, y2: 18 }],
   ],
+  wrapContainer: [
+    ['rect', { x: 3, y: 4, width: 18, height: 16, rx: 2.5 }],
+    ['line', { x1: 7.5, y1: 9.5, x2: 16.5, y2: 9.5 }],
+    ['line', { x1: 7.5, y1: 14.5, x2: 13.5, y2: 14.5 }],
+  ],
   editLine: [
     ['circle', { cx: 5, cy: 19, r: 2.5 }],
     ['circle', { cx: 19, cy: 5, r: 2.5 }],
@@ -1468,6 +1473,10 @@ const CTX_ITEM_ICON_MAP: Record<string, string> = {
   paste: 'paste',
   duplicateSelection: 'dup',
   deleteSelectedElements: 'reset',
+  sendToBack: 'toBack',
+  sendBackward: 'backward',
+  bringForward: 'forward',
+  bringToFront: 'toFront',
   cropEditor: 'crop',
   flipHorizontal: 'flipH',
   flipVertical: 'flipV',
@@ -1482,11 +1491,26 @@ const CTX_ITEM_ICON_MAP: Record<string, string> = {
   autoResize: 'wrap',
   unbindText: 'wrap',
   bindText: 'wrap',
+  wrapTextInContainer: 'wrapContainer',
   toggleLinearEditor: 'editLine',
   togglePolygon: 'editLine',
   selectAllElementsInFrame: 'frame',
   removeAllElementsFromFrame: 'frameRemove',
 };
+
+function isSelectedElementLocked(isEditableSelection: boolean): boolean {
+  if (runtime.api) {
+    const appState = silently(() => runtime.api?.getAppState());
+    const elements = silently(() => runtime.api?.getSceneElements());
+    if (elements && appState?.selectedElementIds) {
+      const selected = elements.filter((item) => appState.selectedElementIds[item.id]);
+      if (selected.length > 0) {
+        return selected.some((item) => item.locked);
+      }
+    }
+  }
+  return !isEditableSelection;
+}
 
 function isContextItemHidden(node: Element): boolean {
   if (node.tagName === 'HR') return node.classList.contains('exq-ctx-hr-hidden');
@@ -1651,8 +1675,8 @@ export function syncContextMenu(root: ParentNode = document): boolean {
 
       const tid = child.getAttribute('data-testid') || '';
       let iconName = CTX_ITEM_ICON_MAP[tid];
-      if (tid === 'toggleElementLock' && !isEditableSelection) {
-        iconName = 'unlock';
+      if (tid === 'toggleElementLock') {
+        iconName = isSelectedElementLocked(isEditableSelection) ? 'unlock' : 'lock';
       }
       const iconSlot = el(
         'span',
