@@ -10,6 +10,12 @@ export const SUPPORTED_LANGS: ReadonlyArray<{ code: AppLang; nativeLabel: string
 
 export interface MessageCatalog {
   shapeGroupTitle: string;
+  mobileShapeGroupTitle: string;
+  toolRectangle: string;
+  toolEllipse: string;
+  toolText: string;
+  toolImage: string;
+  toolFrame: string;
   toolArrow: string;
   toolLine: string;
   toolDiamond: string;
@@ -65,6 +71,7 @@ export interface MessageCatalog {
   ctxPaste: string;
   ctxDuplicate: string;
   ctxDelete: string;
+  ctxMore: string;
   ctxLayer: string;
   ctxBringToFront: string;
   ctxBringForward: string;
@@ -92,6 +99,12 @@ export interface MessageCatalog {
 const MESSAGES: Record<AppLang, MessageCatalog> = {
   en: {
     shapeGroupTitle: 'Arrow, Line, Diamond',
+    mobileShapeGroupTitle: 'Ellipse, Arrow, Line, Diamond',
+    toolRectangle: 'Rectangle',
+    toolEllipse: 'Ellipse',
+    toolText: 'Text',
+    toolImage: 'Image',
+    toolFrame: 'Frame',
     toolArrow: 'Arrow',
     toolLine: 'Line',
     toolDiamond: 'Diamond',
@@ -147,6 +160,7 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     ctxPaste: 'Paste',
     ctxDuplicate: 'Duplicate',
     ctxDelete: 'Delete',
+    ctxMore: 'More',
     ctxLayer: 'Layer',
     ctxBringToFront: 'Bring to front',
     ctxBringForward: 'Bring forward',
@@ -172,6 +186,12 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
   },
   'ja-JP': {
     shapeGroupTitle: '矢印・直線・ひし形',
+    mobileShapeGroupTitle: '丸・矢印・直線・ひし形',
+    toolRectangle: '四角形',
+    toolEllipse: '丸',
+    toolText: 'テキスト',
+    toolImage: '画像',
+    toolFrame: 'フレーム',
     toolArrow: '矢印',
     toolLine: '直線',
     toolDiamond: 'ひし形',
@@ -227,6 +247,7 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     ctxPaste: '貼り付け',
     ctxDuplicate: '複製',
     ctxDelete: '削除',
+    ctxMore: 'その他',
     ctxLayer: 'レイヤー',
     ctxBringToFront: '最前面に移動',
     ctxBringForward: '前面へ移動',
@@ -252,6 +273,12 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
   },
   'zh-CN': {
     shapeGroupTitle: '箭头・直线・菱形',
+    mobileShapeGroupTitle: '椭圆・箭头・直线・菱形',
+    toolRectangle: '矩形',
+    toolEllipse: '椭圆',
+    toolText: '文本',
+    toolImage: '图片',
+    toolFrame: '画框',
     toolArrow: '箭头',
     toolLine: '直线',
     toolDiamond: '菱形',
@@ -307,6 +334,7 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     ctxPaste: '粘贴',
     ctxDuplicate: '再制',
     ctxDelete: '删除',
+    ctxMore: '更多',
     ctxLayer: '图层',
     ctxBringToFront: '置于顶层',
     ctxBringForward: '上移一层',
@@ -332,6 +360,12 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
   },
   'zh-TW': {
     shapeGroupTitle: '箭頭・直線・菱形',
+    mobileShapeGroupTitle: '橢圓・箭頭・直線・菱形',
+    toolRectangle: '矩形',
+    toolEllipse: '橢圓',
+    toolText: '文字',
+    toolImage: '圖片',
+    toolFrame: '畫框',
     toolArrow: '箭頭',
     toolLine: '直線',
     toolDiamond: '菱形',
@@ -387,6 +421,7 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     ctxPaste: '貼上',
     ctxDuplicate: '重製',
     ctxDelete: '刪除',
+    ctxMore: '更多',
     ctxLayer: '圖層',
     ctxBringToFront: '移至最上層',
     ctxBringForward: '上移一層',
@@ -412,6 +447,12 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
   },
   'ko-KR': {
     shapeGroupTitle: '화살표・직선・마름모',
+    mobileShapeGroupTitle: '원・화살표・직선・마름모',
+    toolRectangle: '사각형',
+    toolEllipse: '원',
+    toolText: '텍스트',
+    toolImage: '이미지',
+    toolFrame: '프레임',
     toolArrow: '화살표',
     toolLine: '직선',
     toolDiamond: '마름모',
@@ -467,6 +508,7 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     ctxPaste: '붙여넣기',
     ctxDuplicate: '복제',
     ctxDelete: '삭제',
+    ctxMore: '더보기',
     ctxLayer: '레이어',
     ctxBringToFront: '맨 앞으로 가져오기',
     ctxBringForward: '앞으로 가져오기',

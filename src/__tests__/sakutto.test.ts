@@ -53,11 +53,14 @@ import {
   applyLanguage,
   applyPreferJpFont,
   attachExcalidrawAPI,
+  clampContextMenuPopover,
   installTextAutoResizeGuard,
   runtime,
   syncContextMenu,
   syncExtraToolsMenu,
   syncMainMenu,
+  syncMobileShapeActions,
+  syncMobileToolbar,
   syncToolbar,
   syncTopRightBar,
 } from '../annotator/quickAnnotator';
@@ -949,4 +952,279 @@ describe('jpGlyphOverride (SetoJP Japanese glyphs, disjoint unicode-range, and p
     expect(fetchedUrls.some((u) => u.includes('/fonts/Xiaolai/'))).toBe(false);
   });
 });
+
+describe('mobile UI unification (A-2 toolbar, persistent Duplicate/Delete, labeled B-2 context menu, touch text fix)', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+    localStorage.clear();
+    attachExcalidrawAPI(null);
+    runtime.prefs = loadPrefs(localStorage);
+    runtime.lastMobileShapeOther = 'ellipse';
+  });
+
+  it('mounts A-2 7-slot mobile toolbar with dedicated rectangle, upward 4-shape picker, fallback text, and recovers Image/Frame in Extra Tools', () => {
+    applyLanguage('ja-JP');
+    const setActiveTool = vi.fn();
+    let activeType = 'selection';
+    attachExcalidrawAPI({
+      getAppState: () => ({ activeTool: { type: activeType, locked: false } }),
+      setActiveTool: (tool: { type: string }) => {
+        activeType = tool.type;
+        setActiveTool(tool);
+      },
+    } as unknown as ExcalidrawImperativeAPI);
+
+    // Narrow <316px mobile toolbar (native toolbar-text absent)
+    document.body.innerHTML = `
+      <div class="excalidraw excalidraw--mobile">
+        <div class="App-toolbar">
+          <div class="mobile-toolbar">
+            <button data-testid="toolbar-selection"></button>
+            <button data-testid="toolbar-freedraw"></button>
+            <button data-testid="toolbar-rectangle"></button>
+            <button data-testid="toolbar-arrow"></button>
+            <button data-testid="toolbar-hand"></button>
+            <button class="App-toolbar__extra-tools-trigger"></button>
+          </div>
+        </div>
+        <div class="dropdown-menu-container">
+          <button data-testid="toolbar-laser"></button>
+        </div>
+      </div>
+    `;
+
+    expect(syncMobileToolbar()).toBe(true);
+    const fallbackText = document.querySelector<HTMLButtonElement>('[data-exq-mobile-tool="text"]');
+    const rectBtn = document.querySelector<HTMLButtonElement>('[data-exq-mobile-tool="rectangle"]');
+    const shapeGroup = document.querySelector<HTMLElement>('[data-exq-mobile-shape-group="1"]');
+    expect(fallbackText).toBeTruthy();
+    expect(fallbackText?.style.display).toBe('');
+    expect(rectBtn).toBeTruthy();
+    expect(shapeGroup?.querySelectorAll('[data-exq-mobile-shape]').length).toBe(4);
+
+    // Selecting arrow inside upward shape group activates arrow and updates remembered icon
+    const arrowBtn = shapeGroup?.querySelector<HTMLButtonElement>('[data-exq-mobile-shape="arrow"]');
+    arrowBtn?.click();
+    expect(setActiveTool).toHaveBeenCalledWith({ type: 'arrow' });
+    expect(runtime.lastMobileShapeOther).toBe('arrow');
+
+    // Selecting dedicated rectangle button activates rectangle
+    rectBtn?.click();
+    expect(setActiveTool).toHaveBeenCalledWith({ type: 'rectangle' });
+
+    // Once native toolbar-text exists (>=316px), fallback text button hides automatically
+    const nativeText = document.createElement('button');
+    nativeText.setAttribute('data-testid', 'toolbar-text');
+    document.querySelector('.mobile-toolbar')?.append(nativeText);
+    syncMobileToolbar();
+    expect(fallbackText?.style.display).toBe('none');
+
+    // Extra Tools menu recovers missing Image and Frame items on mobile
+    expect(syncExtraToolsMenu()).toBe(true);
+    expect(document.querySelector('[data-exq-extra-tool="image"]')).toBeTruthy();
+    expect(document.querySelector('[data-exq-extra-tool="frame"]')).toBeTruthy();
+  });
+
+  it('injects persistent Duplicate and Delete buttons in MobileShapeActions based on native count and selection state', () => {
+    applyLanguage('ja-JP');
+    let selectedIds: Record<string, boolean> = { el1: true };
+    attachExcalidrawAPI({
+      getAppState: () => ({ selectedElementIds: selectedIds, viewModeEnabled: false }),
+    } as unknown as ExcalidrawImperativeAPI);
+
+    // Smartphone width (<374px): only 2 native right items (Undo / Redo)
+    document.body.innerHTML = `
+      <div class="mobile-shape-actions">
+        <div class="left-styles"></div>
+        <div class="right-actions">
+          <div class="compact-action-item"><button>Undo</button></div>
+          <div class="compact-action-item"><button>Redo</button></div>
+        </div>
+      </div>
+    `;
+
+    expect(syncMobileShapeActions()).toBe(true);
+    const dupBtn = document.querySelector<HTMLButtonElement>('[data-exq-mobile-action="duplicate"]');
+    const delBtn = document.querySelector<HTMLButtonElement>('[data-exq-mobile-action="delete"]');
+    expect(dupBtn).toBeTruthy();
+    expect(delBtn).toBeTruthy();
+    expect(dupBtn?.parentElement?.style.display).toBe('');
+    expect(delBtn?.parentElement?.style.display).toBe('');
+    expect(dupBtn?.disabled).toBe(false);
+    expect(delBtn?.disabled).toBe(false);
+
+    // Clicking Duplicate / Delete dispatches Ctrl/Cmd+D and Delete keydown
+    const keys: string[] = [];
+    const onKey = (e: KeyboardEvent) => keys.push(e.key);
+    document.addEventListener('keydown', onKey);
+    try {
+      dupBtn?.click();
+      delBtn?.click();
+      expect(keys).toEqual(['d', 'Delete']);
+    } finally {
+      document.removeEventListener('keydown', onKey);
+    }
+
+    // Empty selection disables both buttons
+    selectedIds = {};
+    syncMobileShapeActions();
+    expect(dupBtn?.disabled).toBe(true);
+    expect(delBtn?.disabled).toBe(true);
+
+    // Medium width (374..411px): 3 native items (Undo, Redo, native Delete) => show Duplicate only, hide injected Delete
+    const nativeDel = document.createElement('div');
+    nativeDel.className = 'compact-action-item';
+    document.querySelector('.right-actions')?.append(nativeDel);
+    syncMobileShapeActions();
+    expect(dupBtn?.parentElement?.style.display).toBe('');
+    expect(delBtn?.parentElement?.style.display).toBe('none');
+    expect(dupBtn?.parentElement?.nextElementSibling).toBe(nativeDel);
+
+    // Wide PC mini-window (>=412px): 4 native items => hide both injected buttons
+    const nativeDup = document.createElement('div');
+    nativeDup.className = 'compact-action-item';
+    document.querySelector('.right-actions')?.append(nativeDup);
+    syncMobileShapeActions();
+    expect(dupBtn?.parentElement?.style.display).toBe('none');
+    expect(delBtn?.parentElement?.style.display).toBe('none');
+  });
+
+  it('renders Desktop-matched labeled B-2 context menu on mobile editable selections, skips B-2 on empty canvas, and clamps popover in viewport', () => {
+    applyLanguage('ja-JP');
+    const origW = window.innerWidth;
+    const origH = window.innerHeight;
+    Object.defineProperty(window, 'innerWidth', { value: 360, configurable: true });
+    Object.defineProperty(window, 'innerHeight', { value: 640, configurable: true });
+
+    try {
+      document.body.innerHTML = `
+        <div class="excalidraw excalidraw--mobile">
+          <div class="popover context-menu-popover" style="left: 170px; top: 140px;">
+            <ul class="context-menu">
+              <li data-testid="cut"><button class="context-menu-item">切り取り</button></li>
+              <li data-testid="copy"><button class="context-menu-item">コピー</button></li>
+              <li data-testid="paste"><button class="context-menu-item">貼り付け</button></li>
+              <li data-testid="duplicateSelection"><button class="context-menu-item">複製</button></li>
+              <li data-testid="deleteSelectedElements"><button class="context-menu-item">削除</button></li>
+              <li data-testid="flipHorizontal"><button class="context-menu-item">水平方向に反転</button></li>
+            </ul>
+          </div>
+        </div>
+      `;
+
+      const popover = document.querySelector<HTMLElement>('.context-menu-popover')!;
+      popover.getBoundingClientRect = () =>
+        ({
+          left: 170,
+          top: 140,
+          width: 296,
+          height: 54,
+          right: 466,
+          bottom: 194,
+          x: 170,
+          y: 140,
+          toJSON: () => ({}),
+        }) as DOMRect;
+
+      expect(syncContextMenu()).toBe(true);
+      const ul = document.querySelector('.context-menu')!;
+      expect(ul.classList.contains('exq-ctx-mobile-b2')).toBe(true);
+      expect(ul.classList.contains('exq-ctx-b2-expanded')).toBe(false);
+
+      const moreBtn = ul.querySelector<HTMLButtonElement>('[data-exq-ctx-more="1"]');
+      expect(moreBtn).toBeTruthy();
+      expect(moreBtn?.textContent).toBe('その他');
+      expect(moreBtn?.getAttribute('aria-expanded')).toBe('false');
+
+      // Popover was clamped so left + 296 <= 360 - 8 => left === 56
+      expect(popover.style.left).toBe('56px');
+
+      // Clicking "その他" expands layer bar & native items and re-clamps
+      moreBtn?.click();
+      expect(ul.classList.contains('exq-ctx-b2-expanded')).toBe(true);
+      expect(moreBtn?.getAttribute('aria-expanded')).toBe('true');
+
+      // Non-editable empty canvas on mobile: no B-2 collapse bar, renders compact card directly
+      document.body.innerHTML = `
+        <div class="excalidraw excalidraw--mobile">
+          <div class="popover context-menu-popover" style="left: 200px; top: 100px;">
+            <ul class="context-menu">
+              <li data-testid="paste"><button class="context-menu-item">貼り付け</button></li>
+              <li data-testid="selectAll"><button class="context-menu-item">すべて選択</button></li>
+            </ul>
+          </div>
+        </div>
+      `;
+      expect(syncContextMenu()).toBe(true);
+      const canvasUl = document.querySelector('.context-menu')!;
+      expect(canvasUl.classList.contains('exq-ctx-mobile-b2')).toBe(false);
+      expect(canvasUl.querySelector('[data-exq-ctx-more="1"]')).toBeNull();
+      clampContextMenuPopover(canvasUl);
+    } finally {
+      Object.defineProperty(window, 'innerWidth', { value: origW, configurable: true });
+      Object.defineProperty(window, 'innerHeight', { value: origH, configurable: true });
+    }
+  });
+
+  it('skips pointermove blocking on touch text input and synchronously focuses textarea.excalidraw-wysiwyg on pointerup', () => {
+    let activeType = 'text';
+    attachExcalidrawAPI({
+      getAppState: () => ({ activeTool: { type: activeType } }),
+    } as unknown as ExcalidrawImperativeAPI);
+
+    const canvas = document.createElement('canvas');
+    canvas.className = 'excalidraw__canvas interactive';
+    document.body.append(canvas);
+
+    const cleanup = installTextAutoResizeGuard();
+    const moveListener = vi.fn();
+    let seenUpCoords: { x: number; y: number } | null = null;
+    let wysiwyg: HTMLTextAreaElement | null = null;
+
+    // Simulate Excalidraw registering its window pointerup handler during canvas pointerdown
+    const onCanvasPointerDown = () => {
+      activeType = 'selection';
+      const excalidrawUp = (e: Event) => {
+        window.removeEventListener('pointerup', excalidrawUp);
+        const pe = e as PointerEvent;
+        seenUpCoords = { x: pe.clientX, y: pe.clientY };
+        wysiwyg = document.createElement('textarea');
+        wysiwyg.className = 'excalidraw-wysiwyg';
+        document.body.append(wysiwyg);
+      };
+      window.addEventListener('pointerup', excalidrawUp);
+    };
+    canvas.addEventListener('pointerdown', onCanvasPointerDown);
+    window.addEventListener('pointermove', moveListener);
+
+    try {
+      const downEvt = new MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 80, clientY: 140 });
+      Object.defineProperty(downEvt, 'pointerId', { value: 7 });
+      Object.defineProperty(downEvt, 'pointerType', { value: 'touch' });
+      canvas.dispatchEvent(downEvt);
+
+      const moveEvt = new MouseEvent('pointermove', { bubbles: true, button: 0, clientX: 110, clientY: 145 });
+      Object.defineProperty(moveEvt, 'pointerId', { value: 7 });
+      Object.defineProperty(moveEvt, 'pointerType', { value: 'touch' });
+      canvas.dispatchEvent(moveEvt);
+
+      const upEvt = new MouseEvent('pointerup', { bubbles: true, button: 0, clientX: 110, clientY: 145 });
+      Object.defineProperty(upEvt, 'pointerId', { value: 7 });
+      Object.defineProperty(upEvt, 'pointerType', { value: 'touch' });
+      canvas.dispatchEvent(upEvt);
+
+      // Touch pointermove must NOT be swallowed and coordinates must NOT be rewritten
+      expect(moveListener).toHaveBeenCalledTimes(1);
+      expect(seenUpCoords).toEqual({ x: 110, y: 145 });
+      // Synchronous focus assist must focus the mounted WYSIWYG textarea immediately
+      expect(wysiwyg).toBeTruthy();
+      expect(document.activeElement).toBe(wysiwyg);
+    } finally {
+      cleanup();
+      canvas.removeEventListener('pointerdown', onCanvasPointerDown);
+      window.removeEventListener('pointermove', moveListener);
+    }
+  });
+});
+
 

@@ -65,12 +65,13 @@ body,
   display: none !important;
 }
 
-/* Extra tools menu (desktop & mobile): keep only T3 bar, Image (desktop), Frame, Laser, Drawing Assist, and Quick Settings */
+/* Extra tools menu (desktop & mobile): keep only T3 bar, Image, Frame, Laser, Drawing Assist, and Quick Settings */
 .dropdown-menu-container:has([data-testid="toolbar-image"], [data-testid="toolbar-laser"]) > [data-testid="toolbar-lasso"],
 .dropdown-menu-container:has([data-testid="toolbar-image"], [data-testid="toolbar-laser"]) > [data-testid="toolbar-stickynote"],
 .dropdown-menu-container:has([data-testid="toolbar-image"], [data-testid="toolbar-laser"]) > [data-testid="toolbar-embeddable"],
 .dropdown-menu-container:has([data-testid="toolbar-image"], [data-testid="toolbar-laser"]) > [data-testid="toolbar-autoshape"],
 .dropdown-menu-container:has([data-testid="toolbar-image"], [data-testid="toolbar-laser"]) > [data-testid="toolbar-bucketfill"],
+.excalidraw.excalidraw--mobile .dropdown-menu-container:has([data-testid="toolbar-laser"]) > [data-testid="toolbar-text"],
 .dropdown-menu-container:has([data-testid="toolbar-image"], [data-testid="toolbar-laser"]) > [data-testid="toolbar-laser"] ~ *:not(.exq-extra-options-root) {
   display: none !important;
 }
@@ -954,4 +955,171 @@ body,
   opacity: 0.56 !important;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
+
+/* === 6. Mobile A-2 Unified 7-Slot Bottom Toolbar & Persistent Duplicate/Delete === */
+.excalidraw .mobile-toolbar {
+  overflow: visible !important;
+  gap: 2px !important;
+  justify-content: space-around !important;
+}
+
+.excalidraw .mobile-toolbar > [data-testid="toolbar-rectangle"],
+.excalidraw .mobile-toolbar > [data-testid="toolbar-arrow"],
+.excalidraw .mobile-toolbar > [data-testid="toolbar-eraser"],
+.excalidraw .mobile-toolbar > [data-testid="toolbar-image"],
+.excalidraw .mobile-toolbar > [data-testid="toolbar-frame"] {
+  display: none !important;
+}
+
+.excalidraw .mobile-toolbar > [data-testid="toolbar-selection"] { order: 10; }
+.excalidraw .mobile-toolbar > [data-testid="toolbar-freedraw"] { order: 20; }
+.excalidraw .mobile-toolbar > [data-testid="toolbar-text"],
+.excalidraw .mobile-toolbar > .exq-mobile-text { order: 22; }
+.excalidraw .mobile-toolbar > .exq-mobile-rect { order: 30; }
+.excalidraw .mobile-toolbar > .exq-mobile-shape-group { order: 34; }
+.excalidraw .mobile-toolbar > [data-testid="toolbar-hand"] { order: 40; }
+.excalidraw .mobile-toolbar > .App-toolbar__extra-tools-trigger {
+  order: 42;
+  position: relative !important;
+}
+
+.exq-mobile-tool-btn {
+  width: var(--lg-button-size, 36px);
+  height: var(--lg-button-size, 36px);
+  padding: 0;
+  border: none;
+  border-radius: var(--border-radius-lg, 8px);
+  background: transparent;
+  color: var(--icon-fill-color, var(--text-primary-color, #1b1b1f));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease, transform 0.08s ease;
+}
+.exq-mobile-tool-btn:hover { background: var(--button-hover-bg, #f1f0ff); }
+.exq-mobile-tool-btn:active { transform: scale(0.95); }
+.exq-mobile-tool-btn.exq-active {
+  background: var(--color-surface-primary-container, #e0dfff);
+  color: var(--color-on-primary-container, #030064);
+}
+
+.exq-popover.exq-popover--up {
+  top: auto;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 0;
+  flex-direction: row;
+  padding: 5px;
+  gap: 4px;
+}
+
+.exq-pop-item.exq-pop-item--mobile {
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  width: auto;
+  min-width: 50px;
+  height: auto;
+  padding: 6px 8px;
+  font-size: 10.5px;
+}
+
+.exq-pop-mobile-label {
+  font-size: 10px;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+/* Mobile Shape Actions: keep left styles scrollable and right Undo/Redo/Duplicate/Delete always reachable */
+.excalidraw .mobile-shape-actions > div:first-child {
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.excalidraw .mobile-shape-actions > div:first-child::-webkit-scrollbar {
+  display: none;
+}
+.excalidraw .mobile-shape-actions > div:last-child {
+  flex-shrink: 0;
+}
+.excalidraw .exq-mobile-action-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.excalidraw .exq-mobile-action-btn--danger:not(:disabled) {
+  color: #d92d20;
+}
+.excalidraw.theme--dark .exq-mobile-action-btn--danger:not(:disabled) {
+  color: #ff7b72;
+}
+
+/* === 7. Mobile B-2 Desktop-Matched Context Menu (Labeled) & Viewport Safety === */
+.excalidraw.excalidraw--mobile .context-menu.exq-ctx-rich {
+  min-width: 184px !important;
+  max-width: calc(100vw - 16px) !important;
+  max-height: calc(100vh - 16px) !important;
+  overflow-y: auto !important;
+  box-sizing: border-box !important;
+}
+
+.excalidraw.excalidraw--mobile .context-menu.exq-ctx-rich .context-menu-item__shortcut {
+  display: none !important;
+}
+
+.excalidraw.excalidraw--mobile .context-menu.exq-ctx-rich.exq-ctx-mobile-b2 {
+  width: min(296px, calc(100vw - 16px)) !important;
+  min-width: 0 !important;
+}
+
+.context-menu.exq-ctx-mobile-b2:not(.exq-ctx-b2-expanded) > :not([data-exq-ctx-quick-bar="1"]) {
+  display: none !important;
+}
+
+.exq-ctx-quick-bar.exq-ctx-quick-bar--b2 {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 1px;
+}
+
+.exq-ctx-b2-actions {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 2px;
+}
+
+.exq-ctx-b2-vdiv {
+  width: 1px;
+  align-self: stretch;
+  margin: 6px 2px;
+  background: var(--default-border-color, rgba(128, 128, 148, 0.24));
+  flex-shrink: 0;
+}
+
+.context-menu.exq-ctx-rich .exq-ctx-b2-more-btn {
+  flex: 0 0 42px;
+  width: 42px;
+}
+
+.context-menu.exq-ctx-rich .exq-ctx-b2-more-btn.exq-open {
+  background: var(--color-surface-primary-container, #e0dfff) !important;
+  color: var(--color-on-primary-container, #030064) !important;
+}
+
+.excalidraw.theme--dark .context-menu.exq-ctx-rich .exq-ctx-b2-more-btn.exq-open {
+  background: rgba(168, 165, 255, 0.22) !important;
+  color: #ffffff !important;
+}
+
+.excalidraw.excalidraw--mobile .context-menu.exq-ctx-rich .exq-ctx-layer-btn {
+  width: 34px;
+  height: 30px;
+}
+
 

@@ -40,6 +40,13 @@ export const SHAPE_OTHER_ITEMS = [
   { id: 'diamond', testId: 'toolbar-diamond', msgKey: 'toolDiamond', shortcut: 'D' },
 ] as const;
 
+export const MOBILE_SHAPE_OTHER_ITEMS = [
+  { id: 'ellipse', testId: 'toolbar-ellipse', msgKey: 'toolEllipse', shortcut: 'O' },
+  { id: 'arrow', testId: 'toolbar-arrow', msgKey: 'toolArrow', shortcut: 'A' },
+  { id: 'line', testId: 'toolbar-line', msgKey: 'toolLine', shortcut: 'L' },
+  { id: 'diamond', testId: 'toolbar-diamond', msgKey: 'toolDiamond', shortcut: 'D' },
+] as const;
+
 export const EXTRA_T3_LEFT_ITEMS = [
   { id: 'eraser', testId: 'toolbar-eraser', msgKey: 'toolEraser', shortcut: 'E' },
   { id: 'sticky', testId: 'toolbar-stickynote', msgKey: 'toolSticky', shortcut: 'N' },
@@ -78,6 +85,19 @@ export const QUICK_OPT_DEFS = [
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const ICON_DEFS: Record<string, Array<[string, Record<string, string | number>]>> = {
+  rectangle: [['rect', { x: 4, y: 4, width: 16, height: 16, rx: 2.5 }]],
+  ellipse: [['circle', { cx: 12, cy: 12, r: 8.5 }]],
+  text: [
+    ['polyline', { points: '4 7 4 4 20 4 20 7' }],
+    ['line', { x1: 9, y1: 20, x2: 15, y2: 20 }],
+    ['line', { x1: 12, y1: 4, x2: 12, y2: 20 }],
+  ],
+  dotsH: [
+    ['circle', { cx: 5, cy: 12, r: 1.5, fill: 'currentColor', stroke: 'none' }],
+    ['circle', { cx: 12, cy: 12, r: 1.5, fill: 'currentColor', stroke: 'none' }],
+    ['circle', { cx: 19, cy: 12, r: 1.5, fill: 'currentColor', stroke: 'none' }],
+  ],
+  caretUp: [['path', { d: 'm3 7.5 3-3 3 3' }]],
   arrow: [
     ['line', { x1: 5, y1: 12, x2: 19, y2: 12 }],
     ['polyline', { points: '13 6 19 12 13 18' }],
@@ -288,6 +308,7 @@ export const runtime: {
   api: ExcalidrawImperativeAPI | null;
   prefs: Prefs;
   lastShapeOther: 'arrow' | 'line' | 'diamond';
+  lastMobileShapeOther: 'ellipse' | 'arrow' | 'line' | 'diamond';
   isBusy: boolean;
   drawAssistAccOpen: boolean;
   accOpen: boolean;
@@ -310,6 +331,7 @@ export const runtime: {
     quickOpts: { ...DEFAULT_PREFS.quickOpts },
   },
   lastShapeOther: 'arrow',
+  lastMobileShapeOther: 'ellipse',
   isBusy: false,
   drawAssistAccOpen: false,
   accOpen: false,
@@ -333,6 +355,19 @@ const toolbarMounts = new WeakMap<Element, {
   d3: HTMLElement;
   widget: ReturnType<typeof buildShapeGroupWidget>;
   resetBtn: HTMLButtonElement;
+}>();
+const mobileToolbarMounts = new WeakMap<Element, {
+  lang: AppLang;
+  textBtn: HTMLButtonElement;
+  rectBtn: HTMLButtonElement;
+  widget: ReturnType<typeof buildMobileShapeGroupWidget>;
+}>();
+const mobileShapeActionsMounts = new WeakMap<Element, {
+  lang: AppLang;
+  dupWrap: HTMLElement;
+  dupBtn: HTMLButtonElement;
+  delWrap: HTMLElement;
+  delBtn: HTMLButtonElement;
 }>();
 const rightBarMounts = new WeakMap<Element, { lang: AppLang; wrap: HTMLElement }>();
 const mainMenuMounts = new WeakMap<Element, { lang: AppLang; nodes: Element[] }>();
@@ -401,13 +436,13 @@ function getActiveNativeToolId(root: ParentNode = document): 'arrow' | 'line' | 
 }
 
 function clickNativeTool(testId: string, root: ParentNode = document): boolean {
-  const btn = root.querySelector<HTMLElement>(`.App-toolbar [data-testid="${testId}"]`);
-  if (btn) {
-    btn.click();
-    return true;
-  }
   if (runtime.api) {
     const map: Record<string, string> = {
+      'toolbar-rectangle': 'rectangle',
+      'toolbar-ellipse': 'ellipse',
+      'toolbar-text': 'text',
+      'toolbar-image': 'image',
+      'toolbar-frame': 'frame',
       'toolbar-arrow': 'arrow',
       'toolbar-line': 'line',
       'toolbar-diamond': 'diamond',
@@ -421,6 +456,11 @@ function clickNativeTool(testId: string, root: ParentNode = document): boolean {
       return true;
     }
   }
+  const btn = root.querySelector<HTMLElement>(`.App-toolbar [data-testid="${testId}"]`);
+  if (btn) {
+    btn.click();
+    return true;
+  }
   return false;
 }
 
@@ -430,19 +470,71 @@ function isTextToolActive(root: ParentNode = document): boolean {
     const t = silently(() => runtime.api?.getAppState()?.activeTool?.type);
     if (t) return t === 'text';
   }
-  return !!root.querySelector('.App-toolbar [data-testid="toolbar-text"].ToolIcon--checked');
+  return !!(
+    root.querySelector('.App-toolbar [data-testid="toolbar-text"].ToolIcon--checked') ||
+    root.querySelector('.App-toolbar [data-exq-mobile-tool="text"].exq-active')
+  );
+}
+
+function focusActiveTextWysiwyg(): boolean {
+  const editable = document.querySelector<HTMLTextAreaElement>('textarea.excalidraw-wysiwyg');
+  if (!editable) return false;
+  if (document.activeElement !== editable) {
+    silently(() => editable.focus({ preventScroll: true }));
+  }
+  return true;
 }
 
 export function installTextAutoResizeGuard(): () => void {
   let downPos: { x: number; y: number; pointerId: number } | null = null;
+  let touchTextPointerId: number | null = null;
+  let pendingTouchCleanup: (() => void) | null = null;
 
-  const onPointerDown = (e: PointerEvent) => {
-    if (!runtime.prefs.quickOpts.textAutoResize) return;
+  const clearPendingTouchFocus = () => {
+    if (pendingTouchCleanup) {
+      pendingTouchCleanup();
+      pendingTouchCleanup = null;
+    }
+    touchTextPointerId = null;
+  };
+
+  const onPointerDownCapture = (e: PointerEvent) => {
     if (e.button !== 0 || e.altKey) return;
     if (!isTextToolActive()) return;
-    if (e.target instanceof Element && e.target.matches('canvas.interactive')) {
-      downPos = { x: e.clientX, y: e.clientY, pointerId: e.pointerId };
+    if (!(e.target instanceof Element) || !e.target.matches('canvas.interactive')) return;
+
+    // On touch devices, never swallow pointermove or rewrite pointerup coordinates;
+    // instead arm a synchronous WYSIWYG focus assist on pointerup/touchend so mobile virtual keyboards reliably open.
+    if (e.pointerType === 'touch') {
+      clearPendingTouchFocus();
+      touchTextPointerId = e.pointerId;
+      return;
     }
+
+    if (!runtime.prefs.quickOpts.textAutoResize) return;
+    downPos = { x: e.clientX, y: e.clientY, pointerId: e.pointerId };
+  };
+
+  // Bubble-phase pointerdown fires after React/Excalidraw registers its own window pointerup handler,
+  // guaranteeing our one-shot bubble pointerup runs synchronously right after Excalidraw mounts textarea.excalidraw-wysiwyg.
+  const onPointerDownBubble = (e: PointerEvent) => {
+    if (touchTextPointerId === null || e.pointerId !== touchTextPointerId) return;
+    const expectedPointerId = touchTextPointerId;
+    const onTouchPointerUp = (upEvent: PointerEvent) => {
+      if (upEvent.pointerId !== expectedPointerId) return;
+      focusActiveTextWysiwyg();
+      clearPendingTouchFocus();
+    };
+    const onTouchEnd = () => {
+      focusActiveTextWysiwyg();
+      clearPendingTouchFocus();
+    };
+    window.addEventListener('pointerup', onTouchPointerUp, false);
+    window.addEventListener('touchend', onTouchEnd, false);
+    pendingTouchCleanup = () => {
+      window.removeEventListener('pointerup', onTouchPointerUp, false);
+      window.removeEventListener('touchend', onTouchEnd, false);
+    };
   };
 
   // Note: Excalidraw 0.18.0-next resets activeTool.type to "selection" immediately on pointerdown
@@ -469,15 +561,21 @@ export function installTextAutoResizeGuard(): () => void {
     if (downPos && e.pointerId === downPos.pointerId) {
       downPos = null;
     }
+    if (touchTextPointerId !== null && e.pointerId === touchTextPointerId) {
+      clearPendingTouchFocus();
+    }
   };
 
-  window.addEventListener('pointerdown', onPointerDown, true);
+  window.addEventListener('pointerdown', onPointerDownCapture, true);
+  window.addEventListener('pointerdown', onPointerDownBubble, false);
   window.addEventListener('pointermove', onPointerMove, true);
   window.addEventListener('pointerup', onPointerUp, true);
   window.addEventListener('pointercancel', onPointerCancel, true);
 
   return () => {
-    window.removeEventListener('pointerdown', onPointerDown, true);
+    clearPendingTouchFocus();
+    window.removeEventListener('pointerdown', onPointerDownCapture, true);
+    window.removeEventListener('pointerdown', onPointerDownBubble, false);
     window.removeEventListener('pointermove', onPointerMove, true);
     window.removeEventListener('pointerup', onPointerUp, true);
     window.removeEventListener('pointercancel', onPointerCancel, true);
@@ -773,6 +871,301 @@ export function syncToolbar(root: ParentNode = document): boolean {
     extraBtn.classList.toggle('exq-eraser-active', eraserChecked || stickyChecked || lassoChecked);
     extraBtn.classList.toggle('exq-lock-active', lockChecked);
   }
+
+  return true;
+}
+
+/* ================= Mobile A-2 Unified Toolbar & Persistent Duplicate/Delete ================= */
+function getActiveMobileShapeOtherId(): 'ellipse' | 'arrow' | 'line' | 'diamond' | null {
+  const activeType = silently(() => runtime.api?.getAppState()?.activeTool?.type);
+  if (
+    activeType === 'ellipse' ||
+    activeType === 'arrow' ||
+    activeType === 'line' ||
+    activeType === 'diamond'
+  ) {
+    return activeType;
+  }
+  return null;
+}
+
+function buildMobileShapeGroupWidget() {
+  const t = getMessages(runtime.prefs.lang);
+  const wrap = el('div', { class: 'exq-shape-group exq-mobile-shape-group', 'data-exq-mobile-shape-group': '1' });
+  const iconSlot = el('span', { class: 'exq-icon-slot' });
+  const caretSlot = svgIcon('caretUp', 10, '0 0 12 12', 2);
+  caretSlot.classList.add('exq-caret');
+
+  const trigger = el(
+    'button',
+    {
+      type: 'button',
+      class: 'exq-shape-trigger exq-mobile-shape-trigger',
+      title: t.mobileShapeGroupTitle,
+      'aria-label': t.mobileShapeGroupTitle,
+      'aria-haspopup': 'menu',
+      'aria-expanded': 'false',
+    },
+    iconSlot,
+    caretSlot,
+  );
+
+  const popover = el('div', { class: 'exq-popover exq-popover--up', role: 'menu' });
+  const itemButtons = new Map<string, HTMLButtonElement>();
+
+  for (const item of MOBILE_SHAPE_OTHER_ITEMS) {
+    const label = t[item.msgKey];
+    const btn = el(
+      'button',
+      {
+        type: 'button',
+        class: 'exq-pop-item exq-pop-item--mobile',
+        role: 'menuitem',
+        'data-exq-mobile-shape': item.id,
+        title: label,
+        'aria-label': label,
+      },
+      svgIcon(item.id, 16),
+      el('span', { class: 'exq-pop-mobile-label' }, label),
+    );
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      runtime.lastMobileShapeOther = item.id;
+      wrap.classList.remove('exq-open');
+      trigger.setAttribute('aria-expanded', 'false');
+      clickNativeTool(item.testId);
+      scheduleSync();
+    });
+    itemButtons.set(item.id, btn);
+    popover.append(btn);
+  }
+
+  trigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const willOpen = !wrap.classList.contains('exq-open');
+    closeFloatingPopovers(wrap);
+    wrap.classList.toggle('exq-open', willOpen);
+    trigger.setAttribute('aria-expanded', String(willOpen));
+  });
+
+  wrap.append(trigger, popover);
+
+  let renderedIconId: string | null = null;
+  const update = () => {
+    const activeId = getActiveMobileShapeOtherId();
+    if (activeId) runtime.lastMobileShapeOther = activeId;
+    if (renderedIconId !== runtime.lastMobileShapeOther) {
+      renderedIconId = runtime.lastMobileShapeOther;
+      iconSlot.replaceChildren(svgIcon(renderedIconId, 16));
+    }
+    trigger.classList.toggle('exq-active', !!activeId);
+    for (const [id, btn] of itemButtons) {
+      btn.classList.toggle('exq-active', activeId === id);
+    }
+  };
+
+  update();
+  return { wrap, trigger, update };
+}
+
+export function syncMobileToolbar(root: ParentNode = document): boolean {
+  const bar = root.querySelector('.App-toolbar .mobile-toolbar');
+  if (!bar) return false;
+
+  let mounted = mobileToolbarMounts.get(bar);
+  if (mounted && mounted.lang !== runtime.prefs.lang) {
+    mounted.textBtn.remove();
+    mounted.rectBtn.remove();
+    mounted.widget.wrap.remove();
+    mounted = undefined;
+  }
+
+  if (!mounted || !mounted.widget.wrap.isConnected) {
+    const t = getMessages(runtime.prefs.lang);
+
+    const textBtn = el(
+      'button',
+      {
+        type: 'button',
+        class: 'exq-mobile-tool-btn exq-mobile-text',
+        'data-exq-mobile-tool': 'text',
+        title: t.toolText,
+        'aria-label': t.toolText,
+      },
+      svgIcon('text', 16),
+    );
+    textBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeFloatingPopovers(null);
+      clickNativeTool('toolbar-text');
+      scheduleSync();
+    });
+
+    const rectBtn = el(
+      'button',
+      {
+        type: 'button',
+        class: 'exq-mobile-tool-btn exq-mobile-rect',
+        'data-exq-mobile-tool': 'rectangle',
+        title: t.toolRectangle,
+        'aria-label': t.toolRectangle,
+      },
+      svgIcon('rectangle', 16),
+    );
+    rectBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeFloatingPopovers(null);
+      clickNativeTool('toolbar-rectangle');
+      scheduleSync();
+    });
+
+    const widget = buildMobileShapeGroupWidget();
+    bar.append(textBtn, rectBtn, widget.wrap);
+    mounted = { lang: runtime.prefs.lang, textBtn, rectBtn, widget };
+    mobileToolbarMounts.set(bar, mounted);
+  } else {
+    mounted.widget.update();
+  }
+
+  // Show fallback Text button only when Excalidraw collapses native toolbar-text (<316px)
+  const hasNativeText = !!bar.querySelector(':scope > [data-testid="toolbar-text"]');
+  mounted.textBtn.style.display = hasNativeText ? 'none' : '';
+
+  const activeTool = silently(() => runtime.api?.getAppState()?.activeTool);
+  mounted.textBtn.classList.toggle('exq-active', activeTool?.type === 'text');
+  mounted.rectBtn.classList.toggle('exq-active', activeTool?.type === 'rectangle');
+
+  const extraBtn = bar.querySelector('.App-toolbar__extra-tools-trigger');
+  if (extraBtn) {
+    const eraserChecked = activeTool?.type === 'eraser';
+    const stickyChecked = activeTool?.type === 'stickynote';
+    const lassoChecked = activeTool?.type === 'lasso';
+    const lockChecked = !!activeTool?.locked;
+    extraBtn.classList.toggle('exq-eraser-active', eraserChecked || stickyChecked || lassoChecked);
+    extraBtn.classList.toggle('exq-lock-active', lockChecked);
+  }
+
+  return true;
+}
+
+function dispatchElementShortcut(action: 'duplicate' | 'delete'): void {
+  const isMac =
+    typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/i.test(navigator.platform || navigator.userAgent || '');
+  silently(() => {
+    if (action === 'delete') {
+      document.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Delete',
+          code: 'Delete',
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+      return;
+    }
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'd',
+        code: 'KeyD',
+        ctrlKey: !isMac,
+        metaKey: isMac,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  });
+}
+
+function hasAnySelectedElement(): boolean {
+  if (!runtime.api) return true;
+  const st = silently(() => runtime.api?.getAppState());
+  if (!st || st.viewModeEnabled) return false;
+  const sel = st.selectedElementIds;
+  if (!sel) return false;
+  return Object.values(sel).some(Boolean);
+}
+
+export function syncMobileShapeActions(root: ParentNode = document): boolean {
+  const bar = root.querySelector('.mobile-shape-actions');
+  if (!bar) return false;
+
+  const directDivs = Array.from(bar.children).filter((c) => c.tagName === 'DIV');
+  if (directDivs.length < 2) return false;
+  const rightGroup = directDivs[directDivs.length - 1];
+
+  let mounted = mobileShapeActionsMounts.get(rightGroup);
+  if (mounted && mounted.lang !== runtime.prefs.lang) {
+    mounted.dupWrap.remove();
+    mounted.delWrap.remove();
+    mounted = undefined;
+  }
+
+  if (!mounted || !mounted.dupWrap.isConnected || !mounted.delWrap.isConnected) {
+    const t = getMessages(runtime.prefs.lang);
+
+    const dupBtn = el(
+      'button',
+      {
+        type: 'button',
+        class: 'compact-action-button exq-mobile-action-btn',
+        'data-exq-mobile-action': 'duplicate',
+        title: t.ctxDuplicate,
+        'aria-label': t.ctxDuplicate,
+      },
+      svgIcon('dup', 15, '0 0 24 24', 1.9),
+    );
+    dupBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (dupBtn.disabled) return;
+      dispatchElementShortcut('duplicate');
+      scheduleSync();
+    });
+    const dupWrap = el('div', { class: 'compact-action-item exq-mobile-action-item' }, dupBtn);
+
+    const delBtn = el(
+      'button',
+      {
+        type: 'button',
+        class: 'compact-action-button exq-mobile-action-btn exq-mobile-action-btn--danger',
+        'data-exq-mobile-action': 'delete',
+        title: t.ctxDelete,
+        'aria-label': t.ctxDelete,
+      },
+      svgIcon('reset', 15, '0 0 24 24', 1.9),
+    );
+    delBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (delBtn.disabled) return;
+      dispatchElementShortcut('delete');
+      scheduleSync();
+    });
+    const delWrap = el('div', { class: 'compact-action-item exq-mobile-action-item' }, delBtn);
+
+    rightGroup.append(dupWrap, delWrap);
+    mounted = { lang: runtime.prefs.lang, dupWrap, dupBtn, delWrap, delBtn };
+    mobileShapeActionsMounts.set(rightGroup, mounted);
+  }
+
+  // Excalidraw renders 2 native items (<374px: Undo/Redo), 3 items (374..411px: +Delete), 4 items (>=412px: +Dup+Delete).
+  const nativeItems = Array.from(rightGroup.children).filter(
+    (c) => !c.classList.contains('exq-mobile-action-item'),
+  );
+  const needDup = nativeItems.length < 4;
+  const needDel = nativeItems.length < 3;
+
+  mounted.dupWrap.style.display = needDup ? '' : 'none';
+  mounted.delWrap.style.display = needDel ? '' : 'none';
+
+  // When Delete is native (nativeItems.length === 3), place our Duplicate button right before native Delete.
+  if (nativeItems.length === 3 && mounted.dupWrap.nextElementSibling !== nativeItems[2]) {
+    rightGroup.insertBefore(mounted.dupWrap, nativeItems[2]);
+  }
+
+  const hasSel = hasAnySelectedElement();
+  mounted.dupBtn.disabled = !hasSel;
+  mounted.delBtn.disabled = !hasSel;
 
   return true;
 }
@@ -1405,6 +1798,35 @@ function makeExtraT3Button(
   return btn;
 }
 
+function makeExtraMenuProxyItem(
+  iconName: string,
+  label: string,
+  toolTestId: string,
+  extraToolId: string,
+): HTMLButtonElement {
+  const btn = el(
+    'button',
+    {
+      type: 'button',
+      role: 'menuitem',
+      class: 'dropdown-menu-item dropdown-menu-item-base exq-extra-proxy-item',
+      'data-exq-extra-tool': extraToolId,
+      title: label,
+      'aria-label': label,
+    },
+    el('div', { class: 'dropdown-menu-item__icon' }, svgIcon(iconName, 16, '0 0 24 24', 1.85)),
+    el('div', { class: 'dropdown-menu-item__text' }, label),
+  );
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    clickNativeTool(toolTestId);
+    sendEscape();
+    scheduleSync();
+  });
+  return btn;
+}
+
 export function syncExtraToolsMenu(root: ParentNode = document): boolean {
   const menu = root.querySelector(
     '.dropdown-menu-container:has([data-testid="toolbar-image"], [data-testid="toolbar-laser"])',
@@ -1422,6 +1844,19 @@ export function syncExtraToolsMenu(root: ParentNode = document): boolean {
   t3Row.append(el('div', { class: 'exq-extra-tb-vdiv', 'aria-hidden': 'true' }));
   t3Row.append(makeExtraT3Button(EXTRA_T3_LOCK_ITEM, root));
   topFrag.append(t3Row, el('div', { class: 'exq-extra-sep', 'aria-hidden': 'true' }));
+
+  // On mobile, A-2 hides toolbar-image/toolbar-frame from .mobile-toolbar for uniform 7-slot layout;
+  // recover them inside Extra Tools whenever Excalidraw moved them out of the dropdown (>=356px / >=396px).
+  if (root.querySelector('.mobile-toolbar')) {
+    const t = getMessages(runtime.prefs.lang);
+    if (!menu.querySelector('[data-testid="toolbar-image"]')) {
+      topFrag.append(makeExtraMenuProxyItem('imgSave', t.toolImage, 'toolbar-image', 'image'));
+    }
+    if (!menu.querySelector('[data-testid="toolbar-frame"]')) {
+      topFrag.append(makeExtraMenuProxyItem('frame', t.toolFrame, 'toolbar-frame', 'frame'));
+    }
+  }
+
   menu.insertBefore(topFrag, firstNative);
 
   menu.append(buildQuickOptionsAccordion());
@@ -1523,8 +1958,19 @@ function isContextItemHidden(node: Element): boolean {
   return false;
 }
 
-function buildContextQuickBar(ul: Element, t: ReturnType<typeof getMessages>): HTMLLIElement {
-  const bar = el('div', { class: 'exq-ctx-quick-bar', role: 'group' });
+function buildContextQuickBar(
+  ul: Element,
+  t: ReturnType<typeof getMessages>,
+  options: { isMobileB2?: boolean; onToggleMore?: (btn: HTMLButtonElement) => void } = {},
+): HTMLLIElement {
+  const bar = el('div', {
+    class: 'exq-ctx-quick-bar' + (options.isMobileB2 ? ' exq-ctx-quick-bar--b2' : ''),
+    role: 'group',
+  });
+
+  const actionsGrid = options.isMobileB2
+    ? el('div', { class: 'exq-ctx-b2-actions', role: 'group' })
+    : bar;
 
   for (const def of CTX_QUICK_BAR_ITEMS) {
     const nativeLi = ul.querySelector<HTMLElement>(`li[data-testid="${def.testId}"]`);
@@ -1556,10 +2002,68 @@ function buildContextQuickBar(ul: Element, t: ReturnType<typeof getMessages>): H
         nativeBtn.click();
       });
     }
-    bar.append(btn);
+    actionsGrid.append(btn);
+  }
+
+  if (options.isMobileB2) {
+    const moreBtn = el(
+      'button',
+      {
+        type: 'button',
+        class: 'exq-ctx-quick-btn exq-ctx-b2-more-btn',
+        'data-exq-ctx-more': '1',
+        title: t.ctxMore,
+        'aria-label': t.ctxMore,
+        'aria-expanded': 'false',
+      },
+      svgIcon('dotsH', 15, '0 0 24 24', 1.9),
+      el('span', { class: 'exq-ctx-quick-label' }, t.ctxMore),
+    );
+    moreBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      options.onToggleMore?.(moreBtn);
+    });
+    bar.append(
+      actionsGrid,
+      el('div', { class: 'exq-ctx-b2-vdiv', 'aria-hidden': 'true' }),
+      moreBtn,
+    );
   }
 
   return el('li', { class: 'exq-ctx-widget-li', 'data-exq-ctx-quick-bar': '1' }, bar);
+}
+
+export function clampContextMenuPopover(ul: Element): void {
+  const popover = ul.closest<HTMLElement>('.context-menu-popover');
+  if (!popover) return;
+  const vw = typeof window !== 'undefined' ? window.innerWidth : 0;
+  const vh = typeof window !== 'undefined' ? window.innerHeight : 0;
+  if (vw <= 0 || vh <= 0) return;
+
+  const gap = 8;
+  const maxW = Math.max(160, vw - gap * 2);
+  const maxH = Math.max(160, vh - gap * 2);
+  popover.style.maxWidth = `${maxW}px`;
+  popover.style.maxHeight = `${maxH}px`;
+
+  const rect = popover.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return;
+
+  const offsetParent = popover.offsetParent instanceof HTMLElement ? popover.offsetParent : null;
+  const parentRect = offsetParent ? offsetParent.getBoundingClientRect() : { left: 0, top: 0 };
+  const containerW = offsetParent ? offsetParent.clientWidth || vw : vw;
+  const containerH = offsetParent ? offsetParent.clientHeight || vh : vh;
+
+  const currentLeft = rect.left - parentRect.left;
+  const currentTop = rect.top - parentRect.top;
+  const maxLeft = Math.max(gap, containerW - gap - rect.width);
+  const maxTop = Math.max(gap, containerH - gap - rect.height);
+  const clampedLeft = Math.min(Math.max(currentLeft, gap), maxLeft);
+  const clampedTop = Math.min(Math.max(currentTop, gap), maxTop);
+
+  popover.style.left = `${Math.round(clampedLeft)}px`;
+  popover.style.top = `${Math.round(clampedTop)}px`;
 }
 
 function dispatchLayerShortcut(testId: (typeof CTX_LAYER_BAR_ITEMS)[number]['testId']): void {
@@ -1647,6 +2151,11 @@ export function syncContextMenu(root: ParentNode = document): boolean {
   const ul = root.querySelector('.context-menu');
   if (!ul || contextMenuProcessed.has(ul)) return false;
 
+  const isMobile = Boolean(
+    ul.closest('.excalidraw--mobile') || root.querySelector('.excalidraw--mobile'),
+  );
+  let useMobileB2 = false;
+
   if (runtime.prefs.quickOpts.modernContextMenu) {
     const t = getMessages(runtime.prefs.lang);
     ul.classList.add('exq-ctx-rich');
@@ -1656,8 +2165,19 @@ export function syncContextMenu(root: ParentNode = document): boolean {
     );
 
     if (isEditableSelection) {
+      useMobileB2 = isMobile;
       const topFrag = document.createDocumentFragment();
-      topFrag.append(buildContextQuickBar(ul, t));
+      topFrag.append(
+        buildContextQuickBar(ul, t, {
+          isMobileB2: useMobileB2,
+          onToggleMore: (moreBtn) => {
+            const expanded = ul.classList.toggle('exq-ctx-b2-expanded');
+            moreBtn.classList.toggle('exq-open', expanded);
+            moreBtn.setAttribute('aria-expanded', String(expanded));
+            clampContextMenuPopover(ul);
+          },
+        }),
+      );
       topFrag.append(el('hr', { class: 'context-menu-item-separator' }));
       topFrag.append(buildContextLayerBar(ul, t));
       topFrag.append(el('hr', { class: 'context-menu-item-separator' }));
@@ -1706,6 +2226,11 @@ export function syncContextMenu(root: ParentNode = document): boolean {
   }
   if (lastVisibleSep) lastVisibleSep.classList.add('exq-ctx-hr-hidden');
 
+  if (useMobileB2) {
+    ul.classList.add('exq-ctx-mobile-b2');
+  }
+
+  clampContextMenuPopover(ul);
   contextMenuProcessed.add(ul);
   return true;
 }
@@ -1823,6 +2348,8 @@ export function syncTopRightBar(root: ParentNode = document): boolean {
 /* ================= Sync Loop & Boot ================= */
 export function syncUI(): void {
   syncToolbar();
+  syncMobileToolbar();
+  syncMobileShapeActions();
   syncTopRightBar();
   syncMainMenu();
   syncExtraToolsMenu();
@@ -1872,7 +2399,7 @@ export function bootQuickAnnotator(): () => void {
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ['class'],
+      attributeFilter: ['class', 'disabled'],
     });
   }
 
