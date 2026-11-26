@@ -1,11 +1,21 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react';
 import { createPortal } from 'react-dom';
 import type { AppLang } from '../types/annotator';
-import { EXCALIDRAW_SELECTORS } from '../excalidraw/domContract';
+import { EXCALIDRAW_CLASSES, EXCALIDRAW_SELECTORS } from '../excalidraw/domContract';
 import { getMessages } from '../i18n/messages';
 import { REDACT_COLOR_SWATCHES } from '../services/storageBridge';
 import { getSwatchToneClass } from '../utils/common';
-import { Icon } from './Icon';
+import {
+  ColorSwatchGrid,
+  getExcalidrawPortalTarget,
+  PanelHeader,
+} from './PanelPrimitives';
 import { useOutsideDismiss } from './useOutsideDismiss';
 
 export interface SakuttoRedactPanelProps {
@@ -28,6 +38,7 @@ function RedactSwatchContent({
   showClose,
   onClose,
   onColorChange,
+  firstButtonRef,
 }: {
   lang: AppLang;
   color: string;
@@ -35,54 +46,31 @@ function RedactSwatchContent({
   showClose?: boolean;
   onClose?: () => void;
   onColorChange: (color: string) => void;
+  firstButtonRef?: React.RefObject<HTMLButtonElement | null>;
 }) {
   const t = getMessages(lang);
-  const normalized = color.trim().toLowerCase();
 
   return (
     <div className="exq-redact-card-body" data-exq-redact-panel="1">
       {variant === 'full' ? (
-        <h3 aria-hidden="true">{t.redactColorTitle}</h3>
+        <h3>{t.redactColorTitle}</h3>
       ) : (
-        <div className="exq-pref-group-header">
-          <div className="exq-pref-group-title">{t.redactColorTitle}</div>
-          {showClose && (
-            <button
-              type="button"
-              className="exq-pref-close-btn"
-              aria-label="Close"
-              onClick={(e) => {
-                e.stopPropagation();
-                onClose?.();
-              }}
-            >
-              <Icon name="close" size={13} strokeWidth={2.2} />
-            </button>
-          )}
-        </div>
+        <PanelHeader
+          title={t.redactColorTitle}
+          closeLabel={t.closeLabel}
+          onClose={showClose ? onClose : undefined}
+        />
       )}
-      <div className="exq-redact-color-grid" role="radiogroup" aria-label={t.redactColorTitle}>
-        {REDACT_COLOR_SWATCHES.map((hex) => {
-          const isSelected = normalized === hex;
-          const toneClass = getSwatchToneClass(hex);
-          return (
-            <button
-              key={hex}
-              type="button"
-              role="radio"
-              aria-checked={isSelected}
-              aria-label={`${t.redactColorTitle} ${hex}`}
-              title={hex}
-              className={`color-picker__button exq-redact-color-swatch${toneClass ? ` ${toneClass}` : ''}${isSelected ? ' active exq-active' : ''}`}
-              data-exq-redact-color={hex}
-              style={{ '--swatch-color': hex, backgroundColor: hex } as CSSProperties}
-              onClick={() => onColorChange(hex)}
-            >
-              <div className="color-picker__button-outline" aria-hidden="true" />
-            </button>
-          );
-        })}
-      </div>
+      <ColorSwatchGrid
+        colors={REDACT_COLOR_SWATCHES}
+        selectedColor={color}
+        ariaLabel={t.redactColorTitle}
+        gridClassName="exq-redact-color-grid"
+        buttonClassName="exq-redact-color-swatch"
+        dataAttrName="data-exq-redact-color"
+        onSelect={onColorChange}
+        firstButtonRef={firstButtonRef}
+      />
     </div>
   );
 }
@@ -96,13 +84,19 @@ export function SakuttoRedactPanel({
 }: SakuttoRedactPanelProps) {
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [mountTarget, setMountTarget] = useState<Element | null>(null);
+  const mountTargetRef = useRef<Element | null>(null);
+  mountTargetRef.current = mountTarget;
   const [mobileFlyoutPos, setMobileFlyoutPos] = useState<{ left: number; bottom: number } | null>(null);
   const mobileBtnRef = useRef<HTMLButtonElement | null>(null);
+  const compactBtnRef = useRef<HTMLButtonElement | null>(null);
+  const firstSwatchRef = useRef<HTMLButtonElement | null>(null);
+  const wasPopoverOpenRef = useRef(false);
 
   useEffect(() => {
     if (!active) {
       setPopoverOpen(false);
       setMountTarget(null);
+      mountTargetRef.current = null;
       return;
     }
 
@@ -116,6 +110,7 @@ export function SakuttoRedactPanel({
 
     const updateTarget = () => {
       const next = resolveTarget();
+      mountTargetRef.current = next;
       setMountTarget((prev) => (prev === next ? prev : next));
     };
 
@@ -123,6 +118,7 @@ export function SakuttoRedactPanel({
 
     let rafId: number | null = null;
     const scheduleUpdate = () => {
+      if (mountTargetRef.current?.isConnected) return;
       if (rafId !== null) return;
       if (typeof requestAnimationFrame === 'function') {
         rafId = requestAnimationFrame(() => {
@@ -135,10 +131,7 @@ export function SakuttoRedactPanel({
     };
 
     const timer = setTimeout(updateTarget, 30);
-    const observeRoot =
-      typeof document !== 'undefined'
-        ? document.querySelector(EXCALIDRAW_SELECTORS.root) || document.body
-        : null;
+    const observeRoot = getExcalidrawPortalTarget();
     const mo =
       typeof MutationObserver !== 'undefined' && observeRoot
         ? new MutationObserver(scheduleUpdate)
@@ -163,7 +156,7 @@ export function SakuttoRedactPanel({
     closeOnEscape: true,
   });
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!popoverOpen || uiLayout !== 'phone' || typeof window === 'undefined') {
       setMobileFlyoutPos(null);
       return;
@@ -180,8 +173,31 @@ export function SakuttoRedactPanel({
     };
     updatePos();
     window.addEventListener('resize', updatePos, true);
-    return () => window.removeEventListener('resize', updatePos, true);
-  }, [popoverOpen, uiLayout]);
+    mountTarget?.addEventListener('scroll', updatePos, { passive: true });
+    const vv = window.visualViewport;
+    vv?.addEventListener('resize', updatePos);
+    vv?.addEventListener('scroll', updatePos);
+    return () => {
+      window.removeEventListener('resize', updatePos, true);
+      mountTarget?.removeEventListener('scroll', updatePos);
+      vv?.removeEventListener('resize', updatePos);
+      vv?.removeEventListener('scroll', updatePos);
+    };
+  }, [popoverOpen, uiLayout, mountTarget]);
+
+  const flyoutVisible = popoverOpen && (uiLayout !== 'phone' || mobileFlyoutPos !== null);
+
+  useEffect(() => {
+    if (flyoutVisible && uiLayout !== 'full') {
+      wasPopoverOpenRef.current = true;
+      firstSwatchRef.current?.focus();
+    } else if (!popoverOpen && wasPopoverOpenRef.current) {
+      wasPopoverOpenRef.current = false;
+      if (active) {
+        (uiLayout === 'phone' ? mobileBtnRef.current : compactBtnRef.current)?.focus();
+      }
+    }
+  }, [flyoutVisible, popoverOpen, uiLayout, active]);
 
   if (!active || !mountTarget) return null;
 
@@ -192,15 +208,15 @@ export function SakuttoRedactPanel({
   if (uiLayout === 'full') {
     return createPortal(
       <div
-        className="selected-shape-actions-container exq-redact-integrated-container"
+        className={`${EXCALIDRAW_CLASSES.selectedShapeActionsContainer} exq-redact-integrated-container`}
         data-exq-redact-root="1"
       >
-        <section className="selected-shape-actions">
+        <section className={EXCALIDRAW_CLASSES.selectedShapeActions}>
           <div
-            className="Island App-menu__left exq-redact-integrated-full"
+            className={`${EXCALIDRAW_CLASSES.island} ${EXCALIDRAW_CLASSES.appMenuLeft} exq-redact-integrated-full`}
             onPointerDown={(e) => e.stopPropagation()}
           >
-            <div className="selected-shape-actions">
+            <div className={EXCALIDRAW_CLASSES.selectedShapeActions}>
               <RedactSwatchContent
                 lang={lang}
                 color={color}
@@ -218,15 +234,18 @@ export function SakuttoRedactPanel({
   if (uiLayout === 'compact') {
     return createPortal(
       <div
-        className="selected-shape-actions-container selected-shape-actions-container--compact exq-redact-integrated-container"
+        className={`${EXCALIDRAW_CLASSES.selectedShapeActionsContainer} ${EXCALIDRAW_CLASSES.selectedShapeActionsContainerCompact} exq-redact-integrated-container`}
         data-exq-redact-root="1"
       >
-        <section className="selected-shape-actions">
+        <section className={EXCALIDRAW_CLASSES.selectedShapeActions}>
           <div className="exq-redact-compact-wrap">
-            <div className="Island compact-shape-actions-island exq-redact-compact-island">
-              <div className="compact-shape-actions">
-                <div className="compact-action-item">
+            <div
+              className={`${EXCALIDRAW_CLASSES.island} ${EXCALIDRAW_CLASSES.compactShapeActionsIsland} exq-redact-compact-island`}
+            >
+              <div className={EXCALIDRAW_CLASSES.compactShapeActions}>
+                <div className={EXCALIDRAW_CLASSES.compactActionItem}>
                   <button
+                    ref={compactBtnRef}
                     type="button"
                     className={`color-picker__button active-color properties-trigger compact-sizing exq-redact-trigger-btn${triggerToneClass ? ` ${triggerToneClass}` : ''}${popoverOpen ? ' active' : ''}`}
                     data-exq-redact-trigger="1"
@@ -246,7 +265,7 @@ export function SakuttoRedactPanel({
             </div>
             {popoverOpen && (
               <div
-                className="Island exq-redact-flyout exq-redact-flyout--side"
+                className={`${EXCALIDRAW_CLASSES.island} exq-redact-flyout exq-redact-flyout--side`}
                 role="dialog"
                 aria-label={t.redactColorTitle}
                 onPointerDown={(e) => e.stopPropagation()}
@@ -258,6 +277,7 @@ export function SakuttoRedactPanel({
                   showClose={true}
                   onClose={() => setPopoverOpen(false)}
                   onColorChange={onColorChange}
+                  firstButtonRef={firstSwatchRef}
                 />
               </div>
             )}
@@ -268,15 +288,15 @@ export function SakuttoRedactPanel({
     );
   }
 
-  const portalContainer =
-    typeof document !== 'undefined'
-      ? document.querySelector(EXCALIDRAW_SELECTORS.root) || document.body
-      : null;
+  const portalContainer = getExcalidrawPortalTarget();
 
   return (
     <>
       {createPortal(
-        <div className="compact-action-item exq-redact-mobile-item" data-exq-redact-root="1">
+        <div
+          className={`${EXCALIDRAW_CLASSES.compactActionItem} exq-redact-mobile-item`}
+          data-exq-redact-root="1"
+        >
           <button
             ref={mobileBtnRef}
             type="button"
@@ -301,7 +321,7 @@ export function SakuttoRedactPanel({
         mobileFlyoutPos &&
         createPortal(
           <div
-            className="Island exq-redact-flyout exq-redact-flyout--up"
+            className={`${EXCALIDRAW_CLASSES.island} exq-redact-flyout exq-redact-flyout--up`}
             data-exq-redact-flyout="1"
             role="dialog"
             aria-label={t.redactColorTitle}
@@ -315,6 +335,7 @@ export function SakuttoRedactPanel({
               showClose={true}
               onClose={() => setPopoverOpen(false)}
               onColorChange={onColorChange}
+              firstButtonRef={firstSwatchRef}
             />
           </div>,
           portalContainer,

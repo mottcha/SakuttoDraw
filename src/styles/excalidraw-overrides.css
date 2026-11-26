@@ -13,7 +13,6 @@
 .context-menu > li[data-testid="copyAsPng"],
 .context-menu > li[data-testid="copyAsSvg"],
 .context-menu > li[data-testid="copyText"],
-.context-menu > li[data-testid="copyAsText"],
 .context-menu > li[data-testid="copyStyles"],
 .context-menu > li[data-testid="pasteStyles"],
 .context-menu > li[data-testid="addToLibrary"],
@@ -31,19 +30,8 @@
   display: none !important;
 }
 
-/* Main hamburger menu: hide native export/collab/palette/search/help/reset/links/canvas-bg */
-.dropdown-menu-container [data-testid="image-export-button"],
-.dropdown-menu-container [data-testid="collab-button"],
-.dropdown-menu-container [data-testid="command-palette-button"],
-.dropdown-menu-container [data-testid="search-menu-button"],
-.dropdown-menu-container [data-testid="help-menu-item"],
-.dropdown-menu-container [data-testid="clear-canvas-button"],
-.dropdown-menu-container > a.dropdown-menu-item,
-.dropdown-menu-container > div:empty:has(+ a.dropdown-menu-item),
-.dropdown-menu-container .dropdown-menu-group:has(a.dropdown-menu-item),
-.dropdown-menu-container > div:empty:has(+ .dropdown-menu-group a.dropdown-menu-item),
-.dropdown-menu-container > hr:has(+ .dropdown-menu-group a.dropdown-menu-item),
-.dropdown-menu-container > div:has([data-testid="canvas-background-label"]) {
+/* Main hamburger menu: keep native SaveAsImage item as DOM insertion anchor, visually hidden */
+.dropdown-menu-container [data-testid="image-export-button"] {
   display: none !important;
 }
 

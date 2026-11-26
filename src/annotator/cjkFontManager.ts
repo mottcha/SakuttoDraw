@@ -24,7 +24,7 @@ export function resolveFontAssetUrl(relPath: string, baseUrl?: string): string {
       : './');
   const origin =
     typeof window !== 'undefined' && window.location ? window.location.href : 'http://localhost/';
-  const baseResolved = new URL(rawBase, origin).toString().replace(/\/+$/, '') + '/';
+  const baseResolved = `${new URL(rawBase, origin).toString().replace(/\/+$/, '')}/`;
   return new URL(cleanRel, baseResolved).toString();
 }
 
@@ -47,6 +47,101 @@ export function saveRecordedInstalledSets(
   silently(() =>
     storage.setItem(LS_CJK_INSTALLED_KEY, JSON.stringify(Array.from(new Set(installed)))),
   );
+}
+
+function buildManifestUrlSet(baseUrl?: string): Set<string> {
+  const validUrls = new Set<string>();
+  for (const lang of CJK_LANG_ORDER) {
+    for (const relPath of cjkFontManifest.sets[lang]?.files ?? []) {
+      validUrls.add(resolveFontAssetUrl(relPath, baseUrl));
+    }
+  }
+  return validUrls;
+}
+
+const RUNTIME_CACHED_FONT_URL_RE = /\/fonts\/(Xiaolai|SetoJP|BizUdpGothic|MochiyPop|SakuttoCode)\/.*\.woff2$/i;
+
+export async function getAllLanguageSetCacheStatuses({
+  cacheStorage = typeof caches !== 'undefined' ? caches : null,
+  storage = typeof localStorage !== 'undefined' ? localStorage : null,
+  baseUrl,
+  pruneStale = false,
+}: {
+  cacheStorage?: CacheStorage | null;
+  storage?: Storage | null;
+  baseUrl?: string;
+  pruneStale?: boolean;
+} = {}): Promise<Record<CjkLang, boolean>> {
+  const result = {} as Record<CjkLang, boolean>;
+  for (const lang of CJK_LANG_ORDER) result[lang] = false;
+
+  const recorded = getRecordedInstalledSets(storage);
+  if (!cacheStorage || typeof cacheStorage.open !== 'function') {
+    return result;
+  }
+
+  try {
+    const cache = await cacheStorage.open(CJK_FONT_CACHE_NAME);
+    let dirtyRecorded = false;
+
+    if (typeof cache.keys === 'function') {
+      const keys = await cache.keys();
+      const cachedUrlSet = new Set(keys.map((req) => req.url));
+
+      if (pruneStale) {
+        const validUrls = buildManifestUrlSet(baseUrl);
+        const staleUrls = keys
+          .map((req) => req.url)
+          .filter((url) => RUNTIME_CACHED_FONT_URL_RE.test(url) && !validUrls.has(url));
+        if (staleUrls.length > 0) {
+          await Promise.all(staleUrls.map((url) => cache.delete(url)));
+        }
+      }
+
+      for (const lang of CJK_LANG_ORDER) {
+        const setMeta = cjkFontManifest.sets[lang];
+        if (!setMeta || setMeta.files.length === 0 || !recorded.has(lang)) {
+          result[lang] = false;
+          continue;
+        }
+        const allPresent = setMeta.files.every((relPath) =>
+          cachedUrlSet.has(resolveFontAssetUrl(relPath, baseUrl)),
+        );
+        if (!allPresent) {
+          recorded.delete(lang);
+          dirtyRecorded = true;
+          result[lang] = false;
+        } else {
+          result[lang] = true;
+        }
+      }
+    } else {
+      for (const lang of CJK_LANG_ORDER) {
+        const setMeta = cjkFontManifest.sets[lang];
+        if (!setMeta || setMeta.files.length === 0 || !recorded.has(lang)) {
+          result[lang] = false;
+          continue;
+        }
+        const hits = await Promise.all(
+          setMeta.files.map((relPath) => cache.match(resolveFontAssetUrl(relPath, baseUrl))),
+        );
+        if (hits.some((h) => !h)) {
+          recorded.delete(lang);
+          dirtyRecorded = true;
+          result[lang] = false;
+        } else {
+          result[lang] = true;
+        }
+      }
+    }
+
+    if (dirtyRecorded) {
+      saveRecordedInstalledSets(recorded, storage);
+    }
+    return result;
+  } catch {
+    return result;
+  }
 }
 
 export async function isLanguageSetCached(
@@ -83,7 +178,6 @@ export async function isLanguageSetCached(
       return true;
     }
 
-    // Fallback for minimal Cache mocks without keys()
     const hits = await Promise.all(
       setMeta.files.map((relPath) => cache.match(resolveFontAssetUrl(relPath, baseUrl))),
     );
@@ -123,6 +217,10 @@ export async function downloadLanguageFontSet(
 
   const files = setMeta.files;
   const total = files.length;
+  if (total === 0) {
+    return { ok: true, cachedCount: 0, total: 0 };
+  }
+
   let completed = 0;
   let cursor = 0;
 
@@ -142,7 +240,11 @@ export async function downloadLanguageFontSet(
           if (!resp.ok) {
             throw new Error(`Failed to fetch font chunk: ${url} (${resp.status})`);
           }
-          await cache.put(url, resp.clone());
+          const contentType = resp.headers?.get?.('content-type')?.toLowerCase() ?? '';
+          if (contentType.includes('text/html')) {
+            throw new Error(`Unexpected HTML fallback response for font chunk: ${url}`);
+          }
+          await cache.put(url, resp);
         }
         completed += 1;
         onProgress?.(completed, total);
@@ -184,19 +286,21 @@ export async function deleteLanguageFontSet(
     cacheStorage = typeof caches !== 'undefined' ? caches : null,
     storage = typeof localStorage !== 'undefined' ? localStorage : null,
     baseUrl,
+    protectedLangs = [],
   }: {
     cacheStorage?: CacheStorage | null;
     storage?: Storage | null;
     baseUrl?: string;
+    protectedLangs?: Iterable<CjkLang>;
   } = {},
 ): Promise<{ ok: boolean; deletedCount: number }> {
   const recorded = getRecordedInstalledSets(storage);
-  const filesToDelete = computeExclusiveFilesForDeletion(lang, recorded);
-
-  recorded.delete(lang);
-  saveRecordedInstalledSets(recorded, storage);
+  const protectedSet = new Set<CjkLang>([...recorded, ...protectedLangs]);
+  const filesToDelete = computeExclusiveFilesForDeletion(lang, protectedSet);
 
   if (!cacheStorage || typeof cacheStorage.open !== 'function') {
+    recorded.delete(lang);
+    saveRecordedInstalledSets(recorded, storage);
     return { ok: true, deletedCount: 0 };
   }
 
@@ -210,6 +314,8 @@ export async function deleteLanguageFontSet(
         if (removed) deletedCount += 1;
       }),
     );
+    recorded.delete(lang);
+    saveRecordedInstalledSets(recorded, storage);
     return { ok: true, deletedCount };
   } catch {
     return { ok: false, deletedCount: 0 };

@@ -140,6 +140,42 @@ describe('context menu enrichment & mobile UI unification', () => {
     const unlockedIconHtml = document.querySelector('li[data-testid="toggleElementLock"] .exq-ctx-item-icon svg')?.innerHTML;
     expect(unlockedIconHtml).toBeTruthy();
     expect(unlockedIconHtml).not.toBe(lockedIconHtml);
+
+    // Reused <ul> (different menu contents mutated in-place) cleanly rebuilds quick bar & decorations
+    const existingUl = document.querySelector('ul.context-menu')!;
+    existingUl.innerHTML = `
+      <li data-testid="paste"><button class="context-menu-item">貼り付け</button></li>
+      <li data-testid="selectAll"><button class="context-menu-item">すべて選択</button></li>
+    `;
+    attachExcalidrawAPI({
+      getAppState: () => ({ selectedElementIds: {} }),
+      getSceneElements: () => [],
+    } as unknown as ExcalidrawImperativeAPI);
+    expect(syncContextMenu()).toBe(true);
+    expect(existingUl.classList.contains('exq-ctx-rich')).toBe(true);
+    expect(existingUl.querySelector('[data-exq-ctx-quick-bar="1"]')).toBeNull();
+    expect(existingUl.querySelector('li[data-testid="paste"] .exq-ctx-item-icon svg')).toBeTruthy();
+  });
+
+  it('clears dangling frameId on surviving elements when deleting a frame', () => {
+    const updatedArgs: unknown[] = [];
+    const elements = [
+      { id: 'frame-1', type: 'frame', isDeleted: false },
+      { id: 'rect-1', type: 'rectangle', frameId: 'frame-1', locked: true, isDeleted: false },
+    ];
+    const mockApi = {
+      getSceneElementsIncludingDeleted: () => elements,
+      getSceneElements: () => elements,
+      getAppState: () => ({ selectedElementIds: { 'frame-1': true }, selectedGroupIds: {} }),
+      updateScene: (arg: { elements: typeof elements }) => {
+        updatedArgs.push(arg);
+      },
+    } as unknown as ExcalidrawImperativeAPI;
+
+    expect(deleteSelectedElementsWithApi(mockApi)).toBe(true);
+    const committed = (updatedArgs[0] as { elements: Array<Record<string, unknown>> }).elements;
+    expect(committed.find((e) => e.id === 'frame-1')?.isDeleted).toBe(true);
+    expect(committed.find((e) => e.id === 'rect-1')?.frameId).toBeNull();
   });
 
   it('mounts A-2 7-slot mobile toolbar with dedicated rectangle, upward shape picker, fallback text, and recovers Image/Frame in Extra Tools', () => {

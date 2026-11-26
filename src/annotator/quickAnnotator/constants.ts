@@ -7,7 +7,7 @@ export const SHAPE_OTHER_ITEMS = [
   { id: 'arrow', testId: EXCALIDRAW_TESTIDS.arrow, msgKey: 'toolArrow', shortcut: 'A' },
   { id: 'line', testId: EXCALIDRAW_TESTIDS.line, msgKey: 'toolLine', shortcut: 'L' },
   { id: 'diamond', testId: EXCALIDRAW_TESTIDS.diamond, msgKey: 'toolDiamond', shortcut: 'D' },
-  { id: 'redact', testId: 'toolbar-redact', msgKey: 'toolRedact', shortcut: '' },
+  { id: 'redact', testId: '', msgKey: 'toolRedact', shortcut: '' },
 ] as const;
 
 export const MOBILE_SHAPE_OTHER_ITEMS = [
@@ -15,7 +15,7 @@ export const MOBILE_SHAPE_OTHER_ITEMS = [
   { id: 'arrow', testId: EXCALIDRAW_TESTIDS.arrow, msgKey: 'toolArrow', shortcut: 'A' },
   { id: 'line', testId: EXCALIDRAW_TESTIDS.line, msgKey: 'toolLine', shortcut: 'L' },
   { id: 'diamond', testId: EXCALIDRAW_TESTIDS.diamond, msgKey: 'toolDiamond', shortcut: 'D' },
-  { id: 'redact', testId: 'toolbar-redact', msgKey: 'toolRedact', shortcut: '' },
+  { id: 'redact', testId: '', msgKey: 'toolRedact', shortcut: '' },
 ] as const;
 
 export const EXTRA_T3_LEFT_ITEMS = [
@@ -34,10 +34,11 @@ export const EXTRA_T3_LOCK_ITEM = {
 export const CANVAS_BG_SWATCHES = ['#ffffff', '#f8f9fa', '#f5faff', '#fffce8', '#fdf8f6'] as const;
 
 export const EXPORT_TOGGLE_DEFS = [
-  { key: 'onlySelected', id: 'exportOnlySelected', msgKey: 'exportOnlySelected' },
-  { key: 'background', id: 'exportBackgroundSwitch', msgKey: 'exportBackground' },
-  { key: 'darkMode', id: 'exportDarkModeSwitch', msgKey: 'exportDarkMode' },
-  { key: 'embedScene', id: 'exportEmbedSwitch', msgKey: 'exportEmbedScene' },
+  { key: 'onlySelected', msgKey: 'exportOnlySelected' },
+  { key: 'background', msgKey: 'exportBackground' },
+  { key: 'darkMode', msgKey: 'exportDarkMode' },
+  { key: 'embedScene', msgKey: 'exportEmbedScene' },
+  { key: 'padding', msgKey: 'exportPadding' },
 ] as const;
 
 export const DRAW_ASSIST_DEFS = [

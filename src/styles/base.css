@@ -9,12 +9,33 @@ body,
   overflow: hidden;
 }
 
+.excalidraw {
+  --exq-text-secondary: #686878;
+  --exq-z-rubberband: 90;
+  --exq-z-popover: 120;
+  --exq-z-flyout: 140;
+  --exq-z-mobile-flyout: 1050;
+  --exq-z-modal: 1100;
+  --exq-z-toast: 99999;
+}
+
+.excalidraw.theme--dark {
+  --exq-text-secondary: #a1a1b5;
+}
+
 /* Inherit Excalidraw UI font across all custom buttons/controls (browser UA resets button font-family) */
 .excalidraw [class*="exq-"] button,
 .excalidraw button[class*="exq-"],
 .excalidraw select[class*="exq-"],
 .context-menu.exq-ctx-rich button {
   font-family: inherit;
+}
+
+.excalidraw [class*="exq-"] button:focus-visible,
+.excalidraw button[class*="exq-"]:focus-visible,
+.context-menu.exq-ctx-rich button:focus-visible {
+  outline: 2px solid var(--color-primary, #6965db);
+  outline-offset: 2px;
 }
 
 /* Shared Switch & Scale Controls */
@@ -74,7 +95,7 @@ body,
   border: none;
   border-radius: 5px;
   background: transparent;
-  color: var(--text-secondary-color, #686878);
+  color: var(--exq-text-secondary);
   font-size: 11px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -92,8 +113,10 @@ body,
 /* Lightweight Toast */
 .exq-toast {
   position: fixed;
-  bottom: 18px;
+  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
   left: 50%;
+  max-width: calc(100vw - 32px);
+  text-align: center;
   transform: translateX(-50%) translateY(10px);
   padding: 7px 14px;
   border-radius: 8px;
@@ -104,15 +127,26 @@ body,
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22);
   opacity: 0;
   pointer-events: none;
-  z-index: 99999;
+  z-index: var(--exq-z-toast);
   transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.excalidraw.theme--dark .exq-toast {
+  background: #2b2b36;
+  color: #f5f5fa;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+.excalidraw.excalidraw--mobile .exq-toast {
+  bottom: calc(74px + env(safe-area-inset-bottom, 0px));
 }
 .exq-toast.exq-toast-show {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
 }
 
-/* Native-matched low-contrast swatch outline (light swatches in light theme, dark swatches in dark theme) */
+/* Native-matched low-contrast swatch outline & hover highlight */
+.excalidraw .color-picker__button[class*="exq-"]:hover:not(.active) {
+  box-shadow: inset 0 0 0 1px var(--color-primary);
+}
 .excalidraw:not(.theme--dark) .color-picker__button.exq-swatch--light,
 .excalidraw.theme--dark .color-picker__button.exq-swatch--dark {
   box-shadow: 0 0 0 1px var(--color-outline, rgba(128, 128, 148, 0.35));

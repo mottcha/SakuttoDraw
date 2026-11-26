@@ -4,9 +4,10 @@ import {
   CJK_LANG_ORDER,
   deleteLanguageFontSet,
   downloadLanguageFontSet,
-  isLanguageSetCached,
+  getAllLanguageSetCacheStatuses,
 } from '../annotator/cjkFontManager';
-import { showToast } from '../annotator/quickAnnotator/runtime';
+import { refreshSceneTextFonts, reloadErroredRegisteredFonts } from '../annotator/jpGlyphOverride';
+import { runtime, showToast } from '../annotator/quickAnnotator/runtime';
 import { getMessages } from '../i18n/messages';
 
 export interface CjkUiSnapshot {
@@ -14,19 +15,33 @@ export interface CjkUiSnapshot {
   progress: Record<CjkLang, number>;
 }
 
+function createInitialRecord<T>(value: T): Record<CjkLang, T> {
+  const out = {} as Record<CjkLang, T>;
+  for (const lang of CJK_LANG_ORDER) {
+    out[lang] = value;
+  }
+  return out;
+}
+
 let snapshot: CjkUiSnapshot = {
-  statuses: {
-    ja: 'uninstalled',
-    jaStandard: 'uninstalled',
-    jaPop: 'uninstalled',
-    jaCode: 'uninstalled',
-    ko: 'uninstalled',
-    zh: 'uninstalled',
-  },
-  progress: { ja: 0, jaStandard: 0, jaPop: 0, jaCode: 0, ko: 0, zh: 0 },
+  statuses: createInitialRecord<CjkSetStatus>('uninstalled'),
+  progress: createInitialRecord(0),
 };
 
 const listeners = new Set<() => void>();
+let opSeq = 0;
+const activeOpToken: Partial<Record<CjkLang, number>> = {};
+
+export function resetCjkFontStoreForTests(): void {
+  opSeq = 0;
+  for (const lang of CJK_LANG_ORDER) {
+    delete activeOpToken[lang];
+  }
+  snapshot = {
+    statuses: createInitialRecord<CjkSetStatus>('uninstalled'),
+    progress: createInitialRecord(0),
+  };
+}
 
 function updateSnapshot(next: CjkUiSnapshot): void {
   snapshot = next;
@@ -51,30 +66,46 @@ export function useCjkFontCacheState(): CjkUiSnapshot {
 }
 
 export function refreshCjkCacheStatuses(isCancelled: () => boolean): void {
-  for (const cjkLang of CJK_LANG_ORDER) {
-    void isLanguageSetCached(cjkLang).then((cached) => {
-      if (isCancelled()) return;
-      if (snapshot.statuses[cjkLang] === 'downloading') return;
-      const nextStatus: CjkSetStatus = cached ? 'installed' : 'uninstalled';
-      if (snapshot.statuses[cjkLang] !== nextStatus) {
-        updateSnapshot({
-          ...snapshot,
-          statuses: { ...snapshot.statuses, [cjkLang]: nextStatus },
-        });
+  void getAllLanguageSetCacheStatuses({ pruneStale: true }).then((cachedMap) => {
+    if (isCancelled()) return;
+    let changed = false;
+    const nextStatuses = { ...snapshot.statuses };
+    for (const cjkLang of CJK_LANG_ORDER) {
+      const cur = nextStatuses[cjkLang];
+      if (cur === 'downloading' || cur === 'deleting') continue;
+      const target: CjkSetStatus = cachedMap[cjkLang] ? 'installed' : 'uninstalled';
+      if (cur !== target) {
+        nextStatuses[cjkLang] = target;
+        changed = true;
       }
-    });
-  }
+    }
+    if (changed) {
+      updateSnapshot({
+        ...snapshot,
+        statuses: nextStatuses,
+      });
+    }
+  });
 }
 
 export async function toggleLanguageFontCache(cjkLang: CjkLang, uiLang: AppLang): Promise<void> {
   const currentStatus = snapshot.statuses[cjkLang];
-  if (currentStatus === 'downloading') return;
+  if (currentStatus === 'downloading' || currentStatus === 'deleting') return;
 
   const msgs = getMessages(uiLang);
   const display = msgs.cjkLangName[cjkLang];
+  const token = ++opSeq;
+  activeOpToken[cjkLang] = token;
 
   if (currentStatus === 'installed') {
-    const res = await deleteLanguageFontSet(cjkLang);
+    const downloadingLangs = CJK_LANG_ORDER.filter((l) => snapshot.statuses[l] === 'downloading');
+    updateSnapshot({
+      ...snapshot,
+      statuses: { ...snapshot.statuses, [cjkLang]: 'deleting' },
+    });
+
+    const res = await deleteLanguageFontSet(cjkLang, { protectedLangs: downloadingLangs });
+    if (activeOpToken[cjkLang] !== token) return;
     if (res.ok) {
       updateSnapshot({
         statuses: { ...snapshot.statuses, [cjkLang]: 'uninstalled' },
@@ -82,6 +113,10 @@ export async function toggleLanguageFontCache(cjkLang: CjkLang, uiLang: AppLang)
       });
       showToast(msgs.toastFontDeleted(display));
     } else {
+      updateSnapshot({
+        ...snapshot,
+        statuses: { ...snapshot.statuses, [cjkLang]: 'installed' },
+      });
       showToast(msgs.toastFontDeleteFailed(display));
     }
     return;
@@ -94,6 +129,7 @@ export async function toggleLanguageFontCache(cjkLang: CjkLang, uiLang: AppLang)
 
   const res = await downloadLanguageFontSet(cjkLang, {
     onProgress: (done, total) => {
+      if (activeOpToken[cjkLang] !== token || snapshot.statuses[cjkLang] !== 'downloading') return;
       const pct = total > 0 ? Math.round((done / total) * 100) : 100;
       updateSnapshot({
         ...snapshot,
@@ -102,11 +138,15 @@ export async function toggleLanguageFontCache(cjkLang: CjkLang, uiLang: AppLang)
     },
   });
 
+  if (activeOpToken[cjkLang] !== token) return;
+
   if (res.ok) {
     updateSnapshot({
       statuses: { ...snapshot.statuses, [cjkLang]: 'installed' },
       progress: { ...snapshot.progress, [cjkLang]: 100 },
     });
+    reloadErroredRegisteredFonts();
+    void refreshSceneTextFonts(runtime.api);
     showToast(msgs.toastFontDownloaded(display));
   } else {
     updateSnapshot({

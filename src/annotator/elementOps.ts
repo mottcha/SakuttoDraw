@@ -7,11 +7,19 @@ import type {
 } from '@excalidraw/excalidraw/element/types';
 import { makeElementId, nextElementNonce } from '../utils/common';
 
+function cloneValue<T>(val: T): T {
+  if (val == null || typeof val !== 'object') return val;
+  if (typeof structuredClone === 'function') {
+    return structuredClone(val);
+  }
+  return JSON.parse(JSON.stringify(val)) as T;
+}
+
 /**
  * Expands the current selection (direct element IDs + selected group IDs)
  * to a fixed point including bound text and frame children.
  */
-export function expandSelectedElementIds(
+function expandSelectedElementIds(
   allElements: readonly ExcalidrawElement[],
   appState: Partial<AppState>,
   { includeLocked }: { includeLocked: boolean },
@@ -130,9 +138,16 @@ export function deleteSelectedElementsWithApi(api: ExcalidrawImperativeAPI | nul
       changed = true;
     }
 
+    let nextFrameId = el.frameId;
+    if (el.frameId && idsToDelete.has(el.frameId)) {
+      nextFrameId = null;
+      changed = true;
+    }
+
     if (!changed) return el;
     return {
       ...el,
+      frameId: nextFrameId,
       boundElements: nextBound,
       ...(nextStartBinding !== linear.startBinding ? { startBinding: nextStartBinding } : {}),
       ...(nextEndBinding !== linear.endBinding ? { endBinding: nextEndBinding } : {}),
@@ -205,11 +220,13 @@ export function duplicateSelectedElementsWithApi(api: ExcalidrawImperativeAPI | 
     const linear = el as ExcalidrawElement & {
       points?: ReadonlyArray<readonly [number, number]>;
       pressures?: readonly number[];
-      startBinding?: { elementId: string } | null;
-      endBinding?: { elementId: string } | null;
+      fixedSegments?: unknown;
+      startBinding?: { elementId: string; fixedPoint?: unknown } | null;
+      endBinding?: { elementId: string; fixedPoint?: unknown } | null;
     };
     const imageLike = el as ExcalidrawElement & {
       scale?: readonly [number, number];
+      crop?: unknown;
     };
 
     const cloned: Record<string, unknown> = {
@@ -234,20 +251,22 @@ export function duplicateSelectedElementsWithApi(api: ExcalidrawImperativeAPI | 
         : {}),
       ...(linear.points ? { points: linear.points.map((pt) => [...pt]) } : {}),
       ...(linear.pressures ? { pressures: [...linear.pressures] } : {}),
+      ...(linear.fixedSegments !== undefined ? { fixedSegments: cloneValue(linear.fixedSegments) } : {}),
       ...(imageLike.scale ? { scale: [...imageLike.scale] } : {}),
-      ...(el.customData ? { customData: { ...el.customData } } : {}),
+      ...(imageLike.crop !== undefined ? { crop: cloneValue(imageLike.crop) } : {}),
+      ...(el.customData ? { customData: cloneValue(el.customData) } : {}),
     };
 
     if ('startBinding' in linear) {
       cloned.startBinding =
         linear.startBinding && idMap.has(linear.startBinding.elementId)
-          ? { ...linear.startBinding, elementId: idMap.get(linear.startBinding.elementId)! }
+          ? { ...cloneValue(linear.startBinding), elementId: idMap.get(linear.startBinding.elementId)! }
           : null;
     }
     if ('endBinding' in linear) {
       cloned.endBinding =
         linear.endBinding && idMap.has(linear.endBinding.elementId)
-          ? { ...linear.endBinding, elementId: idMap.get(linear.endBinding.elementId)! }
+          ? { ...cloneValue(linear.endBinding), elementId: idMap.get(linear.endBinding.elementId)! }
           : null;
     }
 

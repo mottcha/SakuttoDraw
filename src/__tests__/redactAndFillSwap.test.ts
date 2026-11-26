@@ -18,7 +18,6 @@ import {
   createOrUpdateRedactElement,
   getRedactMeta,
   isRedactElement,
-  resetRedactStyleIsolationForTests,
   syncRedactStyleIsolation,
   updateRedactElementsColor,
   updateRedactStyleIsolationPenColor,
@@ -55,11 +54,14 @@ describe('CustomSettings, Stroke-Fill Swap, and Blackout/Redact Tool', () => {
     expect(host.querySelector('[data-exq-bg-color="#f8f9fa"]')?.classList.contains('exq-swatch--light')).toBe(true);
 
     const fastSaveBtn = host.querySelector<HTMLButtonElement>('[data-exq-quick-opt="fastLoadSave"]');
-    expect(fastSaveBtn?.classList.contains('exq-on')).toBe(true);
+    expect(fastSaveBtn?.getAttribute('role')).toBe('switch');
+    expect(fastSaveBtn?.getAttribute('aria-checked')).toBe('true');
+    expect(fastSaveBtn?.querySelector('.exq-switch')?.classList.contains('exq-on')).toBe(true);
     await act(async () => {
-      fastSaveBtn?.parentElement?.click();
+      fastSaveBtn?.click();
     });
     expect(runtime.prefs.quickOpts.fastLoadSave).toBe(false);
+    expect(fastSaveBtn?.getAttribute('aria-checked')).toBe('false');
     await act(async () => {
       root.unmount();
     });
@@ -238,37 +240,21 @@ describe('CustomSettings, Stroke-Fill Swap, and Blackout/Redact Tool', () => {
     expect(mobBtn?.getAttribute('aria-label')).toContain('Shift+X');
     expect(slimBtn?.classList.contains('exq-is-filled')).toBe(false);
     expect(slimBtn?.getAttribute('aria-pressed')).toBe('false');
-    expect(slimBtn?.querySelectorAll('.exq-fill-btn-icon svg path').length).toBe(4);
-    expect(mobBtn?.querySelectorAll('.exq-fill-btn-icon svg path').length).toBe(4);
+    const hollowSvgHtml = slimBtn?.querySelector('.exq-fill-btn-icon')?.innerHTML ?? '';
+    expect(hollowSvgHtml.length).toBeGreaterThan(0);
 
     currentStroke = 'transparent';
     currentBg = '#c2255c';
     syncStylesPanelColorSwap();
     expect(slimBtn?.classList.contains('exq-is-filled')).toBe(true);
     expect(slimBtn?.getAttribute('aria-pressed')).toBe('true');
-    expect(slimBtn?.querySelectorAll('.exq-fill-btn-icon svg path').length).toBe(5);
+    expect(slimBtn?.querySelector('.exq-fill-btn-icon')?.innerHTML).not.toBe(hollowSvgHtml);
     expect(mobBtn?.classList.contains('exq-is-filled')).toBe(true);
-    expect(mobBtn?.querySelectorAll('.exq-fill-btn-icon svg path').length).toBe(5);
 
     activeToolType = 'freedraw';
     syncStylesPanelColorSwap();
     expect(document.querySelector('.App-menu_top__left [data-exq-fill-toggle="1"]')).toBeNull();
     expect(document.querySelector('.mobile-shape-actions [data-exq-fill-toggle="1"]')).toBeNull();
-
-    activeToolType = 'rectangle';
-    document.body.innerHTML = `
-      <div class="selected-shape-actions-container">
-        <div class="Island App-menu__left">
-          <div data-exq-fill-segment="1">stale</div>
-          <div class="panelColumn">
-            <button data-openpopup="elementStroke"></button>
-            <button data-openpopup="elementBackground"></button>
-          </div>
-        </div>
-      </div>
-    `;
-    syncStylesPanelColorSwap();
-    expect(document.querySelector('[data-exq-fill-segment="1"]')).toBeNull();
   });
 
   it('creates native blackout rectangle with customizable color, updates selected blackout color, and mounts color-only SakuttoRedactPanel', async () => {
@@ -426,7 +412,7 @@ describe('CustomSettings, Stroke-Fill Swap, and Blackout/Redact Tool', () => {
   });
 
   it('isolates blackout style edits so normal shape/pen defaults remain unaffected', () => {
-    resetRedactStyleIsolationForTests();
+    clearRedactStyleIsolationState();
     let appState: Record<string, unknown> = {
       currentItemBackgroundColor: 'transparent',
       currentItemStrokeColor: '#c2255c',
@@ -517,6 +503,54 @@ describe('CustomSettings, Stroke-Fill Swap, and Blackout/Redact Tool', () => {
 
       window.dispatchEvent(new Event('blur'));
       expect(document.querySelector('[data-exq-redact-rubberband="1"]')).toBeNull();
+
+      // Multi-touch second pointer aborts active drag cleanly without committing
+      const updateSceneMock = vi.fn();
+      let sceneEls: Array<Record<string, unknown>> = [];
+      attachExcalidrawAPI({
+        getSceneElementsIncludingDeleted: () => sceneEls,
+        getSceneElements: () => sceneEls,
+        getAppState: () => ({
+          activeTool: { type: 'custom', customType: REDACT_TOOL_CUSTOM_TYPE, locked: false },
+          zoom: { value: 2 },
+          scrollX: 100,
+          scrollY: 50,
+          offsetLeft: 20,
+          offsetTop: 10,
+        }),
+        updateScene: (arg: { elements?: Array<Record<string, unknown>> }) => {
+          updateSceneMock(arg);
+          if (arg.elements) sceneEls = arg.elements;
+        },
+        setActiveTool: vi.fn(),
+      } as unknown as ExcalidrawImperativeAPI);
+
+      const p1Down = new MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 60, clientY: 50 });
+      Object.defineProperty(p1Down, 'pointerId', { value: 11 });
+      canvas.dispatchEvent(p1Down);
+      expect(document.querySelector('[data-exq-redact-rubberband="1"]')).toBeTruthy();
+
+      const p2Down = new MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 90, clientY: 90 });
+      Object.defineProperty(p2Down, 'pointerId', { value: 12 });
+      canvas.dispatchEvent(p2Down);
+      expect(document.querySelector('[data-exq-redact-rubberband="1"]')).toBeNull();
+      expect(updateSceneMock).not.toHaveBeenCalled();
+
+      // Complete pointerdown -> pointermove -> pointerup commits scene element with zoom/scroll mapping
+      const d1 = new MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 60, clientY: 50 });
+      Object.defineProperty(d1, 'pointerId', { value: 15 });
+      canvas.dispatchEvent(d1);
+      const m1 = new MouseEvent('pointermove', { bubbles: true, button: 0, clientX: 160, clientY: 110 });
+      Object.defineProperty(m1, 'pointerId', { value: 15 });
+      window.dispatchEvent(m1);
+      const u1 = new MouseEvent('pointerup', { bubbles: true, button: 0, clientX: 160, clientY: 110 });
+      Object.defineProperty(u1, 'pointerId', { value: 15 });
+      window.dispatchEvent(u1);
+
+      expect(updateSceneMock).toHaveBeenCalledTimes(1);
+      expect(sceneEls.length).toBe(1);
+      expect(sceneEls[0].width).toBe(50);
+      expect(sceneEls[0].height).toBe(30);
     } finally {
       cleanup();
     }

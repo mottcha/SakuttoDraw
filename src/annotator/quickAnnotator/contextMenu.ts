@@ -1,57 +1,103 @@
 // Right-click context menu quick bar / layer bar and popover clamping.
-import { CTX_HIDDEN_TESTIDS, EXCALIDRAW_SELECTORS } from '../../excalidraw/domContract';
+import type { AppLang } from '../../types/annotator';
+import {
+  CTX_HIDDEN_TESTIDS,
+  ctxItemSelector,
+  EXCALIDRAW_CLASSES,
+  EXCALIDRAW_CTX_TESTIDS,
+  EXCALIDRAW_SELECTORS,
+} from '../../excalidraw/domContract';
 import { getMessages } from '../../i18n/messages';
 import { isMacPlatform, silently } from '../../utils/common';
-import { el, svgIcon } from './dom';
-import { runtime, sendEscape } from './runtime';
+import { el, formatShortcutLabel, svgIcon } from './dom';
+import { hasSelectedElements, runtime, sendEscape } from './runtime';
 
-const contextMenuProcessed = new WeakSet<Element>();
+const contextMenuState = new WeakMap<
+  Element,
+  { signature: string; lang: AppLang; modern: boolean }
+>();
 
 /* ================= Context Menu Cleanup & Rich UI (Design 1) ================= */
 const CTX_QUICK_BAR_ITEMS = [
-  { testId: 'cut', icon: 'cut', msgKey: 'ctxCut', shortcut: 'Ctrl+X', danger: false },
-  { testId: 'copy', icon: 'copy', msgKey: 'ctxCopy', shortcut: 'Ctrl+C', danger: false },
-  { testId: 'paste', icon: 'paste', msgKey: 'ctxPaste', shortcut: 'Ctrl+V', danger: false },
-  { testId: 'duplicateSelection', icon: 'dup', msgKey: 'ctxDuplicate', shortcut: 'Ctrl+D', danger: false },
-  { testId: 'deleteSelectedElements', icon: 'reset', msgKey: 'ctxDelete', shortcut: 'Delete', danger: true },
+  { testId: EXCALIDRAW_CTX_TESTIDS.cut, icon: 'cut', msgKey: 'ctxCut', shortcut: 'Ctrl+X', danger: false },
+  { testId: EXCALIDRAW_CTX_TESTIDS.copy, icon: 'copy', msgKey: 'ctxCopy', shortcut: 'Ctrl+C', danger: false },
+  { testId: EXCALIDRAW_CTX_TESTIDS.paste, icon: 'paste', msgKey: 'ctxPaste', shortcut: 'Ctrl+V', danger: false },
+  {
+    testId: EXCALIDRAW_CTX_TESTIDS.duplicateSelection,
+    icon: 'dup',
+    msgKey: 'ctxDuplicate',
+    shortcut: 'Ctrl+D',
+    danger: false,
+  },
+  {
+    testId: EXCALIDRAW_CTX_TESTIDS.deleteSelectedElements,
+    icon: 'reset',
+    msgKey: 'ctxDelete',
+    shortcut: 'Delete',
+    danger: true,
+  },
 ] as const;
 
 const CTX_LAYER_BAR_ITEMS = [
-  { testId: 'sendToBack', zIdx: 0, icon: 'toBack', msgKey: 'ctxSendToBack', shortcut: 'Ctrl+Shift+[' },
-  { testId: 'sendBackward', zIdx: 1, icon: 'backward', msgKey: 'ctxSendBackward', shortcut: 'Ctrl+[' },
-  { testId: 'bringForward', zIdx: 2, icon: 'forward', msgKey: 'ctxBringForward', shortcut: 'Ctrl+]' },
-  { testId: 'bringToFront', zIdx: 3, icon: 'toFront', msgKey: 'ctxBringToFront', shortcut: 'Ctrl+Shift+]' },
+  {
+    testId: EXCALIDRAW_CTX_TESTIDS.sendToBack,
+    zIdx: 0,
+    icon: 'toBack',
+    msgKey: 'ctxSendToBack',
+    shortcut: 'Ctrl+Shift+[',
+  },
+  {
+    testId: EXCALIDRAW_CTX_TESTIDS.sendBackward,
+    zIdx: 1,
+    icon: 'backward',
+    msgKey: 'ctxSendBackward',
+    shortcut: 'Ctrl+[',
+  },
+  {
+    testId: EXCALIDRAW_CTX_TESTIDS.bringForward,
+    zIdx: 2,
+    icon: 'forward',
+    msgKey: 'ctxBringForward',
+    shortcut: 'Ctrl+]',
+  },
+  {
+    testId: EXCALIDRAW_CTX_TESTIDS.bringToFront,
+    zIdx: 3,
+    icon: 'toFront',
+    msgKey: 'ctxBringToFront',
+    shortcut: 'Ctrl+Shift+]',
+  },
 ] as const;
 
 const CTX_ITEM_ICON_MAP: Record<string, string> = {
-  cut: 'cut',
-  copy: 'copy',
-  paste: 'paste',
-  duplicateSelection: 'dup',
-  deleteSelectedElements: 'reset',
-  sendToBack: 'toBack',
-  sendBackward: 'backward',
-  bringForward: 'forward',
-  bringToFront: 'toFront',
-  cropEditor: 'crop',
-  flipHorizontal: 'flipH',
-  flipVertical: 'flipV',
-  hyperlink: 'link',
-  copyElementLink: 'copyLink',
-  toggleElementLock: 'lock',
-  unlockAllElements: 'unlock',
-  selectAll: 'selectAll',
-  group: 'group',
-  ungroup: 'ungroup',
-  toggleWrap: 'wrap',
-  autoResize: 'wrap',
-  unbindText: 'wrap',
-  bindText: 'wrap',
-  wrapTextInContainer: 'wrapContainer',
-  toggleLinearEditor: 'editLine',
-  togglePolygon: 'editLine',
-  selectAllElementsInFrame: 'frame',
-  removeAllElementsFromFrame: 'frameRemove',
+  [EXCALIDRAW_CTX_TESTIDS.cut]: 'cut',
+  [EXCALIDRAW_CTX_TESTIDS.copy]: 'copy',
+  [EXCALIDRAW_CTX_TESTIDS.paste]: 'paste',
+  [EXCALIDRAW_CTX_TESTIDS.duplicateSelection]: 'dup',
+  [EXCALIDRAW_CTX_TESTIDS.deleteSelectedElements]: 'reset',
+  [EXCALIDRAW_CTX_TESTIDS.sendToBack]: 'toBack',
+  [EXCALIDRAW_CTX_TESTIDS.sendBackward]: 'backward',
+  [EXCALIDRAW_CTX_TESTIDS.bringForward]: 'forward',
+  [EXCALIDRAW_CTX_TESTIDS.bringToFront]: 'toFront',
+  [EXCALIDRAW_CTX_TESTIDS.cropEditor]: 'crop',
+  [EXCALIDRAW_CTX_TESTIDS.flipHorizontal]: 'flipH',
+  [EXCALIDRAW_CTX_TESTIDS.flipVertical]: 'flipV',
+  [EXCALIDRAW_CTX_TESTIDS.hyperlink]: 'link',
+  [EXCALIDRAW_CTX_TESTIDS.copyElementLink]: 'copyLink',
+  [EXCALIDRAW_CTX_TESTIDS.toggleElementLock]: 'lock',
+  [EXCALIDRAW_CTX_TESTIDS.unlockAllElements]: 'unlock',
+  [EXCALIDRAW_CTX_TESTIDS.selectAll]: 'selectAll',
+  [EXCALIDRAW_CTX_TESTIDS.group]: 'group',
+  [EXCALIDRAW_CTX_TESTIDS.ungroup]: 'ungroup',
+  [EXCALIDRAW_CTX_TESTIDS.toggleWrap]: 'wrap',
+  [EXCALIDRAW_CTX_TESTIDS.autoResize]: 'wrap',
+  [EXCALIDRAW_CTX_TESTIDS.unbindText]: 'wrap',
+  [EXCALIDRAW_CTX_TESTIDS.bindText]: 'wrap',
+  [EXCALIDRAW_CTX_TESTIDS.wrapTextInContainer]: 'wrapContainer',
+  [EXCALIDRAW_CTX_TESTIDS.toggleLinearEditor]: 'editLine',
+  [EXCALIDRAW_CTX_TESTIDS.togglePolygon]: 'editLine',
+  [EXCALIDRAW_CTX_TESTIDS.selectAllElementsInFrame]: 'frame',
+  [EXCALIDRAW_CTX_TESTIDS.removeAllElementsFromFrame]: 'frameRemove',
 };
 
 function isSelectedElementLocked(isEditableSelection: boolean): boolean {
@@ -85,7 +131,7 @@ function buildContextQuickBar(
   options: { isMobileB2?: boolean; onToggleMore?: (btn: HTMLButtonElement) => void } = {},
 ): HTMLLIElement {
   const bar = el('div', {
-    class: 'exq-ctx-quick-bar' + (options.isMobileB2 ? ' exq-ctx-quick-bar--b2' : ''),
+    class: `exq-ctx-quick-bar${options.isMobileB2 ? ' exq-ctx-quick-bar--b2' : ''}`,
     role: 'group',
   });
 
@@ -94,19 +140,19 @@ function buildContextQuickBar(
     : bar;
 
   for (const def of CTX_QUICK_BAR_ITEMS) {
-    const nativeLi = ul.querySelector<HTMLElement>(`li[data-testid="${def.testId}"]`);
+    const nativeLi = ul.querySelector<HTMLElement>(ctxItemSelector(def.testId));
     const nativeBtn = nativeLi?.querySelector<HTMLButtonElement>('button') ?? null;
     if (nativeLi) {
       nativeLi.classList.add('exq-ctx-proxied-hidden');
     }
 
     const label = t[def.msgKey];
-    const title = `${label} (${def.shortcut})`;
+    const title = `${label} (${formatShortcutLabel(def.shortcut)})`;
     const btn = el(
       'button',
       {
         type: 'button',
-        class: 'exq-ctx-quick-btn' + (def.danger ? ' exq-ctx-quick-btn--danger' : ''),
+        class: `exq-ctx-quick-btn${def.danger ? ' exq-ctx-quick-btn--danger' : ''}`,
         'data-exq-ctx-quick': def.testId,
         title,
         'aria-label': title,
@@ -189,8 +235,8 @@ export function clampContextMenuPopover(ul: Element): void {
 
 function dispatchLayerShortcut(testId: (typeof CTX_LAYER_BAR_ITEMS)[number]['testId']): void {
   const isMac = isMacPlatform();
-  const isFront = testId === 'bringForward' || testId === 'bringToFront';
-  const isEdge = testId === 'sendToBack' || testId === 'bringToFront';
+  const isFront = testId === EXCALIDRAW_CTX_TESTIDS.bringForward || testId === EXCALIDRAW_CTX_TESTIDS.bringToFront;
+  const isEdge = testId === EXCALIDRAW_CTX_TESTIDS.sendToBack || testId === EXCALIDRAW_CTX_TESTIDS.bringToFront;
   const code = isFront ? 'BracketRight' : 'BracketLeft';
   const key = isFront ? ']' : '[';
   silently(() => {
@@ -215,7 +261,7 @@ function buildContextLayerBar(
 ): HTMLLIElement {
   const nativeMap = new Map<string, HTMLButtonElement | null>();
   for (const def of CTX_LAYER_BAR_ITEMS) {
-    const nativeLi = ul.querySelector<HTMLElement>(`li[data-testid="${def.testId}"]`);
+    const nativeLi = ul.querySelector<HTMLElement>(ctxItemSelector(def.testId));
     const nativeBtn = nativeLi?.querySelector<HTMLButtonElement>('button') ?? null;
     if (nativeLi) {
       nativeLi.classList.add('exq-ctx-proxied-hidden');
@@ -226,7 +272,7 @@ function buildContextLayerBar(
   const group = el('div', { class: 'exq-ctx-layer-btns', role: 'group', 'aria-label': t.ctxLayer });
   for (const def of CTX_LAYER_BAR_ITEMS) {
     const label = t[def.msgKey];
-    const title = `${label} (${def.shortcut})`;
+    const title = `${label} (${formatShortcutLabel(def.shortcut)})`;
     const btn = el(
       'button',
       {
@@ -267,22 +313,65 @@ function buildContextLayerBar(
   return el('li', { class: 'exq-ctx-widget-li', 'data-exq-ctx-layer-bar': '1' }, row);
 }
 
+function getNativeContextMenuSignature(ul: Element): string {
+  return Array.from(ul.children)
+    .filter(
+      (c) =>
+        c.tagName === 'LI' &&
+        !c.classList.contains('exq-ctx-widget-li') &&
+        !c.hasAttribute('data-exq-ctx-sep'),
+    )
+    .map((c) => c.getAttribute('data-testid') || c.textContent?.trim() || 'li')
+    .join('|');
+}
+
+function resetInjectedContextMenuArtifacts(ul: Element): void {
+  for (const n of ul.querySelectorAll('.exq-ctx-widget-li, [data-exq-ctx-sep="1"], .exq-ctx-item-icon')) {
+    n.remove();
+  }
+  for (const n of ul.querySelectorAll('.exq-ctx-proxied-hidden')) {
+    n.classList.remove('exq-ctx-proxied-hidden');
+  }
+  for (const n of ul.querySelectorAll('.exq-ctx-hr-hidden')) {
+    n.classList.remove('exq-ctx-hr-hidden');
+  }
+  ul.classList.remove('exq-ctx-rich', 'exq-ctx-mobile-b2', 'exq-ctx-b2-expanded');
+}
+
 export function syncContextMenu(root: ParentNode = document): boolean {
   const ul = root.querySelector(EXCALIDRAW_SELECTORS.contextMenu);
-  if (!ul || contextMenuProcessed.has(ul)) return false;
+  if (!ul) return false;
+
+  const signature = getNativeContextMenuSignature(ul);
+  const modern = Boolean(runtime.prefs.quickOpts.modernContextMenu);
+  const prev = contextMenuState.get(ul);
+  if (
+    prev &&
+    prev.signature === signature &&
+    prev.lang === runtime.prefs.lang &&
+    prev.modern === modern
+  ) {
+    return false;
+  }
+
+  if (prev) {
+    resetInjectedContextMenuArtifacts(ul);
+  }
 
   const isMobile = Boolean(
     ul.closest(EXCALIDRAW_SELECTORS.mobileRoot) || root.querySelector(EXCALIDRAW_SELECTORS.mobileRoot),
   );
   let useMobileB2 = false;
 
-  if (runtime.prefs.quickOpts.modernContextMenu) {
+  if (modern) {
     const t = getMessages(runtime.prefs.lang);
     ul.classList.add('exq-ctx-rich');
 
-    const isEditableSelection = !!(
-      ul.querySelector('li[data-testid="cut"]') || ul.querySelector('li[data-testid="deleteSelectedElements"]')
+    const hasDomEditItems = Boolean(
+      ul.querySelector(ctxItemSelector(EXCALIDRAW_CTX_TESTIDS.cut)) ||
+        ul.querySelector(ctxItemSelector(EXCALIDRAW_CTX_TESTIDS.deleteSelectedElements)),
     );
+    const isEditableSelection = runtime.api ? hasSelectedElements() && hasDomEditItems : hasDomEditItems;
 
     if (isEditableSelection) {
       useMobileB2 = isMobile;
@@ -298,9 +387,13 @@ export function syncContextMenu(root: ParentNode = document): boolean {
           },
         }),
       );
-      topFrag.append(el('hr', { class: 'context-menu-item-separator' }));
+      topFrag.append(
+        el('hr', { class: EXCALIDRAW_CLASSES.contextMenuItemSeparator, 'data-exq-ctx-sep': '1' }),
+      );
       topFrag.append(buildContextLayerBar(ul, t));
-      topFrag.append(el('hr', { class: 'context-menu-item-separator' }));
+      topFrag.append(
+        el('hr', { class: EXCALIDRAW_CLASSES.contextMenuItemSeparator, 'data-exq-ctx-sep': '1' }),
+      );
 
       ul.insertBefore(topFrag, ul.firstChild);
     }
@@ -310,12 +403,12 @@ export function syncContextMenu(root: ParentNode = document): boolean {
       if (child.tagName !== 'LI' || child.classList.contains('exq-ctx-widget-li')) continue;
       if (isContextItemHidden(child)) continue;
 
-      const btn = child.querySelector<HTMLButtonElement>(':scope > button.context-menu-item');
+      const btn = child.querySelector<HTMLButtonElement>(EXCALIDRAW_SELECTORS.contextMenuItemButton);
       if (!btn || btn.querySelector('.exq-ctx-item-icon')) continue;
 
       const tid = child.getAttribute('data-testid') || '';
       let iconName = CTX_ITEM_ICON_MAP[tid];
-      if (tid === 'toggleElementLock') {
+      if (tid === EXCALIDRAW_CTX_TESTIDS.toggleElementLock) {
         iconName = isSelectedElementLocked(isEditableSelection) ? 'unlock' : 'lock';
       }
       const iconSlot = el(
@@ -351,6 +444,6 @@ export function syncContextMenu(root: ParentNode = document): boolean {
   }
 
   clampContextMenuPopover(ul);
-  contextMenuProcessed.add(ul);
+  contextMenuState.set(ul, { signature, lang: runtime.prefs.lang, modern });
   return true;
 }

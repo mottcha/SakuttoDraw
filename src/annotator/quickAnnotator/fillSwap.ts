@@ -2,14 +2,15 @@
 import { CaptureUpdateAction } from '@excalidraw/excalidraw';
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types';
-import type { AppLang } from '../../types/annotator';
-import { EXCALIDRAW_SELECTORS } from '../../excalidraw/domContract';
+import { EXCALIDRAW_CLASSES, EXCALIDRAW_SELECTORS } from '../../excalidraw/domContract';
 import { getMessages } from '../../i18n/messages';
 import { DEFAULT_PEN_COLOR } from '../../services/storageBridge';
+import type { AppLang } from '../../types/annotator';
 import { nextElementNonce } from '../../utils/common';
+import { registerSceneReplaceHook } from '../apiActions';
 import { isRedactElement } from '../redactProcessor';
 import { getCurrentPenColor } from './actions';
-import { el, svgIcon } from './dom';
+import { createMountedSlot, el, svgIcon } from './dom';
 import { runtime, scheduleSync, showToast } from './runtime';
 
 /* ================= Stroke <-> Background Fill Toggle (Item 6) ================= */
@@ -28,6 +29,8 @@ let tempFillSnapshot: TempFillSnapshot | null = null;
 export function clearTempFillSnapshot(): void {
   tempFillSnapshot = null;
 }
+
+registerSceneReplaceHook(clearTempFillSnapshot);
 
 export function restoreTempFillIfToolChanged(
   api: ExcalidrawImperativeAPI | null,
@@ -260,95 +263,91 @@ export function toggleFillOrSwapColorsWithApi(
   return true;
 }
 
-const fillToggleMounts = new WeakMap<Element, {
-  lang: AppLang;
-  wrap: HTMLElement;
+const fillToggleSlot = createMountedSlot<{
   btn: HTMLButtonElement;
   iconSlot: HTMLElement;
+  lastIsFilled: boolean | null;
 }>();
 
 function updateFillToggleButtonState(
-  btn: HTMLButtonElement,
-  iconSlot: HTMLElement,
+  state: { btn: HTMLButtonElement; iconSlot: HTMLElement; lastIsFilled: boolean | null },
   isFilled: boolean,
 ): void {
-  btn.classList.toggle('exq-is-filled', isFilled);
-  btn.setAttribute('aria-pressed', String(isFilled));
-  iconSlot.replaceChildren(svgIcon(isFilled ? 'fillBucketSolid' : 'fillBucket', 16, '0 0 24 24', 1.8));
+  if (state.lastIsFilled === isFilled) return;
+  state.lastIsFilled = isFilled;
+  state.btn.classList.toggle('exq-is-filled', isFilled);
+  state.btn.setAttribute('aria-pressed', String(isFilled));
+  state.iconSlot.replaceChildren(svgIcon(isFilled ? 'fillBucketSolid' : 'fillBucket', 16, '0 0 24 24', 1.8));
 }
 
 function syncCompactFillToggle(container: Element, isMobile: boolean): boolean {
   const strokeTrigger = container.querySelector(EXCALIDRAW_SELECTORS.strokePopupTrigger);
   const bgTrigger = container.querySelector(EXCALIDRAW_SELECTORS.bgPopupTrigger);
-  const existing = fillToggleMounts.get(container);
   const { isFilledOnly, eligible } = getActiveStrokeFillState(runtime.api);
 
   if (!strokeTrigger || !bgTrigger || !eligible) {
-    if (existing) {
-      existing.wrap.remove();
-      fillToggleMounts.delete(container);
-    }
+    fillToggleSlot.clear(container);
     return false;
   }
 
   const t = getMessages(runtime.prefs.lang);
-
-  let mounted = existing;
-  if (mounted && mounted.lang !== runtime.prefs.lang) {
-    mounted.wrap.remove();
-    fillToggleMounts.delete(container);
-    mounted = undefined;
+  let mounted = fillToggleSlot.get(container);
+  if (mounted && mounted.lang === runtime.prefs.lang && mounted.nodes.every((n) => n.isConnected)) {
+    updateFillToggleButtonState(mounted.state, isFilledOnly);
+    return true;
   }
 
-  if (!mounted || !mounted.wrap.isConnected) {
-    const iconSlot = el('span', { class: 'exq-fill-btn-icon', 'aria-hidden': 'true' });
-    const btn = el(
-      'button',
-      {
-        type: 'button',
-        class: `exq-fill-toggle-btn${isMobile ? ' exq-fill-toggle-btn--mobile' : ' exq-fill-toggle-btn--slim'}`,
-        'data-exq-fill-toggle': '1',
-        title: t.swapStrokeFillTitle,
-        'aria-label': t.swapStrokeFillTitle,
-        'aria-pressed': String(isFilledOnly),
-      },
-      iconSlot,
-    );
-    btn.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      toggleFillOrSwapColorsWithApi(runtime.api, {
-        lang: runtime.prefs.lang,
-        showToast,
-        defaultPenColor: getCurrentPenColor(),
-        targetMode: 'toggle',
-      });
-      syncStylesPanelColorSwap();
-      scheduleSync();
+  const iconSlot = el('span', { class: 'exq-fill-btn-icon', 'aria-hidden': 'true' });
+  const btn = el(
+    'button',
+    {
+      type: 'button',
+      class: `exq-fill-toggle-btn${isMobile ? ' exq-fill-toggle-btn--mobile' : ' exq-fill-toggle-btn--slim'}`,
+      'data-exq-fill-toggle': '1',
+      title: t.swapStrokeFillTitle,
+      'aria-label': t.swapStrokeFillTitle,
+      'aria-pressed': String(isFilledOnly),
+    },
+    iconSlot,
+  );
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleFillOrSwapColorsWithApi(runtime.api, {
+      lang: runtime.prefs.lang,
+      showToast,
+      defaultPenColor: getCurrentPenColor(),
+      targetMode: 'toggle',
     });
+    scheduleSync();
+  });
 
-    const wrap = el(
-      'div',
-      { class: `compact-action-item exq-fill-compact-item${isMobile ? ' exq-fill-mobile-item' : ''}` },
-      btn,
-    );
-    const bgItem = bgTrigger.closest(EXCALIDRAW_SELECTORS.compactActionItem);
-    if (bgItem && bgItem.parentElement === container) {
-      container.insertBefore(wrap, bgItem.nextSibling);
-    } else {
-      container.append(wrap);
-    }
-    mounted = { lang: runtime.prefs.lang, wrap, btn, iconSlot };
-    fillToggleMounts.set(container, mounted);
+  const wrap = el(
+    'div',
+    {
+      class: `${EXCALIDRAW_CLASSES.compactActionItem} exq-fill-compact-item${isMobile ? ' exq-fill-mobile-item' : ''}`,
+    },
+    btn,
+  );
+  const bgItem = bgTrigger.closest(EXCALIDRAW_SELECTORS.compactActionItem);
+  fillToggleSlot.mount(container, runtime.prefs.lang, [wrap], {
+    btn,
+    iconSlot,
+    lastIsFilled: null,
+  });
+  if (bgItem && bgItem.parentElement === container) {
+    container.insertBefore(wrap, bgItem.nextSibling);
+  } else {
+    container.append(wrap);
   }
 
-  updateFillToggleButtonState(mounted.btn, mounted.iconSlot, isFilledOnly);
+  mounted = fillToggleSlot.get(container)!;
+  updateFillToggleButtonState(mounted.state, isFilledOnly);
   return true;
 }
 
 export function syncStylesPanelColorSwap(root: ParentNode = document): boolean {
   restoreTempFillIfToolChanged(runtime.api);
-  root.querySelectorAll('[data-exq-fill-segment="1"]').forEach((node) => node.remove());
 
   let updated = false;
   const slimContainer = root.querySelector(EXCALIDRAW_SELECTORS.slimStyleActions);

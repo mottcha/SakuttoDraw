@@ -4,7 +4,7 @@ import { findXiaolaiFamilyId, type RegisteredFontsMap } from '../excalidraw/font
 import { matchesUnicodeRange } from '../utils/unicodeRange';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
-const CJK_FALLBACK_CHAR_RE = /[\u2e80-\u9fff\uac00-\ud7af\uf900-\ufaff\ufe30-\ufe4f\uff00-\uffef\u{20000}-\u{2ffff}]/u;
+const CJK_FALLBACK_CHAR_RE = /[\u1100-\u11ff\u2e80-\u9fff\uac00-\ud7ff\uf900-\ufaff\ufe30-\ufe4f\uff00-\uffef\u{20000}-\u{2ffff}]/u;
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
@@ -24,6 +24,14 @@ function formatCssFontFamily(family: string): string {
   return trimmed;
 }
 
+interface PendingFaceDecl {
+  family: string;
+  urlStr: string;
+  unicodeRange?: string;
+  weight?: string;
+  style?: string;
+}
+
 /**
  * Inlines pre-split local WOFF2 font chunks matching the exact characters used
  * in the exported SVG, avoiding WASM/Emscripten `new Function` calls under strict CSP.
@@ -33,7 +41,7 @@ export async function inlinePreSplitFontsIntoSvg(
   elements: readonly ExcalidrawElement[],
   {
     fetchFn = typeof fetch === 'function' ? fetch.bind(globalThis) : null,
-    registeredFonts = Fonts.registered,
+    registeredFonts,
   }: {
     fetchFn?: typeof fetch | null;
     registeredFonts?: RegisteredFontsMap;
@@ -60,31 +68,41 @@ export async function inlinePreSplitFontsIntoSvg(
 
   if (charsByFamily.size === 0) return 0;
 
-  // Include Xiaolai CJK fallback when hand-drawn fonts (Excalifont / Virgil) contain CJK characters
-  const xiaolaiId = findXiaolaiFamilyId(registeredFonts);
+  const fontsMap = registeredFonts ?? Fonts.registered;
+
+  // Include Xiaolai CJK fallback only for characters not already covered by Excalifont itself
+  const xiaolaiId = findXiaolaiFamilyId(fontsMap);
   if (xiaolaiId !== null) {
-    for (const handDrawnId of [FONT_FAMILY.Excalifont, FONT_FAMILY.Virgil]) {
-      const usedChars = charsByFamily.get(handDrawnId);
-      if (!usedChars) continue;
+    const usedChars = charsByFamily.get(FONT_FAMILY.Excalifont);
+    if (usedChars) {
       const joined = Array.from(usedChars).join('');
       if (CJK_FALLBACK_CHAR_RE.test(joined)) {
+        const excalifontEntry = fontsMap.get(FONT_FAMILY.Excalifont);
+        const excalifontRanges = (excalifontEntry?.fontFaces ?? [])
+          .map((face) => face.fontFace?.unicodeRange)
+          .filter((r): r is string => Boolean(r));
         let fallbackSet = charsByFamily.get(xiaolaiId);
         if (!fallbackSet) {
           fallbackSet = new Set();
           charsByFamily.set(xiaolaiId, fallbackSet);
         }
-        for (const ch of usedChars) fallbackSet.add(ch);
+        for (const ch of usedChars) {
+          const coveredByPrimary = excalifontRanges.some((range) => matchesUnicodeRange(range, ch));
+          if (!coveredByPrimary || CJK_FALLBACK_CHAR_RE.test(ch)) {
+            fallbackSet.add(ch);
+          }
+        }
       }
     }
   }
 
-  const declarations: string[] = [];
-  // Deduplicate @font-face declarations by (family, url) while memoizing fetched Base64 per url
+  // Deduplicate @font-face declarations by (family, url, weight, style, range)
   const emittedFaceKeys = new Set<string>();
-  const dataUrlByUrl = new Map<string, string>();
+  const pendingDecls: PendingFaceDecl[] = [];
+  const urlsToFetch = new Set<string>();
 
   for (const [familyId, charSet] of charsByFamily.entries()) {
-    const entry = registeredFonts.get(familyId);
+    const entry = fontsMap.get(familyId);
     if (!entry || entry.metadata?.local) continue;
     const text = Array.from(charSet).join('');
 
@@ -95,32 +113,58 @@ export async function inlinePreSplitFontsIntoSvg(
       if (!rawUrl) continue;
       const urlStr = typeof rawUrl === 'string' ? rawUrl : rawUrl.toString();
       const family = face.fontFace.family;
-      const emitKey = `${family}::${urlStr}`;
+      const weight = face.fontFace.weight;
+      const style = face.fontFace.style;
+      const emitKey = `${family}::${urlStr}::${weight ?? ''}::${style ?? ''}::${unicodeRange ?? ''}`;
       if (emittedFaceKeys.has(emitKey)) continue;
       emittedFaceKeys.add(emitKey);
 
-      try {
-        let dataUrl = dataUrlByUrl.get(urlStr);
-        if (!dataUrl) {
-          if (urlStr.startsWith('data:')) {
-            dataUrl = urlStr;
-          } else {
+      pendingDecls.push({ family, urlStr, unicodeRange, weight, style });
+      if (!urlStr.startsWith('data:')) {
+        urlsToFetch.add(urlStr);
+      }
+    }
+  }
+
+  if (pendingDecls.length === 0) return 0;
+
+  const dataUrlByUrl = new Map<string, string>();
+  const fetchQueue = Array.from(urlsToFetch);
+  let fetchCursor = 0;
+  const workerCount = Math.min(6, fetchQueue.length);
+  if (workerCount > 0) {
+    await Promise.all(
+      Array.from({ length: workerCount }, async () => {
+        for (;;) {
+          const idx = fetchCursor++;
+          if (idx >= fetchQueue.length) break;
+          const urlStr = fetchQueue[idx];
+          try {
             const resp = await fetchFn(urlStr, { credentials: 'same-origin', cache: 'force-cache' });
             if (!resp.ok) continue;
             const buf = await resp.arrayBuffer();
-            dataUrl = `data:font/woff2;base64,${arrayBufferToBase64(buf)}`;
+            dataUrlByUrl.set(urlStr, `data:font/woff2;base64,${arrayBufferToBase64(buf)}`);
+          } catch {
+            // Skip unreadable chunk silently so SVG export always succeeds
           }
-          dataUrlByUrl.set(urlStr, dataUrl);
         }
-        const cssFamily = formatCssFontFamily(family);
-        const rangeRule = unicodeRange ? ` unicode-range: ${unicodeRange};` : '';
-        declarations.push(
-          `@font-face { font-family: ${cssFamily}; src: url(${dataUrl}) format('woff2');${rangeRule} }`,
-        );
-      } catch {
-        // Skip unreadable chunk silently so SVG export always succeeds
-      }
-    }
+      }),
+    );
+  }
+
+  const declarations: string[] = [];
+  for (const decl of pendingDecls) {
+    const dataUrl = decl.urlStr.startsWith('data:') ? decl.urlStr : dataUrlByUrl.get(decl.urlStr);
+    if (!dataUrl) continue;
+    const cssFamily = formatCssFontFamily(decl.family);
+    const isWoff2Data = !dataUrl.startsWith('data:') || dataUrl.startsWith('data:font/woff2');
+    const srcPart = isWoff2Data ? `url(${dataUrl}) format('woff2')` : `url(${dataUrl})`;
+    const styleRule = decl.style && decl.style !== 'normal' ? ` font-style: ${decl.style};` : '';
+    const weightRule = decl.weight && decl.weight !== '400' ? ` font-weight: ${decl.weight};` : '';
+    const rangeRule = decl.unicodeRange ? ` unicode-range: ${decl.unicodeRange};` : '';
+    declarations.push(
+      `@font-face { font-family: ${cssFamily};${styleRule}${weightRule} src: ${srcPart};${rangeRule} }`,
+    );
   }
 
   if (declarations.length === 0) return 0;

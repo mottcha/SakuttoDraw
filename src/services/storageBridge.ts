@@ -1,6 +1,8 @@
 import { FONT_FAMILY } from '@excalidraw/excalidraw';
 import type { BinaryFiles, ExcalidrawInitialDataState } from '@excalidraw/excalidraw/types';
 import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types';
+import { EXCALIDRAW_LS_KEYS } from '../excalidraw/domContract';
+import { detectBrowserLang, normalizeAppLang } from '../i18n/messages';
 import type {
   AppLang,
   BoxSelectionPref,
@@ -11,7 +13,6 @@ import type {
   StylesPanelPref,
   ThemeMode,
 } from '../types/annotator';
-import { detectBrowserLang, normalizeAppLang } from '../i18n/messages';
 import { normalizeHexColor, silently } from '../utils/common';
 import {
   clearIndexedDbFiles,
@@ -19,15 +20,13 @@ import {
   saveFilesToIndexedDb,
 } from './filesDb';
 
-export const DEFAULT_PINK = '#c2255c';
-export const DEFAULT_PEN_COLOR = DEFAULT_PINK;
+export const DEFAULT_PEN_COLOR = '#c2255c';
 export const PEN_COLOR_SWATCHES = ['#c2255c', '#1e1e1e', '#e03131', '#1971c2', '#2f9e44', '#f08c00'] as const;
 export const DEFAULT_REDACT_COLOR = '#111111';
 export const REDACT_COLOR_SWATCHES = ['#111111', '#495057', '#adb5bd', '#ffffff', '#c2255c', '#1971c2'] as const;
 export const LS_ELEMENTS_KEY = 'excalidraw';
 export const LS_STATE_KEY = 'excalidraw-state';
 export const LS_PREFS_KEY = 'exq-annotator-prefs';
-export const LS_DESKTOP_UI_MODE_KEY = 'excalidraw.desktopUIMode';
 
 export const DEFAULT_FONT_TOP_PICKS = [
   FONT_FAMILY.Excalifont,
@@ -35,7 +34,7 @@ export const DEFAULT_FONT_TOP_PICKS = [
   FONT_FAMILY.Cascadia,
 ] as const;
 
-export const DEFAULT_PREFS: Prefs = {
+const DEFAULT_PREFS: Prefs = {
   lang: 'en',
   themeMode: 'light',
   boxSelectionMode: 'overlap',
@@ -48,6 +47,7 @@ export const DEFAULT_PREFS: Prefs = {
     background: true,
     darkMode: false,
     embedScene: false,
+    padding: false,
     format: 'png',
     scale: 1,
   },
@@ -94,7 +94,7 @@ export function normalizeFormat(value: unknown): ExportFormat {
   return String(value || '').toLowerCase() === 'svg' ? 'svg' : 'png';
 }
 
-export function normalizeThemeMode(value: unknown): ThemeMode {
+function normalizeThemeMode(value: unknown): ThemeMode {
   if (value === 'dark' || value === 'system') return value;
   return 'light';
 }
@@ -107,7 +107,7 @@ export function normalizeInputDevice(value: unknown): InputDevicePref {
   return value === 'mouse' ? 'mouse' : 'trackpad';
 }
 
-export function normalizeStylesPanelMode(value: unknown): StylesPanelPref {
+function normalizeStylesPanelMode(value: unknown): StylesPanelPref {
   if (value === 'compact' || value === 'full') return value;
   return 'auto';
 }
@@ -146,8 +146,8 @@ export function syncDesktopUIMode(
   const resolved = resolveDesktopUIMode(pref, width, height);
   if (storage) {
     silently(() => {
-      if (storage.getItem(LS_DESKTOP_UI_MODE_KEY) !== resolved) {
-        storage.setItem(LS_DESKTOP_UI_MODE_KEY, resolved);
+      if (storage.getItem(EXCALIDRAW_LS_KEYS.desktopUIMode) !== resolved) {
+        storage.setItem(EXCALIDRAW_LS_KEYS.desktopUIMode, resolved);
       }
     });
   }
@@ -157,7 +157,7 @@ export function syncDesktopUIMode(
   return resolved;
 }
 
-export function resolveTheme(themeMode: ThemeMode): 'light' | 'dark' {
+function resolveTheme(themeMode: ThemeMode): 'light' | 'dark' {
   if (themeMode === 'dark') return 'dark';
   if (themeMode === 'system') {
     if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
@@ -179,7 +179,9 @@ export function readSavedAppState(
   const raw = silently(() => storage.getItem(LS_STATE_KEY));
   if (!raw) return {};
   const parsed = silently(() => JSON.parse(raw));
-  return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
+  return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+    ? (parsed as Record<string, unknown>)
+    : {};
 }
 
 export function patchSavedAppState(
@@ -192,6 +194,17 @@ export function patchSavedAppState(
     const delta = typeof patch === 'function' ? patch(prev) : patch;
     storage.setItem(LS_STATE_KEY, JSON.stringify({ ...prev, ...delta }));
   });
+}
+
+export function prefsToAppStatePatch(prefs: Prefs) {
+  return {
+    boxSelectionMode: normalizeBoxSelectionMode(prefs.boxSelectionMode),
+    inputDevice: normalizeInputDevice(prefs.inputDevice),
+    exportBackground: Boolean(prefs.exportOpts.background),
+    exportWithDarkMode: Boolean(prefs.exportOpts.darkMode),
+    exportEmbedScene: Boolean(prefs.exportOpts.embedScene),
+    exportScale: normalizeScale(prefs.exportOpts.scale),
+  };
 }
 
 export function loadPrefs(
@@ -216,22 +229,22 @@ export function loadPrefs(
   const rawPrefs = silently(() => storage.getItem(LS_PREFS_KEY));
   if (rawPrefs) {
     const saved = silently(() => JSON.parse(rawPrefs));
-    if (saved && typeof saved === 'object') {
+    if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
       const savedLang = normalizeAppLang(saved.lang);
       if (savedLang) {
         base.lang = savedLang;
       }
-      if (saved.themeMode === 'light' || saved.themeMode === 'dark' || saved.themeMode === 'system') {
-        base.themeMode = saved.themeMode;
+      if (saved.themeMode != null) {
+        base.themeMode = normalizeThemeMode(saved.themeMode);
       }
       if (saved.boxSelectionMode === 'contain' || saved.boxSelectionMode === 'overlap') {
-        base.boxSelectionMode = saved.boxSelectionMode;
+        base.boxSelectionMode = normalizeBoxSelectionMode(saved.boxSelectionMode);
       }
       if (saved.inputDevice === 'mouse' || saved.inputDevice === 'trackpad') {
-        base.inputDevice = saved.inputDevice;
+        base.inputDevice = normalizeInputDevice(saved.inputDevice);
       }
-      if (saved.stylesPanelMode === 'auto' || saved.stylesPanelMode === 'compact' || saved.stylesPanelMode === 'full') {
-        base.stylesPanelMode = saved.stylesPanelMode;
+      if (saved.stylesPanelMode != null) {
+        base.stylesPanelMode = normalizeStylesPanelMode(saved.stylesPanelMode);
       }
       if (typeof saved.preferJpFont === 'boolean' || saved.preferJpFont === null) {
         base.preferJpFont = saved.preferJpFont;
@@ -239,8 +252,8 @@ export function loadPrefs(
       if (typeof saved.codeLigatures === 'boolean') {
         base.codeLigatures = saved.codeLigatures;
       }
-      if (saved.exportOpts && typeof saved.exportOpts === 'object') {
-        for (const k of ['onlySelected', 'background', 'darkMode', 'embedScene'] as const) {
+      if (saved.exportOpts && typeof saved.exportOpts === 'object' && !Array.isArray(saved.exportOpts)) {
+        for (const k of ['onlySelected', 'background', 'darkMode', 'embedScene', 'padding'] as const) {
           if (typeof saved.exportOpts[k] === 'boolean') base.exportOpts[k] = saved.exportOpts[k];
         }
         if (saved.exportOpts.format != null) {
@@ -250,7 +263,7 @@ export function loadPrefs(
           base.exportOpts.scale = normalizeScale(saved.exportOpts.scale);
         }
       }
-      if (saved.quickOpts && typeof saved.quickOpts === 'object') {
+      if (saved.quickOpts && typeof saved.quickOpts === 'object' && !Array.isArray(saved.quickOpts)) {
         for (const k of ['autoResetOnOpen', 'textAutoResize', 'fastLoadSave', 'modernContextMenu'] as const) {
           if (typeof saved.quickOpts[k] === 'boolean') base.quickOpts[k] = saved.quickOpts[k];
         }
@@ -263,7 +276,7 @@ export function loadPrefs(
           base.quickOpts.defaultPenColor = '#1e1e1e';
         }
       }
-      if (saved.redactOpts && typeof saved.redactOpts === 'object') {
+      if (saved.redactOpts && typeof saved.redactOpts === 'object' && !Array.isArray(saved.redactOpts)) {
         base.redactOpts.color = normalizeHexColor(
           saved.redactOpts.color,
           DEFAULT_REDACT_COLOR,
@@ -280,17 +293,26 @@ export function savePrefs(
 ): void {
   if (!storage) return;
   silently(() => storage.setItem(LS_PREFS_KEY, JSON.stringify(prefs)));
-  patchSavedAppState(
-    {
-      boxSelectionMode: normalizeBoxSelectionMode(prefs.boxSelectionMode),
-      inputDevice: normalizeInputDevice(prefs.inputDevice),
-      exportBackground: prefs.exportOpts.background,
-      exportWithDarkMode: prefs.exportOpts.darkMode,
-      exportEmbedScene: prefs.exportOpts.embedScene,
-      exportScale: normalizeScale(prefs.exportOpts.scale),
-    },
-    storage,
-  );
+  patchSavedAppState(prefsToAppStatePatch(prefs), storage);
+}
+
+const persistedFileIdsByIdb = new WeakMap<IDBFactory, Set<string>>();
+
+function getPersistedFileIdSet(idb: IDBFactory | null): Set<string> | null {
+  if (!idb) return null;
+  let set = persistedFileIdsByIdb.get(idb);
+  if (!set) {
+    set = new Set();
+    persistedFileIdsByIdb.set(idb, set);
+  }
+  return set;
+}
+
+export function resetPersistedFilesCache(
+  idb: IDBFactory | null = typeof indexedDB !== 'undefined' ? indexedDB : null,
+): void {
+  if (!idb) return;
+  persistedFileIdsByIdb.get(idb)?.clear();
 }
 
 export function bootstrapCleanCanvas({
@@ -305,47 +327,53 @@ export function bootstrapCleanCanvas({
   skipped: boolean;
   prefs: Prefs;
   autoReset: boolean;
-  pinkApplied: boolean;
 } {
   const prefs = loadPrefs(storage);
-  if (!storage) return { skipped: true, prefs, autoReset: false, pinkApplied: false };
+  if (!storage) return { skipped: true, prefs, autoReset: false };
 
   if (shouldSkipAutoReset(hash)) {
-    return { skipped: true, prefs, autoReset: false, pinkApplied: false };
+    return { skipped: true, prefs, autoReset: false };
   }
 
   let autoReset = false;
   if (prefs.quickOpts.autoResetOnOpen) {
     silently(() => storage.setItem(LS_ELEMENTS_KEY, '[]'));
+    resetPersistedFilesCache(idb);
     void clearIndexedDbFiles(idb);
     autoReset = true;
   }
 
   const penColor = normalizeHexColor(prefs.quickOpts.defaultPenColor, DEFAULT_PEN_COLOR);
-  const pinkApplied = penColor === DEFAULT_PINK;
 
   patchSavedAppState(
     {
       currentItemStrokeColor: penColor,
       showWelcomeScreen: false,
-      boxSelectionMode: normalizeBoxSelectionMode(prefs.boxSelectionMode),
-      inputDevice: normalizeInputDevice(prefs.inputDevice),
-      exportBackground: prefs.exportOpts.background,
-      exportWithDarkMode: prefs.exportOpts.darkMode,
-      exportEmbedScene: prefs.exportOpts.embedScene,
-      exportScale: normalizeScale(prefs.exportOpts.scale),
+      ...prefsToAppStatePatch(prefs),
     },
     storage,
   );
 
-  return { skipped: false, prefs, autoReset, pinkApplied };
+  return { skipped: false, prefs, autoReset };
+}
+
+function isValidStoredElement(el: unknown): el is ExcalidrawElement {
+  return Boolean(
+    el &&
+      typeof el === 'object' &&
+      !Array.isArray(el) &&
+      typeof (el as { id?: unknown }).id === 'string' &&
+      typeof (el as { type?: unknown }).type === 'string' &&
+      !(el as { isDeleted?: unknown }).isDeleted,
+  );
 }
 
 export async function loadInitialSceneData(
   storage: Storage | null = typeof localStorage !== 'undefined' ? localStorage : null,
   idb: IDBFactory | null = typeof indexedDB !== 'undefined' ? indexedDB : null,
+  preloadedPrefs?: Prefs,
 ): Promise<ExcalidrawInitialDataState> {
-  const prefs = loadPrefs(storage);
+  const prefs = preloadedPrefs ?? loadPrefs(storage);
   let elements: ExcalidrawElement[] = [];
 
   if (storage) {
@@ -353,13 +381,19 @@ export async function loadInitialSceneData(
     if (rawEls) {
       const parsedEls = silently(() => JSON.parse(rawEls));
       if (Array.isArray(parsedEls)) {
-        elements = parsedEls.filter((e) => e && !e.isDeleted);
+        elements = parsedEls.filter(isValidStoredElement);
       }
     }
   }
 
   const savedState = readSavedAppState(storage);
   const files = elements.length > 0 ? await loadFilesFromIndexedDb(idb) : {};
+  const persistedSet = getPersistedFileIdSet(idb);
+  if (persistedSet) {
+    for (const id of Object.keys(files)) {
+      persistedSet.add(id);
+    }
+  }
   const defaultPenColor = normalizeHexColor(prefs.quickOpts.defaultPenColor, DEFAULT_PEN_COLOR);
 
   const savedTopPicks =
@@ -381,54 +415,96 @@ export async function loadInitialSceneData(
         typeof savedState.currentItemStrokeColor === 'string' && savedState.currentItemStrokeColor
           ? savedState.currentItemStrokeColor
           : defaultPenColor,
-      boxSelectionMode: normalizeBoxSelectionMode(prefs.boxSelectionMode),
-      inputDevice: normalizeInputDevice(prefs.inputDevice),
-      exportBackground: prefs.exportOpts.background,
-      exportWithDarkMode: prefs.exportOpts.darkMode,
-      exportEmbedScene: prefs.exportOpts.embedScene,
-      exportScale: normalizeScale(prefs.exportOpts.scale) as unknown as number,
+      ...prefsToAppStatePatch(prefs),
       fontTopPicks: savedTopPicks as NonNullable<ExcalidrawInitialDataState['appState']>['fontTopPicks'],
       theme: resolveTheme(prefs.themeMode),
     },
   };
 }
 
-export function persistSceneSnapshot(
+let onStorageQuotaWarned = false;
+
+function persistSceneSnapshot(
   elements: readonly ExcalidrawElement[],
   appState: Record<string, unknown>,
   files: BinaryFiles,
   storage: Storage | null = typeof localStorage !== 'undefined' ? localStorage : null,
   idb: IDBFactory | null = typeof indexedDB !== 'undefined' ? indexedDB : null,
+  onPersistError?: (reason: 'quota-exceeded') => void,
 ): void {
   if (!storage) return;
-  silently(() => {
-    const nonDeleted = elements.filter((el) => !el.isDeleted);
+  const nonDeleted = elements.filter((el) => !el.isDeleted);
+  let writeError: unknown = null;
+  try {
     storage.setItem(LS_ELEMENTS_KEY, JSON.stringify(nonDeleted));
-  });
-  patchSavedAppState(
-    (prev) => ({
-      viewBackgroundColor: appState.viewBackgroundColor ?? prev.viewBackgroundColor ?? '#ffffff',
-      currentItemStrokeColor:
-        appState.currentItemStrokeColor ?? prev.currentItemStrokeColor ?? DEFAULT_PEN_COLOR,
-      boxSelectionMode: normalizeBoxSelectionMode(
-        appState.boxSelectionMode ?? prev.boxSelectionMode ?? DEFAULT_PREFS.boxSelectionMode,
-      ),
-      inputDevice: normalizeInputDevice(
-        appState.inputDevice ?? prev.inputDevice ?? DEFAULT_PREFS.inputDevice,
-      ),
-      exportBackground: appState.exportBackground ?? prev.exportBackground ?? true,
-      exportWithDarkMode: appState.exportWithDarkMode ?? prev.exportWithDarkMode ?? false,
-      exportEmbedScene: appState.exportEmbedScene ?? prev.exportEmbedScene ?? false,
-      exportScale: normalizeScale(appState.exportScale ?? prev.exportScale ?? 1),
-      fontTopPicks: Array.isArray(appState.fontTopPicks)
-        ? appState.fontTopPicks
-        : prev.fontTopPicks ?? [...DEFAULT_FONT_TOP_PICKS],
-      theme: appState.theme ?? prev.theme ?? 'light',
-    }),
-    storage,
-  );
-  if (files && Object.keys(files).length > 0) {
-    void saveFilesToIndexedDb(files, idb);
+  } catch (err) {
+    writeError = err;
+    const isQuota =
+      err instanceof DOMException && (err.name === 'QuotaExceededError' || err.code === 22);
+    if (isQuota) {
+      onPersistError?.('quota-exceeded');
+      if (!onStorageQuotaWarned) {
+        onStorageQuotaWarned = true;
+        console.warn('[SakuttoDraw] localStorage quota exceeded while persisting scene elements.');
+      }
+    }
+  }
+
+  if (!writeError) {
+    patchSavedAppState(
+      (prev) => ({
+        viewBackgroundColor: appState.viewBackgroundColor ?? prev.viewBackgroundColor ?? '#ffffff',
+        currentItemStrokeColor:
+          appState.currentItemStrokeColor ?? prev.currentItemStrokeColor ?? DEFAULT_PEN_COLOR,
+        boxSelectionMode: normalizeBoxSelectionMode(
+          appState.boxSelectionMode ?? prev.boxSelectionMode ?? DEFAULT_PREFS.boxSelectionMode,
+        ),
+        inputDevice: normalizeInputDevice(
+          appState.inputDevice ?? prev.inputDevice ?? DEFAULT_PREFS.inputDevice,
+        ),
+        exportBackground: appState.exportBackground ?? prev.exportBackground ?? true,
+        exportWithDarkMode: appState.exportWithDarkMode ?? prev.exportWithDarkMode ?? false,
+        exportEmbedScene: appState.exportEmbedScene ?? prev.exportEmbedScene ?? false,
+        exportScale: normalizeScale(appState.exportScale ?? prev.exportScale ?? 1),
+        fontTopPicks: Array.isArray(appState.fontTopPicks)
+          ? appState.fontTopPicks
+          : prev.fontTopPicks ?? [...DEFAULT_FONT_TOP_PICKS],
+        theme: appState.theme ?? prev.theme ?? 'light',
+      }),
+      storage,
+    );
+  }
+
+  if (!files) return;
+  const referencedFileIds = new Set<string>();
+  for (const el of nonDeleted) {
+    if (el.type === 'image') {
+      const fileId = (el as { fileId?: string | null }).fileId;
+      if (fileId) referencedFileIds.add(fileId);
+    }
+  }
+
+  if (referencedFileIds.size === 0) return;
+
+  const persistedSet = getPersistedFileIdSet(idb);
+  const filesToWrite: BinaryFiles = {};
+  for (const fileId of referencedFileIds) {
+    if (persistedSet?.has(fileId)) continue;
+    const file = files[fileId];
+    if (file?.id) {
+      filesToWrite[fileId] = file;
+      persistedSet?.add(fileId);
+    }
+  }
+
+  if (Object.keys(filesToWrite).length > 0) {
+    void saveFilesToIndexedDb(filesToWrite, idb).then((ok) => {
+      if (!ok && persistedSet) {
+        for (const id of Object.keys(filesToWrite)) {
+          persistedSet.delete(id);
+        }
+      }
+    });
   }
 }
 
@@ -462,15 +538,17 @@ export function scheduleScenePersist(
     delayMs = 250,
     storage = typeof localStorage !== 'undefined' ? localStorage : null,
     idb = typeof indexedDB !== 'undefined' ? indexedDB : null,
+    onPersistError,
   }: {
     delayMs?: number;
     storage?: Storage | null;
     idb?: IDBFactory | null;
+    onPersistError?: (reason: 'quota-exceeded') => void;
   } = {},
 ): void {
   cancelPendingScenePersist();
   pendingPersistTask = () => {
-    persistSceneSnapshot(elements, appState, files, storage, idb);
+    persistSceneSnapshot(elements, appState, files, storage, idb, onPersistError);
   };
   pendingPersistTimer = setTimeout(() => {
     pendingPersistTimer = null;

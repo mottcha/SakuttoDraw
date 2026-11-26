@@ -1,8 +1,47 @@
-// DOM element builders, unified SVG icon rendering, and shared UI primitives.
-import { toolbarTestIdSelector } from '../../excalidraw/domContract';
+// DOM element builders, unified SVG icon rendering, mount slots, and shared UI primitives.
+import type { AppLang } from '../../types/annotator';
+import { EXCALIDRAW_CLASSES, toolbarTestIdSelector } from '../../excalidraw/domContract';
 import { ICON_DEFS, type IconEntry, type IconName } from '../../ui/iconDefs';
+import { isMacPlatform } from '../../utils/common';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
+
+export function formatShortcutLabel(shortcut: string): string {
+  if (!shortcut || !isMacPlatform()) return shortcut;
+  return shortcut
+    .replace(/Ctrl\+Shift\+/g, '⇧⌘')
+    .replace(/Ctrl\+/g, '⌘')
+    .replace(/Alt\+/g, '⌥');
+}
+
+export interface MountedSlotHandle<T> {
+  get(host: Element): { lang: AppLang; nodes: Element[]; state: T } | undefined;
+  mount(host: Element, lang: AppLang, nodes: Element[], state: T): void;
+  clear(host: Element): void;
+}
+
+export function createMountedSlot<T>(): MountedSlotHandle<T> {
+  const map = new WeakMap<Element, { lang: AppLang; nodes: Element[]; state: T }>();
+  const clear = (host: Element) => {
+    const prev = map.get(host);
+    if (prev) {
+      for (const node of prev.nodes) {
+        node.remove();
+      }
+      map.delete(host);
+    }
+  };
+  return {
+    get(host) {
+      return map.get(host);
+    },
+    mount(host, lang, nodes, state) {
+      clear(host);
+      map.set(host, { lang, nodes, state });
+    },
+    clear,
+  };
+}
 
 export function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -78,11 +117,36 @@ export function isEditableFocused(): boolean {
   return tag === 'INPUT' || tag === 'TEXTAREA' || !!active.isContentEditable;
 }
 
-export function getButtonIconSignature(btn: Element | null): string {
-  if (!btn || typeof btn.querySelectorAll !== 'function') return '';
-  return Array.from(btn.querySelectorAll('svg path, svg circle, svg rect, svg polyline, svg line'))
-    .map((n) => n.getAttribute('d') || n.tagName)
-    .join('|');
+export function makeDropdownActionItem({
+  className,
+  attrs = {},
+  icon,
+  label,
+  onClick,
+}: {
+  className: string;
+  attrs?: Record<string, string>;
+  icon: SVGSVGElement;
+  label: string;
+  onClick: () => void;
+}): HTMLButtonElement {
+  const btn = el(
+    'button',
+    {
+      type: 'button',
+      role: 'menuitem',
+      class: `${EXCALIDRAW_CLASSES.dropdownMenuItem} ${EXCALIDRAW_CLASSES.dropdownMenuItemBase} ${className}`,
+      ...attrs,
+    },
+    el('div', { class: EXCALIDRAW_CLASSES.dropdownMenuItemIcon }, icon),
+    el('div', { class: EXCALIDRAW_CLASSES.dropdownMenuItemText }, label),
+  );
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onClick();
+  });
+  return btn;
 }
 
 export function createAccordionSection({
@@ -151,23 +215,29 @@ export function createSwitchRow({
   shortcut?: string;
   onClick: () => void;
 }) {
-  const switchBtn = el('button', {
-    type: 'button',
+  const switchEl = el('span', {
     class: 'exq-switch',
-    [optAttr]: optValue,
-    'aria-label': label,
+    'aria-hidden': 'true',
   });
-  const rightSide = shortcut
+  const displayShortcut = shortcut ? formatShortcutLabel(shortcut) : '';
+  const rightSide = displayShortcut
     ? el(
         'span',
         { class: 'exq-opt-right' },
-        el('span', { class: 'exq-opt-shortcut', 'aria-hidden': 'true' }, shortcut),
-        switchBtn,
+        el('span', { class: 'exq-opt-shortcut', 'aria-hidden': 'true' }, displayShortcut),
+        switchEl,
       )
-    : switchBtn;
+    : switchEl;
   const row = el(
-    'div',
-    { class: 'exq-opt-row', role: 'menuitemcheckbox' },
+    'button',
+    {
+      type: 'button',
+      class: 'exq-opt-row',
+      role: 'switch',
+      'aria-checked': 'false',
+      'aria-label': label,
+      [optAttr]: optValue,
+    },
     el('span', { class: 'exq-opt-label' }, label),
     rightSide,
   );
@@ -176,5 +246,10 @@ export function createSwitchRow({
     e.stopPropagation();
     onClick();
   });
-  return { row, switchBtn };
+  const setChecked = (on: boolean) => {
+    row.setAttribute('aria-checked', String(on));
+    row.classList.toggle('exq-on', on);
+    switchEl.classList.toggle('exq-on', on);
+  };
+  return { row, switchEl, setChecked };
 }

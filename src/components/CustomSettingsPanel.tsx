@@ -1,4 +1,3 @@
-import { type CSSProperties, useState } from 'react';
 import type { AppLang } from '../types/annotator';
 import {
   applyCanvasBackground,
@@ -7,15 +6,15 @@ import {
   getCurrentPenColor,
 } from '../annotator/quickAnnotator/actions';
 import { CANVAS_BG_SWATCHES, QUICK_OPT_DEFS } from '../annotator/quickAnnotator/constants';
-import { runtime, showToast } from '../annotator/quickAnnotator/runtime';
+import { notifyRuntimeChange, runtime, showToast } from '../annotator/quickAnnotator/runtime';
 import { getMessages } from '../i18n/messages';
 import { PEN_COLOR_SWATCHES, savePrefs } from '../services/storageBridge';
-import { getSwatchToneClass } from '../utils/common';
 import { Icon } from './Icon';
+import { ColorSwatchGrid, PanelHeader, useRuntimeChangeTick } from './PanelPrimitives';
 import { closeExcalidrawMainMenu, useMainMenuSubmenuDismiss } from './useOutsideDismiss';
 
 export function CustomSettingsVisualPanel({ lang }: { lang: AppLang }) {
-  const [, setTick] = useState(0);
+  useRuntimeChangeTick();
   const t = getMessages(lang);
 
   useMainMenuSubmenuDismiss();
@@ -31,31 +30,23 @@ export function CustomSettingsVisualPanel({ lang }: { lang: AppLang }) {
       onPointerDown={(e) => e.stopPropagation()}
     >
       <div className="exq-pref-group">
-        <div className="exq-pref-group-header">
-          <div className="exq-pref-group-title">{t.customBehaviorTitle}</div>
-          <button
-            type="button"
-            className="exq-pref-close-btn"
-            data-exq-custom-close="1"
-            aria-label="Close"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              closeExcalidrawMainMenu();
-            }}
-          >
-            <Icon name="close" size={13} strokeWidth={2.2} />
-          </button>
-        </div>
+        <PanelHeader
+          title={t.customBehaviorTitle}
+          closeLabel={t.closeLabel}
+          onClose={closeExcalidrawMainMenu}
+          closeDataAttr="data-exq-custom-close"
+        />
         <div className="exq-custom-toggle-list" role="group" aria-label={t.customBehaviorTitle}>
           {QUICK_OPT_DEFS.map((def) => {
             const label = t[def.msgKey];
             const on = !!runtime.prefs.quickOpts[def.key];
             return (
-              <div
+              <button
                 key={def.key}
-                role="menuitemcheckbox"
+                type="button"
+                role="switch"
                 aria-checked={on}
+                data-exq-quick-opt={def.key}
                 className={`exq-custom-toggle-card${on ? ' exq-active' : ''}`}
                 onClick={(e) => {
                   e.preventDefault();
@@ -63,22 +54,16 @@ export function CustomSettingsVisualPanel({ lang }: { lang: AppLang }) {
                   const nextVal = !runtime.prefs.quickOpts[def.key];
                   runtime.prefs.quickOpts[def.key] = nextVal;
                   savePrefs(runtime.prefs);
-                  setTick((n) => n + 1);
-                  showToast(`${label}: ${nextVal ? 'ON' : 'OFF'}`);
+                  notifyRuntimeChange();
+                  showToast(`${label}: ${nextVal ? t.stateOn : t.stateOff}`);
                 }}
               >
                 <span className="exq-custom-toggle-icon" aria-hidden="true">
                   <Icon name={def.key} size={14} strokeWidth={2} />
                 </span>
                 <span className="exq-custom-toggle-label">{label}</span>
-                <button
-                  type="button"
-                  className={`exq-switch${on ? ' exq-on' : ''}`}
-                  data-exq-quick-opt={def.key}
-                  aria-label={label}
-                  aria-pressed={on}
-                />
-              </div>
+                <span className={`exq-switch${on ? ' exq-on' : ''}`} aria-hidden="true" />
+              </button>
             );
           })}
         </div>
@@ -89,33 +74,17 @@ export function CustomSettingsVisualPanel({ lang }: { lang: AppLang }) {
           <Icon name="penColor" size={13} strokeWidth={2} />
           <span>{t.penColor}</span>
         </div>
-        <div className="exq-custom-swatch-row" role="radiogroup" aria-label={t.penColorLabel}>
-          {PEN_COLOR_SWATCHES.map((hex) => {
-            const isSelected = curPen === hex;
-            const toneClass = getSwatchToneClass(hex);
-            return (
-              <button
-                key={hex}
-                type="button"
-                role="radio"
-                aria-checked={isSelected}
-                className={`color-picker__button exq-custom-swatch${toneClass ? ` ${toneClass}` : ''}${isSelected ? ' active exq-active' : ''}`}
-                style={{ '--swatch-color': hex, backgroundColor: hex } as CSSProperties}
-                data-exq-pen-color={hex}
-                title={hex}
-                aria-label={`${t.penColorLabel} ${hex}`}
-                onClick={async (e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  await applyPenColor(hex);
-                  setTick((n) => n + 1);
-                }}
-              >
-                <div className="color-picker__button-outline" aria-hidden="true" />
-              </button>
-            );
-          })}
-        </div>
+        <ColorSwatchGrid
+          colors={PEN_COLOR_SWATCHES}
+          selectedColor={curPen}
+          ariaLabel={t.penColor}
+          gridClassName="exq-custom-swatch-row"
+          buttonClassName="exq-custom-swatch"
+          dataAttrName="data-exq-pen-color"
+          onSelect={(hex) => {
+            void applyPenColor(hex);
+          }}
+        />
       </div>
 
       <div className="exq-pref-group">
@@ -123,33 +92,17 @@ export function CustomSettingsVisualPanel({ lang }: { lang: AppLang }) {
           <Icon name="canvasBackground" size={13} strokeWidth={2} />
           <span>{t.canvasBackground}</span>
         </div>
-        <div className="exq-custom-swatch-row" role="radiogroup" aria-label={t.bgColorLabel}>
-          {CANVAS_BG_SWATCHES.map((hex) => {
-            const isSelected = curBg === hex;
-            const toneClass = getSwatchToneClass(hex);
-            return (
-              <button
-                key={hex}
-                type="button"
-                role="radio"
-                aria-checked={isSelected}
-                className={`color-picker__button exq-custom-swatch${toneClass ? ` ${toneClass}` : ''}${isSelected ? ' active exq-active' : ''}`}
-                style={{ '--swatch-color': hex, backgroundColor: hex } as CSSProperties}
-                data-exq-bg-color={hex}
-                title={hex}
-                aria-label={`${t.bgColorLabel} ${hex}`}
-                onClick={async (e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  await applyCanvasBackground(hex);
-                  setTick((n) => n + 1);
-                }}
-              >
-                <div className="color-picker__button-outline" aria-hidden="true" />
-              </button>
-            );
-          })}
-        </div>
+        <ColorSwatchGrid
+          colors={CANVAS_BG_SWATCHES}
+          selectedColor={curBg}
+          ariaLabel={t.bgColorLabel}
+          gridClassName="exq-custom-swatch-row"
+          buttonClassName="exq-custom-swatch"
+          dataAttrName="data-exq-bg-color"
+          onSelect={(hex) => {
+            void applyCanvasBackground(hex);
+          }}
+        />
       </div>
     </div>
   );

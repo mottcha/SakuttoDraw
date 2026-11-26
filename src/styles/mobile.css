@@ -1,8 +1,8 @@
 /* === Mobile A-2 Unified 7-Slot Bottom Toolbar & Persistent Duplicate/Delete === */
 .excalidraw .mobile-toolbar {
   overflow: visible !important;
-  gap: 2px !important;
-  justify-content: space-around !important;
+  gap: 2px;
+  justify-content: space-around;
 }
 
 .excalidraw .mobile-toolbar > [data-testid="toolbar-rectangle"],
@@ -22,7 +22,7 @@
 .excalidraw .mobile-toolbar > [data-testid="toolbar-hand"] { order: 40; }
 .excalidraw .mobile-toolbar > .App-toolbar__extra-tools-trigger {
   order: 42;
-  position: relative !important;
+  position: relative;
 }
 
 .exq-mobile-tool-btn {
@@ -53,7 +53,10 @@
   left: 50%;
   transform: translateX(-50%);
   min-width: 0;
+  max-width: calc(100vw - 16px);
   flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
   padding: 5px;
   gap: 4px;
 }
@@ -104,12 +107,13 @@
   min-width: 184px !important;
   max-width: calc(100vw - 16px) !important;
   max-height: calc(100vh - 16px) !important;
-  overflow-y: auto !important;
-  box-sizing: border-box !important;
+  max-height: calc(100dvh - 16px) !important;
+  overflow-y: auto;
+  box-sizing: border-box;
 }
 
 .excalidraw.excalidraw--mobile .context-menu.exq-ctx-rich .context-menu-item__shortcut {
-  display: none !important;
+  display: none;
 }
 
 .excalidraw.excalidraw--mobile .context-menu.exq-ctx-rich.exq-ctx-mobile-b2 {
@@ -150,13 +154,13 @@
 }
 
 .context-menu.exq-ctx-rich .exq-ctx-b2-more-btn.exq-open {
-  background: var(--color-surface-primary-container, #e0dfff) !important;
-  color: var(--color-on-primary-container, #030064) !important;
+  background: var(--color-surface-primary-container, #e0dfff);
+  color: var(--color-on-primary-container, #030064);
 }
 
 .excalidraw.theme--dark .context-menu.exq-ctx-rich .exq-ctx-b2-more-btn.exq-open {
-  background: rgba(168, 165, 255, 0.22) !important;
-  color: #ffffff !important;
+  background: rgba(168, 165, 255, 0.22);
+  color: #ffffff;
 }
 
 .excalidraw.excalidraw--mobile .context-menu.exq-ctx-rich .exq-ctx-layer-btn {

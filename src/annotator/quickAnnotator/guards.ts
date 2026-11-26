@@ -6,7 +6,7 @@ import {
 } from '../../excalidraw/domContract';
 import { isMacPlatform, silently } from '../../utils/common';
 import { runDirectDiskSaveWithApi, runDirectFileLoadWithApi } from '../apiActions';
-import { getButtonIconSignature, isEditableFocused } from './dom';
+import { runInstantExport, withBusyLock } from './actions';
 import {
   focusActiveTextWysiwyg,
   isTextToolActive,
@@ -41,6 +41,7 @@ export function installTextAutoResizeGuard(): () => void {
     // On touch devices, never swallow pointermove or rewrite pointerup coordinates;
     // instead arm a synchronous WYSIWYG focus assist on pointerup/touchend so mobile virtual keyboards reliably open.
     if (e.pointerType === 'touch') {
+      if (e.isPrimary === false) return;
       clearPendingTouchFocus();
       touchTextPointerId = e.pointerId;
       return;
@@ -60,7 +61,8 @@ export function installTextAutoResizeGuard(): () => void {
       focusActiveTextWysiwyg();
       clearPendingTouchFocus();
     };
-    const onTouchEnd = () => {
+    const onTouchEnd = (te: TouchEvent) => {
+      if (te.touches && te.touches.length > 0) return;
       focusActiveTextWysiwyg();
       clearPendingTouchFocus();
     };
@@ -76,7 +78,11 @@ export function installTextAutoResizeGuard(): () => void {
   // when tool lock is OFF, so onPointerMove/onPointerUp must rely on `downPos` rather than re-checking isTextToolActive().
   const onPointerMove = (e: PointerEvent) => {
     if (!downPos || e.pointerId !== downPos.pointerId) return;
-    if (!runtime.prefs.quickOpts.textAutoResize || e.altKey) {
+    if (
+      !runtime.prefs.quickOpts.textAutoResize ||
+      e.altKey ||
+      ((e.pointerType === 'mouse' || e.pointerType === 'pen') && (e.buttons & 1) === 0)
+    ) {
       downPos = null;
       return;
     }
@@ -120,15 +126,9 @@ export function installTextAutoResizeGuard(): () => void {
 }
 
 /* ================= Ctrl+Click Multi-Select Guard ================= */
-function isSelectionToolActive(root: ParentNode = document): boolean {
-  if (runtime.api) {
-    const t = silently(() => runtime.api?.getAppState()?.activeTool?.type);
-    if (t) return t === 'selection';
-  }
-  return !!(
-    root.querySelector(`${EXCALIDRAW_SELECTORS.toolbar} ${testIdSelector(EXCALIDRAW_TESTIDS.selection)}.ToolIcon--checked`) ||
-    root.querySelector(`${EXCALIDRAW_SELECTORS.toolbar} [data-exq-mobile-tool="selection"].exq-active`)
-  );
+function isSelectionToolActive(): boolean {
+  if (!runtime.api) return false;
+  return silently(() => runtime.api?.getAppState()?.activeTool?.type) === 'selection';
 }
 
 function remapCtrlToShift(e: PointerEvent, isMac: boolean): void {
@@ -212,11 +212,19 @@ export function installCtrlMultiSelectGuard(): () => void {
   };
 }
 
-/* ================= Direct API Fast Load & Fast Save Interceptor ================= */
+/* ================= Direct API Fast Load, Fast Save & Export Interceptor ================= */
+function pruneStaleFileInputs(): void {
+  document.querySelectorAll('input[type="file"][data-exq-fast-load="1"]').forEach((node) => {
+    node.remove();
+  });
+}
+
 function openFilePickerForFastLoad(): void {
+  pruneStaleFileInputs();
   const input = document.createElement('input');
   input.type = 'file';
-  input.accept = '.excalidraw,.json,application/json,image/*';
+  input.setAttribute('data-exq-fast-load', '1');
+  input.accept = '.excalidraw,.json,application/json,image/png,image/svg+xml';
   input.style.display = 'none';
   input.addEventListener(
     'change',
@@ -224,11 +232,16 @@ function openFilePickerForFastLoad(): void {
       const file = input.files?.[0];
       input.remove();
       if (!file) return;
-      await runDirectFileLoadWithApi(runtime.api, file, {
-        lang: runtime.prefs.lang,
-        showToast,
-        defaultPenColor: runtime.prefs.quickOpts.defaultPenColor,
-      });
+      await withBusyLock(
+        null,
+        () =>
+          runDirectFileLoadWithApi(runtime.api, file, {
+            lang: runtime.prefs.lang,
+            showToast,
+            defaultPenColor: runtime.prefs.quickOpts.defaultPenColor,
+          }),
+        false,
+      );
     },
     { once: true },
   );
@@ -254,15 +267,35 @@ export function installFastLoadSaveInterceptor(): () => void {
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
+      const api = runtime.api;
       // Invoke File System Access save picker in the synchronous user-gesture tick before dismissing menu
-      void runDirectDiskSaveWithApi(runtime.api, { lang: runtime.prefs.lang, showToast });
+      void withBusyLock(
+        null,
+        () => runDirectDiskSaveWithApi(api, { lang: runtime.prefs.lang, showToast }),
+        false,
+      );
       sendEscape();
     }
   };
 
   const onKeyDown = (e: KeyboardEvent) => {
-    if (!runtime.prefs.quickOpts.fastLoadSave || runtime.isBusy || !runtime.api) return;
-    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'o') {
+    if (e.repeat || e.isComposing || !runtime.api) return;
+    const mod = e.ctrlKey || e.metaKey;
+    if (!mod || e.altKey) return;
+    const keyLower = e.key.toLowerCase();
+
+    // Always intercept Ctrl/Cmd+Shift+E so Excalidraw's native export dialog (and WASM subsetter) never runs under strict CSP
+    if (e.shiftKey && keyLower === 'e') {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      if (!runtime.isBusy) {
+        void runInstantExport('save');
+      }
+      return;
+    }
+
+    if (runtime.prefs.quickOpts.fastLoadSave && !runtime.isBusy && !e.shiftKey && keyLower === 'o') {
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
@@ -273,86 +306,54 @@ export function installFastLoadSaveInterceptor(): () => void {
 
   window.addEventListener('click', onClick, true);
   window.addEventListener('keydown', onKeyDown, true);
+  window.addEventListener('focus', pruneStaleFileInputs);
   return () => {
+    pruneStaleFileInputs();
     window.removeEventListener('click', onClick, true);
     window.removeEventListener('keydown', onKeyDown, true);
+    window.removeEventListener('focus', pruneStaleFileInputs);
   };
 }
 
 /* ================= Primary Tool Restore Guard ================= */
-let internalToolClickDepth = 0;
-
-function withInternalToolClick<T>(fn: () => T): T {
-  internalToolClickDepth += 1;
-  try {
-    return fn();
-  } finally {
-    internalToolClickDepth -= 1;
-  }
-}
-
-export async function restorePrimaryFreedraw(): Promise<boolean> {
-  if (runtime.api) {
-    runtime.api.setActiveTool({ type: 'freedraw' });
-    return true;
-  }
-  const popFree = document.querySelector<HTMLElement>(
-    `${EXCALIDRAW_SELECTORS.toolPopoverContent} ${testIdSelector(EXCALIDRAW_TESTIDS.freedraw)}`,
-  );
-  if (popFree) {
-    withInternalToolClick(() => popFree.click());
-    return true;
-  }
-  if (!isEditableFocused()) {
-    silently(() => {
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'p', code: 'KeyP', bubbles: true, cancelable: true }));
-    });
-    return true;
-  }
-  return false;
-}
-
-export async function restorePrimarySelection(selBtn?: Element | null): Promise<boolean> {
-  if (runtime.api) {
-    runtime.api.setActiveTool({ type: 'selection' });
-    return true;
-  }
-  const popSel = document.querySelector<HTMLElement>(
-    `${EXCALIDRAW_SELECTORS.toolPopoverContent} ${testIdSelector(EXCALIDRAW_TESTIDS.selection)}`,
-  );
-  const lassoChecked = !!document.querySelector(
-    `${EXCALIDRAW_SELECTORS.toolPopoverContent} ${testIdSelector(EXCALIDRAW_TESTIDS.lasso)}.ToolIcon--checked`,
-  );
-  if (popSel && lassoChecked) {
-    withInternalToolClick(() => popSel.click());
-    return true;
-  }
-  const sigNow = getButtonIconSignature(selBtn ?? null);
-  if (runtime.primarySelIconSig && sigNow && sigNow !== runtime.primarySelIconSig && selBtn instanceof HTMLElement) {
-    withInternalToolClick(() => selBtn.click());
-    return true;
-  }
-  return false;
-}
-
 export function installPrimaryToolRestoreGuard(): () => void {
+  const pendingTimers = new Set<ReturnType<typeof setTimeout>>();
+
+  const scheduleRestore = (fn: () => void) => {
+    const id = setTimeout(() => {
+      pendingTimers.delete(id);
+      fn();
+    }, 20);
+    pendingTimers.add(id);
+  };
+
   const onClick = (e: MouseEvent) => {
-    if (internalToolClickDepth > 0 || runtime.isBusy) return;
+    if (runtime.isBusy || !runtime.api) return;
     if (!(e.target instanceof Element)) return;
     const tbBtn = e.target.closest(EXCALIDRAW_SELECTORS.toolbarPrimaryButton);
     if (!tbBtn) return;
     const tid = tbBtn.getAttribute('data-testid');
     if (tid === EXCALIDRAW_TESTIDS.freedraw) {
-      setTimeout(() => {
-        void restorePrimaryFreedraw();
-      }, 20);
+      scheduleRestore(() => {
+        const curType = silently(() => runtime.api?.getAppState()?.activeTool?.type);
+        if (runtime.api && curType === 'selection') {
+          runtime.api.setActiveTool({ type: 'freedraw' });
+        }
+      });
     } else if (tid === EXCALIDRAW_TESTIDS.selection) {
-      setTimeout(() => {
-        void restorePrimarySelection(tbBtn);
-      }, 20);
+      scheduleRestore(() => {
+        const curType = silently(() => runtime.api?.getAppState()?.activeTool?.type);
+        if (runtime.api && (curType === 'lasso' || curType === 'hand')) {
+          runtime.api.setActiveTool({ type: 'selection' });
+        }
+      });
     }
   };
 
   window.addEventListener('click', onClick, true);
-  return () => window.removeEventListener('click', onClick, true);
+  return () => {
+    for (const id of pendingTimers) clearTimeout(id);
+    pendingTimers.clear();
+    window.removeEventListener('click', onClick, true);
+  };
 }

@@ -15,8 +15,11 @@ export function silently<T>(fn: () => T): T | undefined {
 export function normalizeHexColor(value: unknown, fallback: string): string {
   if (typeof value !== 'string') return fallback;
   const trimmed = value.trim().toLowerCase();
-  if (/^#[0-9a-f]{6}$/.test(trimmed) || /^#[0-9a-f]{3}$/.test(trimmed)) {
+  if (/^#[0-9a-f]{6}$/.test(trimmed)) {
     return trimmed;
+  }
+  if (/^#[0-9a-f]{3}$/.test(trimmed)) {
+    return `#${trimmed[1]}${trimmed[1]}${trimmed[2]}${trimmed[2]}${trimmed[3]}${trimmed[3]}`;
   }
   return fallback;
 }

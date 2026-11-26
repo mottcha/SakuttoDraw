@@ -4,6 +4,7 @@ import { ICON_DEFS, type IconName } from '../ui/iconDefs';
 const SVG_ATTR_TO_REACT: Readonly<Record<string, string>> = {
   'stroke-width': 'strokeWidth',
   'stroke-dasharray': 'strokeDasharray',
+  'stroke-opacity': 'strokeOpacity',
   'fill-opacity': 'fillOpacity',
 };
 
@@ -18,6 +19,8 @@ function toReactSvgProps(attrs: Readonly<Record<string, string | number>>): Reco
 export interface IconProps {
   name: IconName;
   size?: number;
+  width?: number;
+  height?: number;
   strokeWidth?: number;
   viewBox?: string;
   className?: string;
@@ -29,6 +32,8 @@ export interface IconProps {
 export function Icon({
   name,
   size = 14,
+  width,
+  height,
   strokeWidth = 2,
   viewBox,
   className,
@@ -36,8 +41,8 @@ export function Icon({
   const entry = ICON_DEFS[name];
   return (
     <svg
-      width={size}
-      height={size}
+      width={width ?? size}
+      height={height ?? size}
       viewBox={viewBox ?? ('viewBox' in entry ? entry.viewBox : undefined) ?? '0 0 24 24'}
       fill="none"
       stroke="currentColor"

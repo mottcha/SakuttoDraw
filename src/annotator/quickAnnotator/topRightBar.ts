@@ -1,12 +1,11 @@
 // Top-right 2-button instant export bar ([Copy] [Save]).
-import type { AppLang } from '../../types/annotator';
 import { EXCALIDRAW_SELECTORS } from '../../excalidraw/domContract';
 import { getMessages } from '../../i18n/messages';
 import { runInstantExport } from './actions';
-import { el, svgIcon } from './dom';
+import { createMountedSlot, el, svgIcon } from './dom';
 import { runtime } from './runtime';
 
-const rightBarMounts = new WeakMap<Element, { lang: AppLang; wrap: HTMLElement }>();
+const rightBarSlot = createMountedSlot<Record<string, never>>();
 
 function buildRightBarWidget() {
   const t = getMessages(runtime.prefs.lang);
@@ -55,7 +54,7 @@ function buildRightBarWidget() {
   });
 
   saveBtn.addEventListener('click', () => {
-    void runInstantExport('png', saveBtn);
+    void runInstantExport('save', saveBtn);
   });
 
   const bar = el('div', { class: 'exq-right-bar' }, copyBtn, saveBtn);
@@ -68,17 +67,13 @@ export function syncTopRightBar(root: ParentNode = document): boolean {
   const container = root.querySelector(EXCALIDRAW_SELECTORS.topRightContainer);
   if (!container) return false;
 
-  let mounted = rightBarMounts.get(container);
-  if (mounted && mounted.lang !== runtime.prefs.lang) {
-    mounted.wrap.remove();
-    mounted = undefined;
+  const mounted = rightBarSlot.get(container);
+  if (mounted && mounted.lang === runtime.prefs.lang && mounted.nodes.every((n) => n.isConnected)) {
+    return false;
   }
 
-  if (!mounted || !mounted.wrap.isConnected) {
-    const widget = buildRightBarWidget();
-    container.append(widget.wrap);
-    mounted = { lang: runtime.prefs.lang, wrap: widget.wrap };
-    rightBarMounts.set(container, mounted);
-  }
+  const widget = buildRightBarWidget();
+  rightBarSlot.mount(container, runtime.prefs.lang, [widget.wrap], {});
+  container.append(widget.wrap);
   return true;
 }

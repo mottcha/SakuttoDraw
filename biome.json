@@ -1,0 +1,49 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.6.9/schema.json",
+  "vcs": {
+    "enabled": false
+  },
+  "files": {
+    "includes": [
+      "src/**/*.ts",
+      "src/**/*.tsx",
+      "scripts/**/*.mjs",
+      "vite.config.ts",
+      "!src/generated/**"
+    ]
+  },
+  "assist": {
+    "enabled": false
+  },
+  "formatter": {
+    "enabled": false
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "style": {
+        "noNonNullAssertion": "off",
+        "useConst": "error",
+        "useTemplate": "error"
+      },
+      "suspicious": {
+        "noExplicitAny": "warn",
+        "noArrayIndexKey": "off",
+        "noPrototypeBuiltins": "error",
+        "useIterableCallbackReturn": "error"
+      },
+      "correctness": {
+        "useExhaustiveDependencies": "warn"
+      },
+      "a11y": {
+        "useSemanticElements": "off",
+        "noStaticElementInteractions": "off",
+        "useKeyWithClickEvents": "off"
+      },
+      "complexity": {
+        "noForEach": "off",
+        "useOptionalChain": "error"
+      }
+    }
+  }
+}

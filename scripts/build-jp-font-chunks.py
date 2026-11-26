@@ -5,6 +5,7 @@ or extract a compact CSS unicode-range manifest from an existing WOFF2 font.
 
 Usage:
   python3 scripts/build-jp-font-chunks.py --input /path/to/Font.ttf --prefix MPlusRounded --output-dir assets/fonts/MPlusRounded --include-latin
+  python3 scripts/build-jp-font-chunks.py --scale-mono-x-dir assets/fonts/ComicShannsMono --output-dir assets/fonts/ComicShannsMono500 --prefix ComicShannsMono500 --orig-adv 550 --target-adv 500 --source-label "Comic Shanns (MIT)"
   python3 scripts/build-jp-font-chunks.py --extract-range /path/to/CascadiaMono-Regular.woff2 --file-ref fonts/CascadiaMono/CascadiaMono-Regular.woff2 --output-manifest assets/fonts/CascadiaMono/manifest.json
 """
 
@@ -238,6 +239,13 @@ def scale_mono_x_dir(
     total_bytes = 0
     for idx, src_path in enumerate(src_files):
         font = TTFont(str(src_path))
+        if "glyf" not in font:
+            font.close()
+            print(
+                f"ERROR: Source WOFF2 {src_path} does not contain a 'glyf' table (CFF outlines unsupported)",
+                file=sys.stderr,
+            )
+            return 1
         glyf = font["glyf"]
         hmtx = font["hmtx"]
         glyph_set = font.getGlyphSet()
@@ -567,7 +575,7 @@ def main() -> int:
         )
 
     manifest = {
-        "source": args.source_label or f"{prefix} (SIL OFL 1.1)",
+        "source": args.source_label or prefix,
         "metrics": {"unitsPerEm": upm, "ascender": asc, "descender": desc},
         "totalBytes": total_bytes,
         "totalGlyphs": len(all_assigned),

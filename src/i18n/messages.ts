@@ -30,6 +30,7 @@ export interface MessageCatalog {
   exportSettings: string;
   exportOnlySelected: string;
   exportBackground: string;
+  exportPadding: string;
   exportDarkMode: string;
   exportEmbedScene: string;
   exportFormat: string;
@@ -46,7 +47,6 @@ export interface MessageCatalog {
   optFastLoadSave: string;
   optModernContextMenu: string;
   penColor: string;
-  penColorLabel: string;
   canvasBackground: string;
   bgColorLabel: string;
   prefBoxSelectionTitle: string;
@@ -75,9 +75,9 @@ export interface MessageCatalog {
   fontLabelPop: string;
   fontLabelCode: string;
   fontLabelCodeHandDrawn: string;
-  offlineFontsTitle: string;
   fontSlotsTitle: string;
   fontBuiltinBadge: string;
+  fontPackSharedHint: string;
   fontOtherLanguagesTitle: string;
   fontLicensesButton: string;
   fontLicenseAuthorPrefix: string;
@@ -88,6 +88,10 @@ export interface MessageCatalog {
   cjkLangName: Record<CjkLang, string>;
   fontDownload: string;
   fontDelete: string;
+  fontDeleting: string;
+  closeLabel: string;
+  stateOn: string;
+  stateOff: string;
   ctxCut: string;
   ctxCopy: string;
   ctxPaste: string;
@@ -141,6 +145,7 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     exportSettings: 'Export settings',
     exportOnlySelected: 'Only selected',
     exportBackground: 'Transparent background',
+    exportPadding: 'Padding',
     exportDarkMode: 'Dark mode',
     exportEmbedScene: 'Embed editable scene',
     exportFormat: 'Format',
@@ -157,7 +162,6 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     optFastLoadSave: 'Skip load/save prompts',
     optModernContextMenu: 'Modern context menu',
     penColor: 'Default pen color',
-    penColorLabel: 'Default pen color',
     canvasBackground: 'Canvas background',
     bgColorLabel: 'Background color',
     prefBoxSelectionTitle: 'Drag selection rule',
@@ -186,9 +190,9 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     fontLabelPop: 'Pop',
     fontLabelCode: 'Code',
     fontLabelCodeHandDrawn: 'Code (Hand-drawn)',
-    offlineFontsTitle: 'Offline fonts',
     fontSlotsTitle: 'Active fonts & offline cache',
     fontBuiltinBadge: 'Built-in',
+    fontPackSharedHint: 'Shared w/ Hand-drawn',
     fontOtherLanguagesTitle: 'Other languages (Xiaolai fallback)',
     fontLicensesButton: 'Font licenses & authors',
     fontLicenseAuthorPrefix: 'Author',
@@ -206,6 +210,10 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     },
     fontDownload: 'Download',
     fontDelete: 'Delete',
+    fontDeleting: 'Removing...',
+    closeLabel: 'Close',
+    stateOn: 'ON',
+    stateOff: 'OFF',
     ctxCut: 'Cut',
     ctxCopy: 'Copy',
     ctxPaste: 'Paste',
@@ -257,6 +265,7 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     exportSettings: 'エクスポート設定',
     exportOnlySelected: '選択した図形のみ',
     exportBackground: '背景の透明化',
+    exportPadding: '余白を追加',
     exportDarkMode: 'ダークモード',
     exportEmbedScene: '編集データを画像に含める',
     exportFormat: '保存形式',
@@ -273,7 +282,6 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     optFastLoadSave: '開く/保存の確認スキップ',
     optModernContextMenu: 'コンテキストメニューのモダン化',
     penColor: 'デフォルトのペンの色',
-    penColorLabel: 'デフォルトのペンの色',
     canvasBackground: 'キャンバスの背景',
     bgColorLabel: '背景色',
     prefBoxSelectionTitle: 'ドラッグ選択の囲み判定',
@@ -293,7 +301,7 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     fontSettings: 'フォント設定',
     prefPreferJpFont: '優先フォント',
     preferJpOptionJa: '日本語',
-    preferJpOptionZh: '標準・中国語',
+    preferJpOptionZh: '標準・CJK',
     prefCodeLigatures: 'コード合字 (=> !==)',
     prefCodeLigaturesOn: 'ON',
     prefCodeLigaturesOff: 'OFF',
@@ -302,9 +310,9 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     fontLabelPop: 'ポップ',
     fontLabelCode: 'コード',
     fontLabelCodeHandDrawn: 'コード（手書き風）',
-    offlineFontsTitle: 'オフライン用フォント',
     fontSlotsTitle: '使用フォント・オフライン保存',
     fontBuiltinBadge: '同梱済み',
+    fontPackSharedHint: '手書きと共通',
     fontOtherLanguagesTitle: 'その他の言語（Xiaolai 補完）',
     fontLicensesButton: 'フォントのライセンス・作者情報',
     fontLicenseAuthorPrefix: '作者',
@@ -322,6 +330,10 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     },
     fontDownload: 'ダウンロード',
     fontDelete: '削除',
+    fontDeleting: '削除中...',
+    closeLabel: '閉じる',
+    stateOn: 'ON',
+    stateOff: 'OFF',
     ctxCut: '切り取り',
     ctxCopy: 'コピー',
     ctxPaste: '貼り付け',
@@ -352,8 +364,8 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     toastFontDeleteFailed: (n) => `${n}フォントの削除に失敗しました`,
   },
   'zh-CN': {
-    shapeGroupTitle: '箭头・直线・菱形・涂黑',
-    mobileShapeGroupTitle: '椭圆・箭头・直线・菱形・涂黑',
+    shapeGroupTitle: '箭头、直线、菱形、涂黑',
+    mobileShapeGroupTitle: '椭圆、箭头、直线、菱形、涂黑',
     toolRectangle: '矩形',
     toolEllipse: '椭圆',
     toolText: '文本',
@@ -373,6 +385,7 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     exportSettings: '导出设置',
     exportOnlySelected: '仅导出选中项',
     exportBackground: '透明背景',
+    exportPadding: '添加边距',
     exportDarkMode: '深色模式',
     exportEmbedScene: '在图片中嵌入可编辑数据',
     exportFormat: '保存格式',
@@ -389,7 +402,6 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     optFastLoadSave: '跳过打开/保存确认',
     optModernContextMenu: '现代右键菜单',
     penColor: '默认画笔颜色',
-    penColorLabel: '默认画笔颜色',
     canvasBackground: '画布背景',
     bgColorLabel: '背景颜色',
     prefBoxSelectionTitle: '框选判定方式',
@@ -409,18 +421,18 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     fontSettings: '字体设置',
     prefPreferJpFont: '优先字体',
     preferJpOptionJa: '日语',
-    preferJpOptionZh: '标准 / 中文',
+    preferJpOptionZh: '标准 / CJK',
     prefCodeLigatures: '代码连字 (=> !==)',
     prefCodeLigaturesOn: '开启',
     prefCodeLigaturesOff: '关闭',
     fontLabelHandDrawn: '手写',
     fontLabelNormal: '标准',
-    fontLabelPop: '流行',
+    fontLabelPop: 'POP体',
     fontLabelCode: '代码',
     fontLabelCodeHandDrawn: '代码（手写风）',
-    offlineFontsTitle: '离线字体',
     fontSlotsTitle: '当前字体与离线缓存',
     fontBuiltinBadge: '已内置',
+    fontPackSharedHint: '与手写共用',
     fontOtherLanguagesTitle: '其他语言（Xiaolai 补充）',
     fontLicensesButton: '字体许可证与作者信息',
     fontLicenseAuthorPrefix: '作者',
@@ -431,13 +443,17 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     cjkLangName: {
       ja: '日语 (手写)',
       jaStandard: '日语 (标准)',
-      jaPop: '日语 (流行)',
+      jaPop: '日语 (POP体)',
       jaCode: '日语 (代码)',
       ko: '韩语',
       zh: '中文',
     },
     fontDownload: '下载',
     fontDelete: '删除',
+    fontDeleting: '删除中...',
+    closeLabel: '关闭',
+    stateOn: '开启',
+    stateOff: '关闭',
     ctxCut: '剪切',
     ctxCopy: '复制',
     ctxPaste: '粘贴',
@@ -468,8 +484,8 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     toastFontDeleteFailed: (n) => `删除${n}字体缓存失败`,
   },
   'zh-TW': {
-    shapeGroupTitle: '箭頭・直線・菱形・塗黑',
-    mobileShapeGroupTitle: '橢圓・箭頭・直線・菱形・塗黑',
+    shapeGroupTitle: '箭頭、直線、菱形、塗黑',
+    mobileShapeGroupTitle: '橢圓、箭頭、直線、菱形、塗黑',
     toolRectangle: '矩形',
     toolEllipse: '橢圓',
     toolText: '文字',
@@ -489,6 +505,7 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     exportSettings: '匯出設定',
     exportOnlySelected: '僅匯出選取項目',
     exportBackground: '透明背景',
+    exportPadding: '加入邊距',
     exportDarkMode: '深色模式',
     exportEmbedScene: '在圖片中嵌入可編輯資料',
     exportFormat: '儲存格式',
@@ -505,7 +522,6 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     optFastLoadSave: '略過開啟/儲存確認',
     optModernContextMenu: '現代化右鍵選單',
     penColor: '預設畫筆顏色',
-    penColorLabel: '預設畫筆顏色',
     canvasBackground: '畫布背景',
     bgColorLabel: '背景顏色',
     prefBoxSelectionTitle: '框選判定方式',
@@ -522,23 +538,23 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     prefStylesPanelCompact: '精簡固定',
     prefStylesPanelFull: '始終展開',
     languageLabel: '語言',
-    fontSettings: '字體設定',
-    prefPreferJpFont: '優先字體',
+    fontSettings: '字型設定',
+    prefPreferJpFont: '優先字型',
     preferJpOptionJa: '日文',
-    preferJpOptionZh: '標準 / 中文',
+    preferJpOptionZh: '標準 / CJK',
     prefCodeLigatures: '程式碼連字 (=> !==)',
     prefCodeLigaturesOn: '開啟',
     prefCodeLigaturesOff: '關閉',
     fontLabelHandDrawn: '手寫',
     fontLabelNormal: '標準',
-    fontLabelPop: '流行',
+    fontLabelPop: 'POP 體',
     fontLabelCode: '程式碼',
     fontLabelCodeHandDrawn: '程式碼（手寫風）',
-    offlineFontsTitle: '離線字體',
-    fontSlotsTitle: '目前字體與離線快取',
+    fontSlotsTitle: '目前字型與離線快取',
     fontBuiltinBadge: '已內建',
+    fontPackSharedHint: '與手寫共用',
     fontOtherLanguagesTitle: '其他語言（Xiaolai 補充）',
-    fontLicensesButton: '字體授權與作者資訊',
+    fontLicensesButton: '字型授權與作者資訊',
     fontLicenseAuthorPrefix: '作者',
     fontLicenseCjkFallback: 'CJK 補充',
     redactColorTitle: '填滿顏色',
@@ -547,13 +563,17 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     cjkLangName: {
       ja: '日文 (手寫)',
       jaStandard: '日文 (標準)',
-      jaPop: '日文 (流行)',
+      jaPop: '日文 (POP 體)',
       jaCode: '日文 (程式碼)',
       ko: '韓文',
       zh: '中文',
     },
     fontDownload: '下載',
     fontDelete: '刪除',
+    fontDeleting: '刪除中...',
+    closeLabel: '關閉',
+    stateOn: '開啟',
+    stateOff: '關閉',
     ctxCut: '剪下',
     ctxCopy: '複製',
     ctxPaste: '貼上',
@@ -578,14 +598,14 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     toastSceneSaved: '已儲存場景檔案',
     toastFileLoaded: '已載入檔案',
     toastFileLoadFailed: '載入檔案失敗',
-    toastFontDownloaded: (n) => `已下載${n}字體`,
-    toastFontDownloadFailed: (n) => `下載${n}字體失敗`,
-    toastFontDeleted: (n) => `已刪除${n}字體快取`,
-    toastFontDeleteFailed: (n) => `刪除${n}字體快取失敗`,
+    toastFontDownloaded: (n) => `已下載${n}字型`,
+    toastFontDownloadFailed: (n) => `下載${n}字型失敗`,
+    toastFontDeleted: (n) => `已刪除${n}字型快取`,
+    toastFontDeleteFailed: (n) => `刪除${n}字型快取失敗`,
   },
   'ko-KR': {
-    shapeGroupTitle: '화살표・직선・마름모・검은 가리기',
-    mobileShapeGroupTitle: '원・화살표・직선・마름모・검은 가리기',
+    shapeGroupTitle: '화살표·직선·마름모·검은 가리기',
+    mobileShapeGroupTitle: '원·화살표·직선·마름모·검은 가리기',
     toolRectangle: '사각형',
     toolEllipse: '원',
     toolText: '텍스트',
@@ -605,6 +625,7 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     exportSettings: '내보내기 설정',
     exportOnlySelected: '선택한 도형만',
     exportBackground: '배경 투명화',
+    exportPadding: '여백 추가',
     exportDarkMode: '다크 모드',
     exportEmbedScene: '이미지에 편집 데이터 포함',
     exportFormat: '저장 형식',
@@ -621,7 +642,6 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     optFastLoadSave: '열기/저장 확인 건너뛰기',
     optModernContextMenu: '모던 컨텍스트 메뉴',
     penColor: '기본 펜 색상',
-    penColorLabel: '기본 펜 색상',
     canvasBackground: '캔버스 배경',
     bgColorLabel: '배경색',
     prefBoxSelectionTitle: '드래그 선택 기준',
@@ -641,7 +661,7 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     fontSettings: '글꼴 설정',
     prefPreferJpFont: '우선 글꼴',
     preferJpOptionJa: '일본어',
-    preferJpOptionZh: '표준 / 한자',
+    preferJpOptionZh: '표준 / CJK',
     prefCodeLigatures: '코드 합자 (=> !==)',
     prefCodeLigaturesOn: '켜기',
     prefCodeLigaturesOff: '끄기',
@@ -650,9 +670,9 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     fontLabelPop: '팝',
     fontLabelCode: '코드',
     fontLabelCodeHandDrawn: '코드 (손글씨풍)',
-    offlineFontsTitle: '오프라인 글꼴',
     fontSlotsTitle: '사용 글꼴 및 오프라인 저장',
     fontBuiltinBadge: '내장됨',
+    fontPackSharedHint: '손글씨와 공용',
     fontOtherLanguagesTitle: '기타 언어 (Xiaolai 보완)',
     fontLicensesButton: '글꼴 라이선스 및 제작자 정보',
     fontLicenseAuthorPrefix: '제작자',
@@ -670,6 +690,10 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     },
     fontDownload: '다운로드',
     fontDelete: '삭제',
+    fontDeleting: '삭제 중...',
+    closeLabel: '닫기',
+    stateOn: '켜짐',
+    stateOff: '꺼짐',
     ctxCut: '잘라내기',
     ctxCopy: '복사',
     ctxPaste: '붙여넣기',

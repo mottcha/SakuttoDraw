@@ -13,13 +13,16 @@ const MAIN_MENU_SUBMENU_IGNORE_SELECTORS = [
 ] as const;
 
 /**
- * Dismisses the Excalidraw main menu / submenu cleanly via API and Escape fallback.
+ * Dismisses the Excalidraw main menu / submenu cleanly via API, falling back to Escape only when needed.
  */
 export function closeExcalidrawMainMenu(): void {
-  runtime.api?.updateScene({
-    appState: { openMenu: null },
-    captureUpdate: CaptureUpdateAction.NEVER,
-  });
+  if (runtime.api) {
+    runtime.api.updateScene({
+      appState: { openMenu: null },
+      captureUpdate: CaptureUpdateAction.NEVER,
+    });
+    return;
+  }
   if (typeof document !== 'undefined') {
     sendEscape(document);
   }
@@ -47,10 +50,12 @@ export function useOutsideDismiss({
   useEffect(() => {
     if (!active || typeof document === 'undefined') return;
 
+    const matchesIgnored = (node: unknown): boolean =>
+      node instanceof Element && ignoreRef.current.some((sel) => node.closest(sel));
+
     const onPointerDownOutside = (e: PointerEvent) => {
-      const target = e.target;
-      if (!(target instanceof Element)) return;
-      if (ignoreRef.current.some((sel) => target.closest(sel))) {
+      const path = typeof e.composedPath === 'function' ? e.composedPath() : [];
+      if (path.some(matchesIgnored) || matchesIgnored(e.target)) {
         return;
       }
       onDismissRef.current();
@@ -58,6 +63,8 @@ export function useOutsideDismiss({
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
         onDismissRef.current();
       }
     };

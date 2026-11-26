@@ -1,5 +1,3 @@
-import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
-
 export type AppLang = 'en' | 'ja-JP' | 'ko-KR' | 'zh-CN' | 'zh-TW';
 export type ThemeMode = 'light' | 'dark' | 'system';
 
@@ -11,6 +9,7 @@ export interface ExportOpts {
   background: boolean;
   darkMode: boolean;
   embedScene: boolean;
+  padding: boolean;
   format: ExportFormat;
   scale: ExportScale;
 }
@@ -45,10 +44,9 @@ export interface Prefs {
 }
 
 export type CjkLang = 'ja' | 'jaStandard' | 'jaPop' | 'jaCode' | 'ko' | 'zh';
-export type CjkSetStatus = 'uninstalled' | 'downloading' | 'installed';
+export type CjkSetStatus = 'uninstalled' | 'downloading' | 'deleting' | 'installed';
 
 export interface CjkFontSetMeta {
-  label: string;
   files: string[];
   totalBytes: number;
 }
@@ -57,35 +55,25 @@ export interface CjkFontManifest {
   sets: Record<CjkLang, CjkFontSetMeta>;
 }
 
-export interface JpFontChunkMeta {
+export interface JpFontChunkRef {
   file: string;
-  unicodeRange: string;
-  bytes: number;
+  rangeIndex?: number;
+  unicodeRange?: string;
 }
 
 export interface FontPackManifest {
-  source: string;
-  totalBytes: number;
-  chunks: JpFontChunkMeta[];
-}
-
-export interface CascadiaMonoManifest {
-  file: string;
-  unicodeRange: string;
-  bytes: number;
+  chunks: JpFontChunkRef[];
 }
 
 export interface JpFontManifest {
-  source: string;
-  totalBytes: number;
-  chunks: JpFontChunkMeta[];
+  ranges?: string[];
+  chunks: JpFontChunkRef[];
   bizUdpGothic?: FontPackManifest;
   mochiyPop?: FontPackManifest;
   sakuttoCode?: FontPackManifest;
-  sakuttoCodeLgLatin?: JpFontChunkMeta;
+  sakuttoCodeLgLatin?: JpFontChunkRef;
   comicShannsMono500?: FontPackManifest;
-  cascadiaMono?: CascadiaMonoManifest;
+  cascadiaMono?: JpFontChunkRef;
+  cascadiaCodeRangeIndex?: number;
   cascadiaCodeRange?: string;
 }
-
-export type { ExcalidrawImperativeAPI };

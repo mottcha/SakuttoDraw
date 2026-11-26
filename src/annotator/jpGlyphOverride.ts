@@ -1,7 +1,7 @@
 import { CaptureUpdateAction, FONT_FAMILY } from '@excalidraw/excalidraw';
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 import rawJpManifest from '../generated/jpFontManifest.json';
-import type { JpFontChunkMeta, JpFontManifest } from '../types/annotator';
+import type { JpFontChunkRef, JpFontManifest } from '../types/annotator';
 import {
   clearLoadedFontCacheForFamilies,
   enableCascadiaFontInRegistry,
@@ -19,6 +19,24 @@ export const jpFontManifest: JpFontManifest = rawJpManifest as JpFontManifest;
 
 const CASCADIA_WEIGHT = '100 900';
 
+function resolveChunkRange(ref: JpFontChunkRef, manifest: JpFontManifest): string {
+  if (typeof ref.unicodeRange === 'string' && ref.unicodeRange) return ref.unicodeRange;
+  if (typeof ref.rangeIndex === 'number' && Array.isArray(manifest.ranges)) {
+    return manifest.ranges[ref.rangeIndex] ?? '';
+  }
+  return '';
+}
+
+function resolveCascadiaCodeRange(manifest: JpFontManifest): string {
+  if (typeof manifest.cascadiaCodeRange === 'string' && manifest.cascadiaCodeRange) {
+    return manifest.cascadiaCodeRange;
+  }
+  if (typeof manifest.cascadiaCodeRangeIndex === 'number' && Array.isArray(manifest.ranges)) {
+    return manifest.ranges[manifest.cascadiaCodeRangeIndex] ?? '';
+  }
+  return '';
+}
+
 interface RegistryOverrideState {
   snapshots: Map<number, ExcalidrawFontFaceLike[]>;
   lastApplied: { preferJpFont: boolean; codeLigatures: boolean } | null;
@@ -27,6 +45,7 @@ interface RegistryOverrideState {
 let registryStates = new WeakMap<RegisteredFontsMap, RegistryOverrideState>();
 let cachedJpCodePointSet: Set<number> | null = null;
 let cachedMeasureCtx: CanvasRenderingContext2D | null | undefined;
+let activeRefreshToken = 0;
 
 function getRegistryState(targetFonts: RegisteredFontsMap): RegistryOverrideState {
   let state = registryStates.get(targetFonts);
@@ -37,13 +56,13 @@ function getRegistryState(targetFonts: RegisteredFontsMap): RegistryOverrideStat
   return state;
 }
 
-export function getJpCoveredCodePoints(manifest: JpFontManifest = jpFontManifest): Set<number> {
+function getJpCoveredCodePoints(manifest: JpFontManifest = jpFontManifest): Set<number> {
   if (manifest === jpFontManifest && cachedJpCodePointSet) {
     return cachedJpCodePointSet;
   }
   const covered = new Set<number>();
   for (const chunk of manifest.chunks) {
-    for (const cp of parseUnicodeRangeToSet(chunk.unicodeRange)) {
+    for (const cp of parseUnicodeRangeToSet(resolveChunkRange(chunk, manifest))) {
       covered.add(cp);
     }
   }
@@ -134,17 +153,19 @@ function resolveSlotWeight(faces: readonly ExcalidrawFontFaceLike[]): string {
 
 function buildExcludedFallbackFaces(
   family: string,
-  chunks: readonly JpFontChunkMeta[],
+  chunks: readonly JpFontChunkRef[],
+  manifest: JpFontManifest,
   excludeCodePoints: ReadonlySet<number>,
   baseUrl?: string,
   weight = '400',
 ): ExcalidrawFontFaceLike[] {
   const result: ExcalidrawFontFaceLike[] = [];
   for (const chunk of chunks) {
+    const rawRange = resolveChunkRange(chunk, manifest);
     const range =
       excludeCodePoints.size > 0
-        ? subtractUnicodeRange(chunk.unicodeRange, excludeCodePoints)
-        : chunk.unicodeRange;
+        ? subtractUnicodeRange(rawRange, excludeCodePoints)
+        : rawRange;
     if (!range) continue;
     result.push(
       createFontFaceEntry(family, [resolveFontAssetUrl(chunk.file, baseUrl)], range, weight),
@@ -156,13 +177,14 @@ function buildExcludedFallbackFaces(
 function augmentFacesWithDisjointJp(
   family: string,
   baseFaces: readonly ExcalidrawFontFaceLike[],
-  jpChunks: readonly JpFontChunkMeta[],
+  jpChunks: readonly JpFontChunkRef[],
+  manifest: JpFontManifest,
   baseUrl?: string,
 ): ExcalidrawFontFaceLike[] {
   if (jpChunks.length === 0) return [...baseFaces];
   const baseCovered = extractCoveredCodePoints(baseFaces);
   const weight = resolveSlotWeight(baseFaces);
-  const jpFaces = buildExcludedFallbackFaces(family, jpChunks, baseCovered, baseUrl, weight);
+  const jpFaces = buildExcludedFallbackFaces(family, jpChunks, manifest, baseCovered, baseUrl, weight);
   return [...baseFaces, ...jpFaces];
 }
 
@@ -188,7 +210,7 @@ function buildXiaolaiFaces(
     createFontFaceEntry(
       XIAOLAI_FAMILY_NAME,
       [resolveFontAssetUrl(chunk.file, baseUrl)],
-      chunk.unicodeRange,
+      resolveChunkRange(chunk, manifest),
     ),
   );
   return { faces: [...trimmedXiaolaiFaces, ...jpFaces], jpFaceCount: jpFaces.length };
@@ -207,15 +229,17 @@ function buildCascadiaFaces(
       codeLigatures && manifest.sakuttoCodeLgLatin
         ? manifest.sakuttoCodeLgLatin
         : (regularLatin ?? manifest.sakuttoCodeLgLatin);
+    const chosenLatinRange = chosenLatin ? resolveChunkRange(chosenLatin, manifest) : '';
     const cjkChunks = regularLatin
       ? sakuttoChunks.filter((chunk) => chunk !== regularLatin)
       : sakuttoChunks;
-    const latinExcluded = chosenLatin
-      ? parseUnicodeRangeToSet(chosenLatin.unicodeRange)
+    const latinExcluded = chosenLatinRange
+      ? parseUnicodeRangeToSet(chosenLatinRange)
       : new Set<number>();
     const cjkFaces = buildExcludedFallbackFaces(
       'Cascadia',
       cjkChunks,
+      manifest,
       latinExcluded,
       baseUrl,
       CASCADIA_WEIGHT,
@@ -225,7 +249,7 @@ function buildCascadiaFaces(
       createFontFaceEntry(
         'Cascadia',
         [resolveFontAssetUrl(chosenLatin.file, baseUrl)],
-        chosenLatin.unicodeRange,
+        chosenLatinRange,
         CASCADIA_WEIGHT,
       ),
       ...cjkFaces,
@@ -233,7 +257,7 @@ function buildCascadiaFaces(
   }
 
   if (codeLigatures || !manifest.cascadiaMono) {
-    const codeRange = manifest.cascadiaCodeRange;
+    const codeRange = resolveCascadiaCodeRange(manifest);
     return snapshot.map((face) => {
       const existingRange = face.fontFace?.unicodeRange;
       const effectiveRange =
@@ -253,7 +277,7 @@ function buildCascadiaFaces(
     createFontFaceEntry(
       'Cascadia',
       [resolveFontAssetUrl(manifest.cascadiaMono.file, baseUrl)],
-      manifest.cascadiaMono.unicodeRange,
+      resolveChunkRange(manifest.cascadiaMono, manifest),
       CASCADIA_WEIGHT,
     ),
   ];
@@ -289,6 +313,7 @@ export function resetJpGlyphOverrideStateForTests(): void {
   registryStates = new WeakMap();
   cachedJpCodePointSet = null;
   cachedMeasureCtx = undefined;
+  activeRefreshToken = 0;
 }
 
 export interface SakuttoFontOverrideOptions {
@@ -371,7 +396,7 @@ export function applySakuttoFontOverrides(
       snapshotAndSwapSlot(targetFonts, state.snapshots, FONT_FAMILY.Nunito, fontFaceSet, (snapshot) =>
         preferJpFont
           ? bizChunks.map((chunk) =>
-              createFontFaceEntry('Nunito', [resolveFontAssetUrl(chunk.file, baseUrl)], chunk.unicodeRange, '100 900'),
+              createFontFaceEntry('Nunito', [resolveFontAssetUrl(chunk.file, baseUrl)], resolveChunkRange(chunk, manifest), '100 900'),
             )
           : [...snapshot],
       );
@@ -379,7 +404,7 @@ export function applySakuttoFontOverrides(
 
     if (mochiyChunks.length > 0) {
       snapshotAndSwapSlot(targetFonts, state.snapshots, FONT_FAMILY['Lilita One'], fontFaceSet, (snapshot) =>
-        preferJpFont ? augmentFacesWithDisjointJp('Lilita One', snapshot, mochiyChunks, baseUrl) : [...snapshot],
+        preferJpFont ? augmentFacesWithDisjointJp('Lilita One', snapshot, mochiyChunks, manifest, baseUrl) : [...snapshot],
       );
     }
 
@@ -392,12 +417,12 @@ export function applySakuttoFontOverrides(
               createFontFaceEntry(
                 'Comic Shanns',
                 [resolveFontAssetUrl(chunk.file, baseUrl)],
-                chunk.unicodeRange,
+                resolveChunkRange(chunk, manifest),
                 baseWeight,
               ),
             )
           : snapshot;
-      return augmentFacesWithDisjointJp('Comic Shanns', baseFaces, manifest.chunks, baseUrl);
+      return augmentFacesWithDisjointJp('Comic Shanns', baseFaces, manifest.chunks, manifest, baseUrl);
     });
   }
 
@@ -417,6 +442,54 @@ export function applySakuttoFontOverrides(
   };
 }
 
+/**
+ * Recreates any FontFace entries stuck in `status === 'error'` (e.g. from earlier offline use)
+ * after an offline CJK pack finishes downloading, so glyphs render without requiring reload.
+ */
+export function reloadErroredRegisteredFonts(
+  registeredFonts: RegisteredFontsMap | null = getDefaultRegisteredFonts(),
+  fontFaceSet: FontFaceSet | null = typeof document !== 'undefined' && document.fonts ? document.fonts : null,
+): number {
+  if (!registeredFonts) return 0;
+  let reloaded = 0;
+  const touchedFamilies = new Set<string>();
+
+  for (const entry of registeredFonts.values()) {
+    const nextFaces = [...entry.fontFaces];
+    let slotChanged = false;
+    for (let i = 0; i < nextFaces.length; i++) {
+      const item = nextFaces[i];
+      if (item.fontFace?.status !== 'error' || item.urls.length === 0) continue;
+      const replacement = createFontFaceEntry(
+        item.fontFace.family,
+        item.urls as Array<URL | string>,
+        item.fontFace.unicodeRange,
+        item.fontFace.weight || '400',
+      );
+      if (fontFaceSet) {
+        try {
+          fontFaceSet.delete?.(item.fontFace);
+          fontFaceSet.add?.(replacement.fontFace);
+        } catch {
+          // ignore FontFaceSet errors in limited shims
+        }
+      }
+      nextFaces[i] = replacement;
+      touchedFamilies.add(item.fontFace.family.replace(/^["']|["']$/g, ''));
+      slotChanged = true;
+      reloaded += 1;
+    }
+    if (slotChanged) {
+      entry.fontFaces = nextFaces;
+    }
+  }
+
+  if (touchedFamilies.size > 0) {
+    clearLoadedFontCacheForFamilies(Array.from(touchedFamilies));
+  }
+  return reloaded;
+}
+
 const ALL_ACTIVE_FONT_IDS: readonly number[] = [
   FONT_FAMILY.Excalifont,
   FONT_FAMILY.Virgil,
@@ -428,7 +501,7 @@ const ALL_ACTIVE_FONT_IDS: readonly number[] = [
 
 const FAMILY_ID_TO_FONT_STACK: Readonly<Record<number, string>> = {
   [FONT_FAMILY.Excalifont]: `Excalifont, ${XIAOLAI_FAMILY_NAME}, sans-serif, "Segoe UI Emoji"`,
-  [FONT_FAMILY.Virgil]: `Virgil, ${XIAOLAI_FAMILY_NAME}, sans-serif, "Segoe UI Emoji"`,
+  [FONT_FAMILY.Virgil]: 'Virgil, sans-serif, "Segoe UI Emoji"',
   [FONT_FAMILY.Nunito]: 'Nunito, sans-serif, "Segoe UI Emoji"',
   [FONT_FAMILY['Lilita One']]: '"Lilita One", sans-serif, "Segoe UI Emoji"',
   [FONT_FAMILY.Cascadia]: 'Cascadia, monospace, "Segoe UI Emoji"',
@@ -483,6 +556,7 @@ export async function refreshSceneTextFonts(
   } = {},
 ): Promise<void> {
   if (!api) return;
+  const refreshToken = ++activeRefreshToken;
   const targetSet = new Set<number>(targetFamilyIds);
   const elements = api.getSceneElements();
   const charsByFamily = new Map<number, Set<string>>();
@@ -520,6 +594,8 @@ export async function refreshSceneTextFonts(
     );
   }
 
+  if (refreshToken !== activeRefreshToken) return;
+
   const refreshed = api.getSceneElements().map((el) => {
     if (el.type === 'text' && !el.isDeleted) {
       const textEl = el as {
@@ -527,6 +603,7 @@ export async function refreshSceneTextFonts(
         containerId?: string | null;
         autoResize?: boolean;
         fontSize?: number;
+        textAlign?: string;
         text?: string;
         originalText?: string;
       };
@@ -541,9 +618,17 @@ export async function refreshSceneTextFonts(
                 textEl.fontFamily,
               )
             : null;
+        let nextX = el.x;
+        if (nextWidth !== null) {
+          if (textEl.textAlign === 'center') {
+            nextX = el.x - (nextWidth - el.width) / 2;
+          } else if (textEl.textAlign === 'right') {
+            nextX = el.x - (nextWidth - el.width);
+          }
+        }
         return {
           ...el,
-          ...(nextWidth !== null ? { width: nextWidth } : {}),
+          ...(nextWidth !== null ? { width: nextWidth, x: nextX } : {}),
           version: el.version + 1,
           versionNonce: nextElementNonce(),
         };

@@ -1,5 +1,4 @@
 // Shared quick-annotator user actions (export, reset, pen color, canvas background).
-import { EXCALIDRAW_SELECTORS } from '../../excalidraw/domContract';
 import { getMessages } from '../../i18n/messages';
 import {
   DEFAULT_PEN_COLOR,
@@ -15,9 +14,14 @@ import {
   runInstantExportWithApi,
   runInstantResetWithApi,
 } from '../apiActions';
-import { closeFloatingPopovers, runtime, showToast } from './runtime';
+import {
+  closeFloatingPopovers,
+  notifyRuntimeChange,
+  runtime,
+  showToast,
+} from './runtime';
 
-async function withBusyLock<T>(
+export async function withBusyLock<T>(
   triggerBtn: HTMLButtonElement | null | undefined,
   fn: () => Promise<T>,
   busyFallback: T,
@@ -36,7 +40,7 @@ async function withBusyLock<T>(
 }
 
 export async function runInstantExport(
-  mode: 'copy' | 'png',
+  mode: 'copy' | 'save',
   triggerBtn?: HTMLButtonElement | null,
 ) {
   return withBusyLock(
@@ -58,7 +62,7 @@ export async function runInstantReset(triggerBtn?: HTMLButtonElement | null) {
       runInstantResetWithApi(runtime.api, runtime.prefs, {
         showToast,
       }),
-    { ok: false, pinkApplied: false, reason: 'busy' } as const,
+    { ok: false, reason: 'busy' } as const,
   );
 }
 
@@ -69,13 +73,6 @@ export function getCurrentCanvasBg(
     const apiBg = silently(() => runtime.api?.getAppState()?.viewBackgroundColor?.trim());
     if (apiBg) return apiBg.toLowerCase();
   }
-  const liveSwatch = silently(() =>
-    document
-      .querySelector<HTMLElement>(EXCALIDRAW_SELECTORS.canvasBgPopupTrigger)
-      ?.style?.getPropertyValue('--swatch-color')
-      ?.trim(),
-  );
-  if (liveSwatch) return liveSwatch.toLowerCase();
   if (runtime.lastCanvasBg) return runtime.lastCanvasBg.toLowerCase();
   const st = readSavedAppState(storage);
   if (typeof st.viewBackgroundColor === 'string' && st.viewBackgroundColor) {
@@ -85,21 +82,28 @@ export function getCurrentCanvasBg(
 }
 
 export async function applyCanvasBackground(hex: string): Promise<boolean> {
-  if (runtime.isBusy) return false;
-  const normalized = normalizeHexColor(hex, '#ffffff');
-  runtime.lastCanvasBg = normalized;
+  return withBusyLock(
+    null,
+    async () => {
+      const normalized = normalizeHexColor(hex, '#ffffff');
+      runtime.lastCanvasBg = normalized;
 
-  if (runtime.api) {
-    const res = await applyCanvasBackgroundWithApi(runtime.api, normalized, {
-      lang: runtime.prefs.lang,
-      showToast,
-    });
-    return res.ok;
-  }
+      if (runtime.api) {
+        const res = applyCanvasBackgroundWithApi(runtime.api, normalized, {
+          lang: runtime.prefs.lang,
+          showToast,
+        });
+        notifyRuntimeChange();
+        return res.ok;
+      }
 
-  patchSavedAppState({ viewBackgroundColor: normalized });
-  showToast(getMessages(runtime.prefs.lang).toastBgChanged);
-  return true;
+      patchSavedAppState({ viewBackgroundColor: normalized });
+      notifyRuntimeChange();
+      showToast(getMessages(runtime.prefs.lang).toastBgChanged);
+      return true;
+    },
+    false,
+  );
 }
 
 export function getCurrentPenColor(): string {
@@ -107,20 +111,27 @@ export function getCurrentPenColor(): string {
 }
 
 export async function applyPenColor(hex: string): Promise<boolean> {
-  if (runtime.isBusy) return false;
-  const normalized = normalizeHexColor(hex, DEFAULT_PEN_COLOR);
-  runtime.prefs.quickOpts.defaultPenColor = normalized;
-  savePrefs(runtime.prefs);
+  return withBusyLock(
+    null,
+    async () => {
+      const normalized = normalizeHexColor(hex, DEFAULT_PEN_COLOR);
+      runtime.prefs.quickOpts.defaultPenColor = normalized;
+      savePrefs(runtime.prefs);
 
-  if (runtime.api) {
-    const res = await applyPenColorWithApi(runtime.api, normalized, {
-      lang: runtime.prefs.lang,
-      showToast,
-    });
-    return res.ok;
-  }
+      if (runtime.api) {
+        const res = applyPenColorWithApi(runtime.api, normalized, {
+          lang: runtime.prefs.lang,
+          showToast,
+        });
+        notifyRuntimeChange();
+        return res.ok;
+      }
 
-  patchSavedAppState({ currentItemStrokeColor: normalized });
-  showToast(getMessages(runtime.prefs.lang).toastPenColorChanged);
-  return true;
+      patchSavedAppState({ currentItemStrokeColor: normalized });
+      notifyRuntimeChange();
+      showToast(getMessages(runtime.prefs.lang).toastPenColorChanged);
+      return true;
+    },
+    false,
+  );
 }

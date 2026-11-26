@@ -16,10 +16,10 @@
 }
 
 .context-menu.exq-ctx-rich > hr.context-menu-item-separator {
-  margin: 4px 2px !important;
-  border: none !important;
-  height: 1px !important;
-  background: var(--default-border-color, rgba(128, 128, 148, 0.18)) !important;
+  margin: 4px 2px;
+  border: none;
+  height: 1px;
+  background: var(--default-border-color, rgba(128, 128, 148, 0.18));
 }
 
 .context-menu.exq-ctx-rich > li.exq-ctx-widget-li {
@@ -53,15 +53,15 @@
 }
 
 .context-menu.exq-ctx-rich .exq-ctx-quick-btn:hover:not(:disabled) {
-  background: rgba(105, 101, 219, 0.15) !important;
+  background: rgba(105, 101, 219, 0.15);
   border-color: rgba(105, 101, 219, 0.28);
-  color: #3b35b8 !important;
+  color: #3b35b8;
 }
 
 .excalidraw.theme--dark .context-menu.exq-ctx-rich .exq-ctx-quick-btn:hover:not(:disabled) {
-  background: rgba(168, 165, 255, 0.22) !important;
+  background: rgba(168, 165, 255, 0.22);
   border-color: rgba(168, 165, 255, 0.34);
-  color: #ffffff !important;
+  color: #ffffff;
 }
 
 .context-menu.exq-ctx-rich .exq-ctx-quick-btn:active:not(:disabled) {
@@ -74,23 +74,23 @@
 }
 
 .context-menu.exq-ctx-rich .exq-ctx-quick-btn--danger {
-  color: #d92d20 !important;
+  color: #d92d20;
 }
 
 .context-menu.exq-ctx-rich .exq-ctx-quick-btn--danger:hover:not(:disabled) {
-  background: rgba(217, 45, 32, 0.15) !important;
+  background: rgba(217, 45, 32, 0.15);
   border-color: rgba(217, 45, 32, 0.3);
-  color: #b42318 !important;
+  color: #b42318;
 }
 
 .excalidraw.theme--dark .context-menu.exq-ctx-rich .exq-ctx-quick-btn--danger {
-  color: #ff7b72 !important;
+  color: #ff7b72;
 }
 
 .excalidraw.theme--dark .context-menu.exq-ctx-rich .exq-ctx-quick-btn--danger:hover:not(:disabled) {
-  background: rgba(255, 107, 107, 0.22) !important;
+  background: rgba(255, 107, 107, 0.22);
   border-color: rgba(255, 107, 107, 0.38);
-  color: #ffa198 !important;
+  color: #ffa198;
 }
 
 .exq-ctx-quick-label {
@@ -116,7 +116,7 @@
 .exq-ctx-layer-title {
   font-size: 11.5px;
   font-weight: 500;
-  color: var(--text-secondary-color, #686878);
+  color: var(--exq-text-secondary);
   white-space: nowrap;
   user-select: none;
 }
@@ -143,8 +143,8 @@
 }
 
 .context-menu.exq-ctx-rich .exq-ctx-layer-btn:hover {
-  background: var(--color-primary, #6965db) !important;
-  color: #ffffff !important;
+  background: var(--color-primary, #6965db);
+  color: #ffffff;
   border-color: transparent;
 }
 
@@ -154,35 +154,35 @@
 
 /* Decorated Native Context Menu Rows */
 .context-menu.exq-ctx-rich .context-menu-item {
-  display: flex !important;
-  align-items: center !important;
-  gap: 9px !important;
-  min-height: 30px !important;
-  padding: 4px 8px !important;
-  border-radius: 7px !important;
-  font-size: 12.5px !important;
-  color: var(--popup-text-color, var(--text-primary-color, #1b1b1f)) !important;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 30px;
+  padding: 4px 8px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  color: var(--popup-text-color, var(--text-primary-color, #1b1b1f));
   transition: background-color 0.12s ease, color 0.12s ease;
 }
 
 .context-menu.exq-ctx-rich .context-menu-item:hover {
-  background: rgba(105, 101, 219, 0.15) !important;
-  color: var(--popup-text-color, var(--text-primary-color, #1b1b1f)) !important;
+  background: rgba(105, 101, 219, 0.15);
+  color: var(--popup-text-color, var(--text-primary-color, #1b1b1f));
 }
 
 .context-menu.exq-ctx-rich .context-menu-item:hover .context-menu-item__label,
 .context-menu.exq-ctx-rich .context-menu-item:hover .exq-ctx-item-icon,
 .context-menu.exq-ctx-rich .context-menu-item:hover .context-menu-item__shortcut {
-  color: inherit !important;
+  color: inherit;
 }
 
 .excalidraw.theme--dark .context-menu.exq-ctx-rich .context-menu-item {
-  color: #e5e5ea !important;
+  color: #e5e5ea;
 }
 
 .excalidraw.theme--dark .context-menu.exq-ctx-rich .context-menu-item:hover {
-  background: rgba(168, 165, 255, 0.22) !important;
-  color: #ffffff !important;
+  background: rgba(168, 165, 255, 0.22);
+  color: #ffffff;
 }
 
 .exq-ctx-item-icon {
@@ -203,7 +203,7 @@
 .context-menu.exq-ctx-rich .context-menu-item__shortcut {
   margin-left: auto;
   padding-left: 12px;
-  font-size: 10px !important;
-  opacity: 0.56 !important;
+  font-size: 10px;
+  opacity: 0.56;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }

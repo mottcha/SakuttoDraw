@@ -23,7 +23,7 @@ function parseUnicodeRange(rangeStr) {
   return cps;
 }
 
-function syncFontPackDir(projectRoot, destFontsDir, folderName, defaultSourceLabel) {
+function syncFontPackDir(projectRoot, destFontsDir, folderName, registerRange) {
   const srcDir = path.join(projectRoot, 'assets', 'fonts', folderName);
   const destDir = path.join(destFontsDir, folderName);
   const manifestSrc = path.join(srcDir, 'manifest.json');
@@ -55,19 +55,18 @@ function syncFontPackDir(projectRoot, destFontsDir, folderName, defaultSourceLab
     totalBytes += size;
     normalizedChunks.push({
       file: `fonts/${folderName}/${fileName}`,
-      unicodeRange: String(chunk.unicodeRange || ''),
+      rangeIndex: registerRange(String(chunk.unicodeRange || '')),
       bytes: size,
     });
   }
 
   return {
-    source: rawManifest.source || defaultSourceLabel,
     totalBytes,
     chunks: normalizedChunks,
   };
 }
 
-function syncCascadiaMono(projectRoot, destFontsDir) {
+function syncCascadiaMono(projectRoot, prodDir, destFontsDir, registerRange) {
   const srcDir = path.join(projectRoot, 'assets', 'fonts', 'CascadiaMono');
   const destDir = path.join(destFontsDir, 'CascadiaMono');
   const manifestPath = path.join(srcDir, 'manifest.json');
@@ -85,6 +84,18 @@ function syncCascadiaMono(projectRoot, destFontsDir) {
     throw new Error(`Missing CascadiaMono font file: ${srcWoff2}`);
   }
 
+  // Drift check: fail fast if upstream CascadiaCode-Regular changed size without updating cascadia-code-range.json
+  const upstreamCascadiaPath = path.join(prodDir, 'fonts', 'Cascadia', 'CascadiaCode-Regular.woff2');
+  if (
+    typeof codeMeta.bytes === 'number' &&
+    fs.existsSync(upstreamCascadiaPath) &&
+    fs.statSync(upstreamCascadiaPath).size !== codeMeta.bytes
+  ) {
+    throw new Error(
+      `Upstream CascadiaCode-Regular.woff2 size (${fs.statSync(upstreamCascadiaPath).size}) differs from cascadia-code-range.json (${codeMeta.bytes}). Regenerate cascadia-code-range.json.`,
+    );
+  }
+
   fs.rmSync(destDir, { recursive: true, force: true });
   fs.mkdirSync(destDir, { recursive: true });
   fs.copyFileSync(srcWoff2, path.join(destDir, fileName));
@@ -92,10 +103,9 @@ function syncCascadiaMono(projectRoot, destFontsDir) {
   return {
     cascadiaMono: {
       file: `fonts/CascadiaMono/${fileName}`,
-      unicodeRange: String(monoMeta.unicodeRange || ''),
-      bytes: fs.statSync(srcWoff2).size,
+      rangeIndex: registerRange(String(monoMeta.unicodeRange || '')),
     },
-    cascadiaCodeRange: String(codeMeta.unicodeRange || ''),
+    cascadiaCodeRangeIndex: registerRange(String(codeMeta.unicodeRange || '')),
   };
 }
 
@@ -116,28 +126,32 @@ export function syncExcalidrawAssets(projectRoot = rootDir) {
     throw new Error(`Excalidraw fonts directory not found: ${srcFontsDir}`);
   }
 
-  fs.mkdirSync(path.dirname(destFontsDir), { recursive: true });
-  fs.cpSync(srcFontsDir, destFontsDir, { recursive: true, force: true });
+  // Clean public/fonts before copying so stale upstream font hashes never linger across upgrades.
+  // Exclude Assistant because Vite already bundles assets/Assistant-*.woff2 from upstream CSS.
+  fs.rmSync(destFontsDir, { recursive: true, force: true });
+  fs.mkdirSync(destFontsDir, { recursive: true });
+  fs.cpSync(srcFontsDir, destFontsDir, {
+    recursive: true,
+    force: true,
+    filter: (src) => !/[\\/]Assistant([\\/]|$)/.test(src),
+  });
 
-  const setoJp = syncFontPackDir(projectRoot, destFontsDir, 'SetoJP', 'KosefontP-JP');
-  const bizUdpGothic = syncFontPackDir(
-    projectRoot,
-    destFontsDir,
-    'BizUdpGothic',
-    'BIZ UDPGothic Bold (SIL OFL 1.1)',
-  );
-  const mochiyPop = syncFontPackDir(
-    projectRoot,
-    destFontsDir,
-    'MochiyPop',
-    'Mochiy Pop P One Regular (SIL OFL 1.1)',
-  );
-  const sakuttoCode = syncFontPackDir(
-    projectRoot,
-    destFontsDir,
-    'SakuttoCode',
-    'SakuttoCode (subset of UDEV Gothic, SIL OFL 1.1)',
-  );
+  const ranges = [];
+  const rangeToIndex = new Map();
+  const registerRange = (rangeStr) => {
+    const existing = rangeToIndex.get(rangeStr);
+    if (existing !== undefined) return existing;
+    const idx = ranges.length;
+    ranges.push(rangeStr);
+    rangeToIndex.set(rangeStr, idx);
+    return idx;
+  };
+
+  const setoJp = syncFontPackDir(projectRoot, destFontsDir, 'SetoJP', registerRange);
+  const bizUdpGothic = syncFontPackDir(projectRoot, destFontsDir, 'BizUdpGothic', registerRange);
+  const mochiyPop = syncFontPackDir(projectRoot, destFontsDir, 'MochiyPop', registerRange);
+  const sakuttoCode = syncFontPackDir(projectRoot, destFontsDir, 'SakuttoCode', registerRange);
+
   const lgMetaPath = path.join(projectRoot, 'assets', 'fonts', 'SakuttoCode', 'latin-lg-manifest.json');
   if (!fs.existsSync(lgMetaPath)) {
     throw new Error(`SakuttoCode LG manifest not found: ${lgMetaPath}`);
@@ -151,20 +165,21 @@ export function syncExcalidrawAssets(projectRoot = rootDir) {
   fs.copyFileSync(lgSrcFile, path.join(destFontsDir, 'SakuttoCode', lgFileName));
   const sakuttoCodeLgLatin = {
     file: `fonts/SakuttoCode/${lgFileName}`,
-    unicodeRange: String(lgRaw.unicodeRange || ''),
+    rangeIndex: registerRange(String(lgRaw.unicodeRange || '')),
     bytes: fs.statSync(lgSrcFile).size,
   };
   const comicShannsMono500 = syncFontPackDir(
     projectRoot,
     destFontsDir,
     'ComicShannsMono500',
-    'Comic Shanns Narrow500 (modified from Comic Shanns, MIT License)',
+    registerRange,
   );
-  const { cascadiaMono, cascadiaCodeRange } = syncCascadiaMono(projectRoot, destFontsDir);
-
-  for (const staleFolder of ['MPlusRounded', 'MPlusU', 'MPlus1Code']) {
-    fs.rmSync(path.join(destFontsDir, staleFolder), { recursive: true, force: true });
-  }
+  const { cascadiaMono, cascadiaCodeRangeIndex } = syncCascadiaMono(
+    projectRoot,
+    prodDir,
+    destFontsDir,
+    registerRange,
+  );
 
   // Scan chunk-*.js without relying on minified array variable names (e.g. "Vo")
   const jsFiles = fs
@@ -191,12 +206,12 @@ export function syncExcalidrawAssets(projectRoot = rootDir) {
   }
 
   const sets = {
-    ja: { label: '日本語（手書き）', files: [], totalBytes: 0 },
-    jaStandard: { label: '日本語（標準）', files: [], totalBytes: 0 },
-    jaPop: { label: '日本語（ポップ）', files: [], totalBytes: 0 },
-    jaCode: { label: '日本語（コード）', files: [], totalBytes: 0 },
-    ko: { label: '한국어', files: [], totalBytes: 0 },
-    zh: { label: '中文', files: [], totalBytes: 0 },
+    ja: { files: [], totalBytes: 0 },
+    jaStandard: { files: [], totalBytes: 0 },
+    jaPop: { files: [], totalBytes: 0 },
+    jaCode: { files: [], totalBytes: 0 },
+    ko: { files: [], totalBytes: 0 },
+    zh: { files: [], totalBytes: 0 },
   };
   const seenFiles = {
     ja: new Set(),
@@ -222,7 +237,9 @@ export function syncExcalidrawAssets(projectRoot = rootDir) {
     }
   }
 
-  const descriptorRe = /\{\s*uri\s*:\s*([A-Za-z_$][\w$]*)\s*,\s*descriptors\s*:\s*\{\s*unicodeRange\s*:\s*"([^"]+)"\s*\}\s*\}/g;
+  const unclassifiedXiaolai = [];
+  const descriptorRe =
+    /\{\s*uri\s*:\s*([A-Za-z_$][\w$]*)\s*,\s*descriptors\s*:\s*\{[^}]*unicodeRange\s*:\s*"([^"]+)"[^}]*\}\s*\}/g;
   for (const m of matchedChunkContent.matchAll(descriptorRe)) {
     const relPath = varMap.get(m[1]);
     if (!relPath) continue;
@@ -234,16 +251,24 @@ export function syncExcalidrawAssets(projectRoot = rootDir) {
     const hasKo = cps.some(
       (cp) =>
         (cp >= 0xac00 && cp <= 0xd7af) ||
+        (cp >= 0xd7b0 && cp <= 0xd7ff) ||
         (cp >= 0x3130 && cp <= 0x318f) ||
         (cp >= 0x1100 && cp <= 0x11ff) ||
-        (cp >= 0x3000 && cp <= 0x303f),
+        (cp >= 0x3000 && cp <= 0x303f) ||
+        (cp >= 0x3200 && cp <= 0x321e) ||
+        (cp >= 0x3260 && cp <= 0x327f) ||
+        (cp >= 0xffa0 && cp <= 0xffdc),
     );
     const hasZh = cps.some(
       (cp) =>
         (cp >= 0x4e00 && cp <= 0x9fff) ||
         (cp >= 0x3400 && cp <= 0x4dbf) ||
+        (cp >= 0xf900 && cp <= 0xfaff) ||
         cp >= 0x20000 ||
-        (cp >= 0x3000 && cp <= 0x303f),
+        (cp >= 0x3000 && cp <= 0x303f) ||
+        (cp >= 0x3190 && cp <= 0x32ff) ||
+        (cp >= 0xfe30 && cp <= 0xfe4f) ||
+        (cp >= 0xff00 && cp <= 0xffef),
     );
 
     if (hasKo && !seenFiles.ko.has(relPath)) {
@@ -256,9 +281,17 @@ export function syncExcalidrawAssets(projectRoot = rootDir) {
       sets.zh.files.push(relPath);
       sets.zh.totalBytes += size;
     }
+    if (!hasKo && !hasZh) {
+      unclassifiedXiaolai.push(relPath);
+    }
   }
 
-  // Fail-fast guard against upstream chunk format changes
+  // Fail-fast guards against upstream chunk classification gaps or format changes
+  if (unclassifiedXiaolai.length > 0) {
+    throw new Error(
+      `Unclassified Xiaolai font chunks (${unclassifiedXiaolai.length}): ${unclassifiedXiaolai.slice(0, 5).join(', ')}`,
+    );
+  }
   if (
     sets.ja.files.length === 0 ||
     sets.jaStandard.files.length === 0 ||
@@ -272,25 +305,33 @@ export function syncExcalidrawAssets(projectRoot = rootDir) {
     );
   }
 
+  const stripChunkBytes = (chunks) => chunks.map(({ file, rangeIndex }) => ({ file, rangeIndex }));
+
   fs.mkdirSync(generatedDir, { recursive: true });
   const manifestPath = path.join(generatedDir, 'cjkFontManifest.json');
   fs.writeFileSync(manifestPath, JSON.stringify({ sets }, null, 2), 'utf8');
 
   const jpManifestPath = path.join(generatedDir, 'jpFontManifest.json');
+  const jpChunksCompact = stripChunkBytes(setoJp.chunks);
+  const bizCompact = { chunks: stripChunkBytes(bizUdpGothic.chunks) };
+  const mochiyCompact = { chunks: stripChunkBytes(mochiyPop.chunks) };
+  const sakuttoCompact = { chunks: stripChunkBytes(sakuttoCode.chunks) };
+  const comicCompact = { chunks: stripChunkBytes(comicShannsMono500.chunks) };
+  const lgCompact = { file: sakuttoCodeLgLatin.file, rangeIndex: sakuttoCodeLgLatin.rangeIndex };
+
   fs.writeFileSync(
     jpManifestPath,
     JSON.stringify(
       {
-        source: setoJp.source,
-        totalBytes: setoJp.totalBytes,
-        chunks: setoJp.chunks,
-        bizUdpGothic,
-        mochiyPop,
-        sakuttoCode,
-        sakuttoCodeLgLatin,
-        comicShannsMono500,
+        ranges,
+        chunks: jpChunksCompact,
+        bizUdpGothic: bizCompact,
+        mochiyPop: mochiyCompact,
+        sakuttoCode: sakuttoCompact,
+        sakuttoCodeLgLatin: lgCompact,
+        comicShannsMono500: comicCompact,
         cascadiaMono,
-        cascadiaCodeRange,
+        cascadiaCodeRangeIndex,
       },
       null,
       2,
@@ -299,16 +340,17 @@ export function syncExcalidrawAssets(projectRoot = rootDir) {
   );
 
   console.log(
-    `[sync-excalidraw-assets] Synced fonts (SetoJP, BizUdpGothic, MochiyPop, SakuttoCode, ComicShannsMono500, CascadiaMono) and generated manifests (ja=${sets.ja.files.length}, jaStandard=${sets.jaStandard.files.length}, jaPop=${sets.jaPop.files.length}, jaCode=${sets.jaCode.files.length}, ko=${sets.ko.files.length}, zh=${sets.zh.files.length})`,
+    `[sync-excalidraw-assets] Synced fonts (SetoJP, BizUdpGothic, MochiyPop, SakuttoCode, ComicShannsMono500, CascadiaMono) and generated manifests (ja=${sets.ja.files.length}, jaStandard=${sets.jaStandard.files.length}, jaPop=${sets.jaPop.files.length}, jaCode=${sets.jaCode.files.length}, ko=${sets.ko.files.length}, zh=${sets.zh.files.length}, uniqueRanges=${ranges.length})`,
   );
   return {
     sets,
-    jpChunks: setoJp.chunks,
-    bizUdpGothic,
-    mochiyPop,
-    sakuttoCode,
-    sakuttoCodeLgLatin,
-    comicShannsMono500,
+    ranges,
+    jpChunks: jpChunksCompact,
+    bizUdpGothic: bizCompact,
+    mochiyPop: mochiyCompact,
+    sakuttoCode: sakuttoCompact,
+    sakuttoCodeLgLatin: lgCompact,
+    comicShannsMono500: comicCompact,
     cascadiaMono,
   };
 }

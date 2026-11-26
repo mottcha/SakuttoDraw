@@ -4,6 +4,7 @@ import { act, createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FONT_FAMILY } from '@excalidraw/excalidraw';
+import './testHelpers';
 import {
   cjkFontManifest,
   computeExclusiveFilesForDeletion,
@@ -522,13 +523,21 @@ describe('5-font architecture (all active slots, ligatures, SVG dedup, picker & 
     assertUniformBucketAndDisjoint();
     const refsAfterLigatureToggle = snapshotNonCascadiaRefs();
     expect(refsAfterLigatureToggle.xiaolai).toHaveLength(refsBeforeLigatureToggle.xiaolai.length);
-    refsAfterLigatureToggle.xiaolai.forEach((f, i) => expect(f).toBe(refsBeforeLigatureToggle.xiaolai[i]));
+    for (const [i, f] of refsAfterLigatureToggle.xiaolai.entries()) {
+      expect(f).toBe(refsBeforeLigatureToggle.xiaolai[i]);
+    }
     expect(refsAfterLigatureToggle.nunito).toHaveLength(refsBeforeLigatureToggle.nunito.length);
-    refsAfterLigatureToggle.nunito.forEach((f, i) => expect(f).toBe(refsBeforeLigatureToggle.nunito[i]));
+    for (const [i, f] of refsAfterLigatureToggle.nunito.entries()) {
+      expect(f).toBe(refsBeforeLigatureToggle.nunito[i]);
+    }
     expect(refsAfterLigatureToggle.lilita).toHaveLength(refsBeforeLigatureToggle.lilita.length);
-    refsAfterLigatureToggle.lilita.forEach((f, i) => expect(f).toBe(refsBeforeLigatureToggle.lilita[i]));
+    for (const [i, f] of refsAfterLigatureToggle.lilita.entries()) {
+      expect(f).toBe(refsBeforeLigatureToggle.lilita[i]);
+    }
     expect(refsAfterLigatureToggle.comic).toHaveLength(refsBeforeLigatureToggle.comic.length);
-    refsAfterLigatureToggle.comic.forEach((f, i) => expect(f).toBe(refsBeforeLigatureToggle.comic[i]));
+    for (const [i, f] of refsAfterLigatureToggle.comic.entries()) {
+      expect(f).toBe(refsBeforeLigatureToggle.comic[i]);
+    }
     const cascadiaMonoUrls = getFaceSources(registered.get(FONT_FAMILY.Cascadia));
     expect(cascadiaMonoUrls.some((s) => /SakuttoCode-00-latin-[0-9a-f]+\.woff2/.test(s))).toBe(true);
     expect(cascadiaMonoUrls.some((s) => s.includes('latin-lg'))).toBe(false);
@@ -929,16 +938,22 @@ describe('FontSettingsPanel UI (5-slot linkage, codeLigatures, other CJK, and li
       panel.querySelector(`[data-exq-font-slot="${slotId}"] .exq-font-slot-sub`)?.textContent;
 
     expect(getSub('hand-drawn')).toBe('Excalifont + SetoJP');
-    expect(getSub('normal')).toBe('BIZ UDPGothic Bold');
+    expect(getSub('normal')).toBe('Nunito + BIZ UDPGothic');
     expect(getSub('pop')).toBe('Lilita One + Mochiy Pop P One');
-    expect(getSub('code')).toBe('UDEV Gothic LG (Subset)');
+    expect(getSub('code')).toBe('SakuttoCode LG');
     expect(getSub('code-hand')).toBe('Comic Shanns (1:2) + SetoJP');
 
-    // Toggle Code Ligatures OFF -> Code slot switches to UDEV Gothic (Subset)
+    // Hand-drawn & Code (Hand-drawn) share the ja pack without duplicate ja download buttons
+    expect(panel.querySelectorAll('[data-exq-cjk-btn="ja"]').length).toBe(1);
+    expect(
+      panel.querySelector('[data-exq-font-slot="code-hand"] [data-exq-cjk-shared="ja"]')?.textContent,
+    ).toBe('手書きと共通');
+
+    // Toggle Code Ligatures OFF -> Code slot switches to SakuttoCode
     await act(async () => {
       panel.querySelector<HTMLButtonElement>('[data-exq-code-ligatures="off"]')?.click();
     });
-    expect(getSub('code')).toBe('UDEV Gothic (Subset)');
+    expect(getSub('code')).toBe('SakuttoCode');
 
     // Expand Other languages drawer -> reveals full 中国語 and 韓国語 buttons
     expect(panel.querySelector('.exq-font-other-cjk [data-exq-cjk-btn="zh"]')).toBeNull();
@@ -948,7 +963,7 @@ describe('FontSettingsPanel UI (5-slot linkage, codeLigatures, other CJK, and li
     expect(panel.querySelector('.exq-font-other-cjk [data-exq-cjk-btn="zh"]')?.textContent).toContain('中国語');
     expect(panel.querySelector('.exq-font-other-cjk [data-exq-cjk-btn="ko"]')?.textContent).toContain('韓国語');
 
-    // Switch 優先フォント to 標準・中国語
+    // Switch 優先フォント to 標準・CJK
     await act(async () => {
       panel.querySelector<HTMLButtonElement>('[data-exq-prefer-jp-card="zh"]')?.click();
     });
@@ -968,12 +983,15 @@ describe('FontSettingsPanel UI (5-slot linkage, codeLigatures, other CJK, and li
     ).toBe('同梱済み');
     expect(panel.querySelector('[data-exq-other-cjk-toggle="1"]')).toBeNull();
 
-    // Open License modal, verify all 10 fonts, close with button, reopen and close with Escape
+    // Open License modal, verify all 10 fonts, close with button, reopen and test Escape + focus restore
+    const openLicenseBtn = panel.querySelector<HTMLButtonElement>('[data-exq-font-licenses-btn="1"]')!;
     await act(async () => {
-      panel.querySelector<HTMLButtonElement>('[data-exq-font-licenses-btn="1"]')?.click();
+      openLicenseBtn.click();
     });
     const modal = document.querySelector('[data-exq-font-license-modal="1"]');
     expect(modal).toBeTruthy();
+    const closeLicenseBtn = document.querySelector<HTMLButtonElement>('[data-exq-font-licenses-close="1"]')!;
+    expect(document.activeElement).toBe(closeLicenseBtn);
     const modalText = modal?.textContent ?? '';
     for (const fontName of [
       'Excalifont',
@@ -990,19 +1008,27 @@ describe('FontSettingsPanel UI (5-slot linkage, codeLigatures, other CJK, and li
       expect(modalText).toContain(fontName);
     }
 
+    // Tab wraps back onto the close button when only close button is focusable inside the modal
     await act(async () => {
-      document.querySelector<HTMLButtonElement>('[data-exq-font-licenses-close="1"]')?.click();
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
     });
-    expect(document.querySelector('[data-exq-font-license-modal="1"]')).toBeNull();
+    expect(document.activeElement).toBe(closeLicenseBtn);
 
     await act(async () => {
-      panel.querySelector<HTMLButtonElement>('[data-exq-font-licenses-btn="1"]')?.click();
+      closeLicenseBtn.click();
+    });
+    expect(document.querySelector('[data-exq-font-license-modal="1"]')).toBeNull();
+    expect(document.activeElement).toBe(openLicenseBtn);
+
+    await act(async () => {
+      openLicenseBtn.click();
     });
     expect(document.querySelector('[data-exq-font-license-modal="1"]')).toBeTruthy();
     await act(async () => {
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
     });
     expect(document.querySelector('[data-exq-font-license-modal="1"]')).toBeNull();
+    expect(document.activeElement).toBe(openLicenseBtn);
 
     await act(async () => {
       root.unmount();

@@ -1,12 +1,17 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { AppLang, CjkLang } from '../types/annotator';
 import { cjkFontManifest, formatBytesToMB } from '../annotator/cjkFontManager';
 import { applyCodeLigatures, applyPreferJpFont, runtime } from '../annotator/quickAnnotator/runtime';
-import { EXCALIDRAW_SELECTORS } from '../excalidraw/domContract';
 import { getMessages, type MessageCatalog } from '../i18n/messages';
 import { resolvePreferJpFont } from '../services/storageBridge';
 import { Icon } from './Icon';
+import {
+  getExcalidrawPortalTarget,
+  handleRadioGroupKeyDown,
+  PanelHeader,
+  useRuntimeChangeTick,
+} from './PanelPrimitives';
 import {
   refreshCjkCacheStatuses,
   toggleLanguageFontCache,
@@ -28,26 +33,22 @@ const FONT_SLOT_DEFS: readonly FontSlotDef[] = [
   {
     id: 'hand-drawn',
     packWhenJp: 'ja',
-    renderIcon: () => <Icon name="drawAssist" size={13} strokeWidth={1.8} />,
+    renderIcon: () => <Icon name="fontSettings" size={13} strokeWidth={2} />,
     getLabel: (t) => t.fontLabelHandDrawn,
     getSubtitle: (preferJp) => (preferJp ? 'Excalifont + SetoJP' : 'Excalifont + Xiaolai'),
   },
   {
     id: 'normal',
     packWhenJp: 'jaStandard',
-    renderIcon: () => (
-      <span className="exq-font-glyph-icon" aria-hidden="true">
-        A
-      </span>
-    ),
+    renderIcon: () => <span className="exq-font-slot-glyph">A</span>,
     getLabel: (t) => t.fontLabelNormal,
-    getSubtitle: (preferJp) => (preferJp ? 'BIZ UDPGothic Bold' : 'Nunito'),
+    getSubtitle: (preferJp) => (preferJp ? 'Nunito + BIZ UDPGothic' : 'Nunito'),
   },
   {
     id: 'pop',
     packWhenJp: 'jaPop',
     renderIcon: () => (
-      <span className="exq-font-glyph-icon exq-font-glyph-icon--bold" aria-hidden="true">
+      <span className="exq-font-slot-glyph" style={{ fontWeight: 800 }}>
         H
       </span>
     ),
@@ -61,7 +62,7 @@ const FONT_SLOT_DEFS: readonly FontSlotDef[] = [
     getLabel: (t) => t.fontLabelCode,
     getSubtitle: (preferJp, codeLigatures) => {
       if (preferJp) {
-        return codeLigatures ? 'UDEV Gothic LG (Subset)' : 'UDEV Gothic (Subset)';
+        return codeLigatures ? 'SakuttoCode LG' : 'SakuttoCode';
       }
       return codeLigatures ? 'Cascadia Code' : 'Cascadia Mono';
     },
@@ -145,11 +146,19 @@ const FONT_CREDITS: readonly FontCreditEntry[] = [
   },
 ] as const;
 
+const FOCUSABLE_SELECTOR =
+  'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
+
 export function FontSettingsPanel({ lang }: { lang: AppLang }) {
+  useRuntimeChangeTick();
   const cjkState = useCjkFontCacheState();
   const [otherCjkOpen, setOtherCjkOpen] = useState(false);
   const [licenseModalOpen, setLicenseModalOpen] = useState(false);
-  const [, setTick] = useState(0);
+  const licenseBtnRef = useRef<HTMLButtonElement | null>(null);
+  const licenseCloseRef = useRef<HTMLButtonElement | null>(null);
+  const licenseDialogRef = useRef<HTMLDivElement | null>(null);
+  const wasModalOpenRef = useRef(false);
+  const licenseTitleId = useId();
 
   useMainMenuSubmenuDismiss();
 
@@ -162,17 +171,47 @@ export function FontSettingsPanel({ lang }: { lang: AppLang }) {
   }, []);
 
   useEffect(() => {
-    if (!licenseModalOpen || typeof document === 'undefined') return;
+    if (licenseModalOpen) {
+      wasModalOpenRef.current = true;
+      licenseCloseRef.current?.focus();
+    } else if (wasModalOpenRef.current) {
+      wasModalOpenRef.current = false;
+      licenseBtnRef.current?.focus();
+    }
+  }, [licenseModalOpen]);
+
+  useEffect(() => {
+    if (!licenseModalOpen || typeof window === 'undefined') return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
         e.stopPropagation();
+        e.stopImmediatePropagation?.();
         setLicenseModalOpen(false);
+        return;
+      }
+      if (e.key === 'Tab') {
+        const dialog = licenseDialogRef.current;
+        if (!dialog) return;
+        const focusables = Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+        if (focusables.length === 0) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        const active = document.activeElement;
+        if (e.shiftKey) {
+          if (active === first || !dialog.contains(active)) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else if (active === last || !dialog.contains(active)) {
+          e.preventDefault();
+          first.focus();
+        }
       }
     };
-    document.addEventListener('keydown', onKeyDown, true);
+    window.addEventListener('keydown', onKeyDown, true);
     return () => {
-      document.removeEventListener('keydown', onKeyDown, true);
+      window.removeEventListener('keydown', onKeyDown, true);
     };
   }, [licenseModalOpen]);
 
@@ -182,16 +221,6 @@ export function FontSettingsPanel({ lang }: { lang: AppLang }) {
     preferJpFont: runtime.prefs.preferJpFont,
   });
   const codeLigaturesActive = runtime.prefs.codeLigatures;
-
-  const selectPreferJpFont = (enabled: boolean) => {
-    applyPreferJpFont(enabled);
-    setTick((n) => n + 1);
-  };
-
-  const selectCodeLigatures = (enabled: boolean) => {
-    applyCodeLigatures(enabled);
-    setTick((n) => n + 1);
-  };
 
   const renderPackActionButton = (cjkLang: CjkLang, includeLangName: boolean) => {
     const meta = cjkFontManifest.sets[cjkLang];
@@ -207,6 +236,8 @@ export function FontSettingsPanel({ lang }: { lang: AppLang }) {
     if (status === 'downloading') {
       const pct = `${cjkState.progress[cjkLang]}%`;
       buttonLabel = includeLangName ? `${langName} ${pct}` : pct;
+    } else if (status === 'deleting') {
+      buttonLabel = t.fontDeleting;
     } else if (status === 'installed') {
       buttonLabel = includeLangName ? langName : t.fontDelete;
     } else {
@@ -223,7 +254,7 @@ export function FontSettingsPanel({ lang }: { lang: AppLang }) {
         data-exq-cjk-state={status}
         title={titleText}
         aria-label={titleText}
-        disabled={status === 'downloading'}
+        disabled={status === 'downloading' || status === 'deleting'}
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -240,10 +271,7 @@ export function FontSettingsPanel({ lang }: { lang: AppLang }) {
     );
   };
 
-  const portalTarget =
-    typeof document !== 'undefined'
-      ? document.querySelector(EXCALIDRAW_SELECTORS.root) || document.body
-      : null;
+  const portalTarget = getExcalidrawPortalTarget();
 
   return (
     <>
@@ -254,23 +282,18 @@ export function FontSettingsPanel({ lang }: { lang: AppLang }) {
         onPointerDown={(e) => e.stopPropagation()}
       >
         <div className="exq-pref-group" data-exq-code-ligatures-group="1">
-          <div className="exq-pref-group-header">
-            <div className="exq-pref-group-title">{t.prefCodeLigatures}</div>
-            <button
-              type="button"
-              className="exq-pref-close-btn"
-              data-exq-font-settings-close="1"
-              aria-label="Close"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                closeExcalidrawMainMenu();
-              }}
-            >
-              <Icon name="close" size={13} strokeWidth={2.2} />
-            </button>
-          </div>
-          <div className="exq-pref-card-grid" role="radiogroup" aria-label={t.prefCodeLigatures}>
+          <PanelHeader
+            title={t.prefCodeLigatures}
+            closeLabel={t.closeLabel}
+            onClose={closeExcalidrawMainMenu}
+            closeDataAttr="data-exq-font-settings-close"
+          />
+          <div
+            className="exq-pref-card-grid"
+            role="radiogroup"
+            aria-label={t.prefCodeLigatures}
+            onKeyDown={handleRadioGroupKeyDown}
+          >
             <button
               type="button"
               role="radio"
@@ -280,7 +303,7 @@ export function FontSettingsPanel({ lang }: { lang: AppLang }) {
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                selectCodeLigatures(true);
+                applyCodeLigatures(true);
               }}
             >
               <span>{t.prefCodeLigaturesOn}</span>
@@ -294,7 +317,7 @@ export function FontSettingsPanel({ lang }: { lang: AppLang }) {
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                selectCodeLigatures(false);
+                applyCodeLigatures(false);
               }}
             >
               <span>{t.prefCodeLigaturesOff}</span>
@@ -305,7 +328,12 @@ export function FontSettingsPanel({ lang }: { lang: AppLang }) {
         <div className="exq-font-linked-box">
           <div className="exq-font-linked-head" data-exq-prefer-jp-group="1">
             <div className="exq-pref-group-title">{t.prefPreferJpFont}</div>
-            <div className="exq-font-seg-track" role="radiogroup" aria-label={t.prefPreferJpFont}>
+            <div
+              className="exq-font-seg-track"
+              role="radiogroup"
+              aria-label={t.prefPreferJpFont}
+              onKeyDown={handleRadioGroupKeyDown}
+            >
               <button
                 type="button"
                 role="radio"
@@ -315,7 +343,7 @@ export function FontSettingsPanel({ lang }: { lang: AppLang }) {
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  selectPreferJpFont(true);
+                  applyPreferJpFont(true);
                 }}
               >
                 {t.preferJpOptionJa}
@@ -329,7 +357,7 @@ export function FontSettingsPanel({ lang }: { lang: AppLang }) {
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  selectPreferJpFont(false);
+                  applyPreferJpFont(false);
                 }}
               >
                 {t.preferJpOptionZh}
@@ -362,7 +390,13 @@ export function FontSettingsPanel({ lang }: { lang: AppLang }) {
                       </div>
                     </div>
                     {preferJpActive ? (
-                      renderPackActionButton(slot.packWhenJp, false)
+                      slot.id === 'code-hand' ? (
+                        <span className="exq-font-shared-badge" data-exq-cjk-shared="ja">
+                          {t.fontPackSharedHint}
+                        </span>
+                      ) : (
+                        renderPackActionButton(slot.packWhenJp, false)
+                      )
                     ) : slot.id !== 'hand-drawn' ? (
                       <span className="exq-font-builtin-badge">{t.fontBuiltinBadge}</span>
                     ) : null}
@@ -404,6 +438,7 @@ export function FontSettingsPanel({ lang }: { lang: AppLang }) {
         </div>
 
         <button
+          ref={licenseBtnRef}
           type="button"
           className="exq-font-license-footer-btn"
           data-exq-font-licenses-btn="1"
@@ -429,7 +464,7 @@ export function FontSettingsPanel({ lang }: { lang: AppLang }) {
             data-exq-font-license-modal="1"
             role="dialog"
             aria-modal="true"
-            aria-label={t.fontLicensesButton}
+            aria-labelledby={licenseTitleId}
             onClick={(e) => {
               e.stopPropagation();
               if (e.target === e.currentTarget) {
@@ -439,20 +474,22 @@ export function FontSettingsPanel({ lang }: { lang: AppLang }) {
             onPointerDown={(e) => e.stopPropagation()}
           >
             <div
+              ref={licenseDialogRef}
               className="exq-font-license-dialog"
               onClick={(e) => e.stopPropagation()}
               onPointerDown={(e) => e.stopPropagation()}
             >
               <div className="exq-font-license-dialog-head">
-                <div className="exq-font-license-dialog-title">
+                <h2 id={licenseTitleId} className="exq-font-license-dialog-title">
                   <Icon name="info" size={14} strokeWidth={2} />
                   <span>{t.fontLicensesButton}</span>
-                </div>
+                </h2>
                 <button
+                  ref={licenseCloseRef}
                   type="button"
                   className="exq-pref-close-btn"
                   data-exq-font-licenses-close="1"
-                  aria-label="Close"
+                  aria-label={t.closeLabel}
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();

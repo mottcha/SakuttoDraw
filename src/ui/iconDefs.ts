@@ -353,25 +353,26 @@ export const ICON_DEFS = {
       ['circle', { cx: 12, cy: 12, r: 3 }],
     ],
   },
-  kanjiJp: {
+  panelAuto: {
+    viewBox: '0 0 26 18',
     shapes: [
-      ['line', { x1: 6, y1: 5.2, x2: 18.5, y2: 5.2 }],
-      ['line', { x1: 12.5, y1: 2.8, x2: 12.5, y2: 8.2 }],
-      ['rect', { x: 9.5, y: 8.2, width: 8.2, height: 8.5, rx: 0.8 }],
-      ['line', { x1: 9.8, y1: 11.2, x2: 17.4, y2: 11.2 }],
-      ['line', { x1: 9.8, y1: 14, x2: 17.4, y2: 14 }],
-      ['path', { d: 'M5.5 9.2 V20.2 H19.5', 'stroke-width': 2.1 }],
+      ['rect', { x: 1, y: 1, width: 24, height: 16, rx: 2.5, opacity: 0.45 }],
+      ['rect', { x: 3, y: 3.5, width: 3.5, height: 11, rx: 1, fill: 'currentColor', stroke: 'none' }],
+      ['path', { d: 'M11 9h9m-2.5-2.5L20 9l-2.5 2.5M13.5 6.5L11 9l2.5 2.5' }],
     ],
   },
-  kanjiZh: {
+  panelCompact: {
+    viewBox: '0 0 26 18',
     shapes: [
-      ['line', { x1: 5.5, y1: 5.2, x2: 18.5, y2: 5.2 }],
-      ['line', { x1: 12, y1: 2.8, x2: 12, y2: 8.2 }],
-      ['rect', { x: 7, y: 8.2, width: 10, height: 11.8, rx: 0.8 }],
-      ['line', { x1: 7.2, y1: 11.2, x2: 16.8, y2: 11.2 }],
-      ['line', { x1: 7.2, y1: 14.2, x2: 16.8, y2: 14.2 }],
-      ['line', { x1: 7.2, y1: 17.1, x2: 16.8, y2: 17.1 }],
-      ['line', { x1: 4, y1: 20.2, x2: 20, y2: 20.2, 'stroke-width': 2.1 }],
+      ['rect', { x: 1, y: 1, width: 24, height: 16, rx: 2.5, opacity: 0.45 }],
+      ['rect', { x: 3, y: 3.5, width: 3.5, height: 11, rx: 1, fill: 'currentColor', stroke: 'none' }],
+    ],
+  },
+  panelFull: {
+    viewBox: '0 0 26 18',
+    shapes: [
+      ['rect', { x: 1, y: 1, width: 24, height: 16, rx: 2.5, opacity: 0.45 }],
+      ['rect', { x: 3, y: 3.5, width: 9.5, height: 11, rx: 1.2, fill: 'currentColor', stroke: 'none' }],
     ],
   },
   autoResetOnOpen: {

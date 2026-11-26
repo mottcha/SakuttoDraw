@@ -1,6 +1,9 @@
 // Syncs localized display labels for the 5 active SakuttoDraw fonts in Excalidraw's FontPicker.
 import { FONT_FAMILY } from '@excalidraw/excalidraw';
-import { EXCALIDRAW_SELECTORS } from '../../excalidraw/domContract';
+import {
+  EXCALIDRAW_FONT_PICKER_TESTIDS,
+  EXCALIDRAW_SELECTORS,
+} from '../../excalidraw/domContract';
 import { getMessages, type MessageCatalog } from '../../i18n/messages';
 import { runtime } from './runtime';
 
@@ -15,14 +18,14 @@ function resolveFontLabelMap(t: MessageCatalog): Readonly<Record<number, string>
 }
 
 const TOP_PICK_TESTID_TO_FAMILY_ID: Readonly<Record<string, number>> = {
-  'font-family-hand-drawn': FONT_FAMILY.Excalifont,
-  'font-family-normal': FONT_FAMILY.Nunito,
-  'font-family-code': FONT_FAMILY['Comic Shanns'],
-  [`font-family-${FONT_FAMILY.Excalifont}`]: FONT_FAMILY.Excalifont,
-  [`font-family-${FONT_FAMILY.Nunito}`]: FONT_FAMILY.Nunito,
-  [`font-family-${FONT_FAMILY['Lilita One']}`]: FONT_FAMILY['Lilita One'],
-  [`font-family-${FONT_FAMILY.Cascadia}`]: FONT_FAMILY.Cascadia,
-  [`font-family-${FONT_FAMILY['Comic Shanns']}`]: FONT_FAMILY['Comic Shanns'],
+  [EXCALIDRAW_FONT_PICKER_TESTIDS.handDrawn]: FONT_FAMILY.Excalifont,
+  [EXCALIDRAW_FONT_PICKER_TESTIDS.normal]: FONT_FAMILY.Nunito,
+  [EXCALIDRAW_FONT_PICKER_TESTIDS.code]: FONT_FAMILY['Comic Shanns'],
+  [`${EXCALIDRAW_FONT_PICKER_TESTIDS.prefix}${FONT_FAMILY.Excalifont}`]: FONT_FAMILY.Excalifont,
+  [`${EXCALIDRAW_FONT_PICKER_TESTIDS.prefix}${FONT_FAMILY.Nunito}`]: FONT_FAMILY.Nunito,
+  [`${EXCALIDRAW_FONT_PICKER_TESTIDS.prefix}${FONT_FAMILY['Lilita One']}`]: FONT_FAMILY['Lilita One'],
+  [`${EXCALIDRAW_FONT_PICKER_TESTIDS.prefix}${FONT_FAMILY.Cascadia}`]: FONT_FAMILY.Cascadia,
+  [`${EXCALIDRAW_FONT_PICKER_TESTIDS.prefix}${FONT_FAMILY['Comic Shanns']}`]: FONT_FAMILY['Comic Shanns'],
 };
 
 /**
@@ -44,7 +47,7 @@ export function syncFontPicker(root: ParentNode = document): boolean {
         btn.setAttribute('title', label);
         touched = true;
       }
-      const textSpan = btn.querySelector<HTMLElement>('.dropdown-menu-item__text span');
+      const textSpan = btn.querySelector<HTMLElement>(`${EXCALIDRAW_SELECTORS.dropdownMenuItemText} span`);
       if (textSpan && textSpan.textContent !== label) {
         textSpan.textContent = label;
         touched = true;

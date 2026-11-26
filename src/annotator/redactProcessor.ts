@@ -10,19 +10,19 @@ import type {
 import { DEFAULT_PEN_COLOR, DEFAULT_REDACT_COLOR } from '../services/storageBridge';
 import { nextElementNonce, normalizeHexColor } from '../utils/common';
 
-export interface SakuttoRedactMeta {
+interface SakuttoRedactMeta {
   v: 1;
   color: string;
 }
 
-export interface RedactRect {
+interface RedactRect {
   x: number;
   y: number;
   width: number;
   height: number;
 }
 
-export const REDACT_BLACKOUT_COLOR = DEFAULT_REDACT_COLOR;
+const REDACT_BLACKOUT_COLOR = DEFAULT_REDACT_COLOR;
 
 export function isRedactElement(el: ExcalidrawElement | null | undefined): boolean {
   if (!el || el.isDeleted) return false;
@@ -70,20 +70,18 @@ function buildBlackoutElement(rect: RedactRect, color: string): OrderedExcalidra
       },
     },
   ]);
-  return created;
+  return { ...created, index: null } as unknown as OrderedExcalidrawElement;
 }
 
 export function createOrUpdateRedactElement({
   api,
   rect,
   color = REDACT_BLACKOUT_COLOR,
-  existingElementId,
   selectResult = true,
 }: {
   api: ExcalidrawImperativeAPI | null;
   rect: RedactRect;
   color?: string;
-  existingElementId?: string;
   selectResult?: boolean;
 }): ExcalidrawElement | null {
   if (!api) return null;
@@ -95,41 +93,12 @@ export function createOrUpdateRedactElement({
     height: Math.max(4, rect.height),
   };
 
-  const allElements: OrderedExcalidrawElement[] = [...api.getSceneElements()];
-  const existingIdx = existingElementId
-    ? allElements.findIndex((el) => el.id === existingElementId && !el.isDeleted)
-    : -1;
-  const existingEl = existingIdx >= 0 ? allElements[existingIdx] : null;
-  const nextMeta: SakuttoRedactMeta = { v: 1, color: resolvedColor };
-
-  let nextEl: OrderedExcalidrawElement;
-  if (existingEl && existingEl.type === 'rectangle') {
-    nextEl = {
-      ...existingEl,
-      x: safeRect.x,
-      y: safeRect.y,
-      width: safeRect.width,
-      height: safeRect.height,
-      strokeColor: 'transparent',
-      backgroundColor: resolvedColor,
-      fillStyle: 'solid',
-      roughness: 0,
-      roundness: null,
-      version: existingEl.version + 1,
-      versionNonce: nextElementNonce(),
-      updated: Date.now(),
-      customData: { ...existingEl.customData, sakuttoRedact: nextMeta },
-    };
-  } else {
-    const fresh = buildBlackoutElement(safeRect, resolvedColor);
-    nextEl = existingEl ? { ...fresh, index: existingEl.index } : fresh;
-  }
-
-  if (existingIdx >= 0) {
-    allElements[existingIdx] = nextEl;
-  } else {
-    allElements.push(nextEl);
-  }
+  const existingElements =
+    typeof api.getSceneElementsIncludingDeleted === 'function'
+      ? api.getSceneElementsIncludingDeleted()
+      : api.getSceneElements();
+  const nextEl = buildBlackoutElement(safeRect, resolvedColor);
+  const allElements: OrderedExcalidrawElement[] = [...existingElements, nextEl];
 
   api.updateScene({
     elements: allElements,
@@ -156,7 +125,11 @@ export function updateRedactElementsColor({
   const now = Date.now();
   let updatedAny = false;
 
-  const nextElements = api.getSceneElements().map((el) => {
+  const baseElements =
+    typeof api.getSceneElementsIncludingDeleted === 'function'
+      ? api.getSceneElementsIncludingDeleted()
+      : api.getSceneElements();
+  const nextElements = baseElements.map((el) => {
     if (el.isDeleted || !idSet.has(el.id) || el.type !== 'rectangle') return el;
     updatedAny = true;
     return {
@@ -181,7 +154,7 @@ export function updateRedactElementsColor({
   return true;
 }
 
-export interface NonRedactStyleSnapshot {
+interface NonRedactStyleSnapshot {
   currentItemBackgroundColor: string;
   currentItemStrokeColor: string;
   currentItemFillStyle: ExcalidrawElement['fillStyle'];
@@ -198,10 +171,6 @@ let frozenNonRedactStyles: NonRedactStyleSnapshot | null = null;
 export function clearRedactStyleIsolationState(): void {
   lastNonRedactStyles = null;
   frozenNonRedactStyles = null;
-}
-
-export function resetRedactStyleIsolationForTests(): void {
-  clearRedactStyleIsolationState();
 }
 
 export function updateRedactStyleIsolationPenColor(penColor: string): void {

@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
+import * as actions from '../annotator/quickAnnotator/actions';
 import {
   installCtrlMultiSelectGuard,
   installFastLoadSaveInterceptor,
+  installPrimaryToolRestoreGuard,
   installTextAutoResizeGuard,
 } from '../annotator/quickAnnotator/guards';
 import { attachExcalidrawAPI } from '../annotator/quickAnnotator/runtime';
@@ -320,6 +322,109 @@ describe('event guards (textAutoResize, touch WYSIWYG, Ctrl multi-select, fast l
       cleanup();
       window.removeEventListener('pointerdown', record);
       window.removeEventListener('pointerup', record);
+    }
+  });
+
+  it('intercepts Ctrl/Cmd+Shift+E to run CSP-safe Sakutto image export', () => {
+    attachExcalidrawAPI({
+      getAppState: () => ({}),
+    } as unknown as ExcalidrawImperativeAPI);
+    const exportSpy = vi
+      .spyOn(actions, 'runInstantExport')
+      .mockResolvedValue({ ok: true, mode: 'save', format: 'png' });
+    const cleanup = installFastLoadSaveInterceptor();
+    try {
+      const evt = new KeyboardEvent('keydown', {
+        key: 'E',
+        ctrlKey: true,
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      window.dispatchEvent(evt);
+      expect(evt.defaultPrevented).toBe(true);
+      expect(exportSpy).toHaveBeenCalledWith('save');
+
+      exportSpy.mockClear();
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'e',
+          ctrlKey: true,
+          shiftKey: true,
+          repeat: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+      expect(exportSpy).not.toHaveBeenCalled();
+    } finally {
+      cleanup();
+      exportSpy.mockRestore();
+    }
+  });
+
+  it('unlocks textAutoResize guard when pointermove reports buttons === 0 and restores subtool after draw', () => {
+    vi.useFakeTimers();
+    try {
+      const setActiveTool = vi.fn();
+      let activeType = 'text';
+      attachExcalidrawAPI({
+        getAppState: () => ({ activeTool: { type: activeType, locked: false } }),
+        setActiveTool,
+      } as unknown as ExcalidrawImperativeAPI);
+
+      const canvas = document.createElement('canvas');
+      canvas.className = 'excalidraw__canvas interactive';
+      document.body.append(canvas);
+
+      const cleanupText = installTextAutoResizeGuard();
+      const cleanupRestore = installPrimaryToolRestoreGuard();
+      const moveListener = vi.fn();
+      window.addEventListener('pointermove', moveListener);
+      try {
+        const downEvt = new MouseEvent('pointerdown', {
+          bubbles: true,
+          button: 0,
+          buttons: 1,
+          clientX: 40,
+          clientY: 50,
+        });
+        Object.defineProperty(downEvt, 'pointerId', { value: 3 });
+        canvas.dispatchEvent(downEvt);
+
+        const releasedMove = new MouseEvent('pointermove', {
+          bubbles: true,
+          button: 0,
+          buttons: 0,
+          clientX: 90,
+          clientY: 90,
+        });
+        Object.defineProperty(releasedMove, 'pointerId', { value: 3 });
+        Object.defineProperty(releasedMove, 'pointerType', { value: 'mouse' });
+        canvas.dispatchEvent(releasedMove);
+        expect(moveListener).toHaveBeenCalledTimes(1);
+
+        activeType = 'selection';
+        const freedrawBtn = document.createElement('button');
+        freedrawBtn.setAttribute('data-testid', 'toolbar-freedraw');
+        const stack = document.createElement('div');
+        stack.className = 'Stack_horizontal';
+        stack.append(freedrawBtn);
+        const toolbar = document.createElement('div');
+        toolbar.className = 'App-toolbar';
+        toolbar.append(stack);
+        document.body.append(toolbar);
+        freedrawBtn.click();
+
+        vi.advanceTimersByTime(30);
+        expect(setActiveTool).toHaveBeenCalledWith({ type: 'freedraw' });
+      } finally {
+        cleanupText();
+        cleanupRestore();
+        window.removeEventListener('pointermove', moveListener);
+      }
+    } finally {
+      vi.useRealTimers();
     }
   });
 });

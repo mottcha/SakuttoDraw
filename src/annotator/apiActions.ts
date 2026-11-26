@@ -14,11 +14,12 @@ import { clearIndexedDbFiles } from '../services/filesDb';
 import {
   cancelPendingScenePersist,
   DEFAULT_PEN_COLOR,
-  DEFAULT_PINK,
   LS_ELEMENTS_KEY,
   normalizeFormat,
   normalizeScale,
   patchSavedAppState,
+  prefsToAppStatePatch,
+  resetPersistedFilesCache,
   savePrefs,
 } from '../services/storageBridge';
 import { normalizeHexColor, silently } from '../utils/common';
@@ -29,7 +30,27 @@ import {
 } from './redactProcessor';
 import { inlinePreSplitFontsIntoSvg } from './svgFontInliner';
 
-export function triggerBlobDownload(blob: Blob, filename: string): void {
+const sceneReplaceHooks = new Set<() => void>();
+
+export function registerSceneReplaceHook(fn: () => void): () => void {
+  sceneReplaceHooks.add(fn);
+  return () => {
+    sceneReplaceHooks.delete(fn);
+  };
+}
+
+function runSceneReplaceHooks(): void {
+  for (const fn of sceneReplaceHooks) {
+    silently(fn);
+  }
+}
+
+function resolveExportBaseName(api: ExcalidrawImperativeAPI): string {
+  const rawName = (typeof api.getName === 'function' && api.getName()) || 'sakuttodraw';
+  return rawName.replace(/\.excalidraw$/i, '').replace(/[\\/:*?"<>|]+/g, '_') || 'sakuttodraw';
+}
+
+function triggerBlobDownload(blob: Blob, filename: string): void {
   if (typeof document === 'undefined' || typeof URL === 'undefined') return;
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -39,7 +60,7 @@ export function triggerBlobDownload(blob: Blob, filename: string): void {
   document.body?.append(a);
   a.click();
   a.remove();
-  setTimeout(() => silently(() => URL.revokeObjectURL(url)), 1500);
+  setTimeout(() => silently(() => URL.revokeObjectURL(url)), 15000);
 }
 
 function buildExportSceneData(
@@ -61,7 +82,7 @@ function buildExportSceneData(
 
 export async function runInstantExportWithApi(
   api: ExcalidrawImperativeAPI | null,
-  mode: 'copy' | 'png',
+  mode: 'copy' | 'save',
   opts: ExportOpts,
   {
     lang = 'en',
@@ -75,7 +96,7 @@ export async function runInstantExportWithApi(
 ): Promise<{
   ok: boolean;
   reason?: string;
-  mode?: 'copy' | 'png';
+  mode?: 'copy' | 'save';
   format?: ExportFormat;
   onlySelected?: boolean;
   message?: string;
@@ -103,6 +124,7 @@ export async function runInstantExportWithApi(
 
   const scale = normalizeScale(opts.scale);
   const fmt = normalizeFormat(opts.format);
+  const exportPadding = opts.padding ? 10 : 0;
   const canvasBackgroundColor = opts.background
     ? appState.viewBackgroundColor || '#ffffff'
     : false;
@@ -118,6 +140,7 @@ export async function runInstantExportWithApi(
           canvasBackgroundColor,
           theme,
           scale,
+          padding: exportPadding,
           embedScene: opts.embedScene,
         },
       });
@@ -132,7 +155,7 @@ export async function runInstantExportWithApi(
       };
     }
 
-    const baseName = (typeof api.getName === 'function' && api.getName()) || 'sakuttodraw';
+    const baseName = resolveExportBaseName(api);
     if (fmt === 'svg') {
       const svgNode = await exportScene({
         type: 'svg',
@@ -140,6 +163,7 @@ export async function runInstantExportWithApi(
         config: {
           canvasBackgroundColor,
           theme,
+          padding: exportPadding,
           embedScene: opts.embedScene,
           skipInliningFonts: true,
         },
@@ -157,6 +181,7 @@ export async function runInstantExportWithApi(
           canvasBackgroundColor,
           theme,
           scale,
+          padding: exportPadding,
           embedScene: opts.embedScene,
         },
       });
@@ -195,40 +220,46 @@ export async function runInstantResetWithApi(
     storage?: Storage | null;
     idb?: IDBFactory | null;
   } = {},
-): Promise<{ ok: boolean; pinkApplied: boolean; reason?: string }> {
+): Promise<{ ok: boolean; reason?: string }> {
   if (!api) {
-    return { ok: false, pinkApplied: false, reason: 'api-not-ready' };
+    return { ok: false, reason: 'api-not-ready' };
   }
 
   // Prevent any debounced onChange snapshot from overwriting the freshly reset storage
   cancelPendingScenePersist();
   clearRedactStyleIsolationState();
+  runSceneReplaceHooks();
+  resetPersistedFilesCache(idb);
 
   api.resetScene();
   silently(() => api.history?.clear());
 
   const penColor = normalizeHexColor(prefs.quickOpts.defaultPenColor, DEFAULT_PEN_COLOR);
+  const restoredAppStatePatch = {
+    ...prefsToAppStatePatch(prefs),
+    currentItemStrokeColor: penColor,
+  };
   api.updateScene({
-    appState: {
-      currentItemStrokeColor: penColor,
-    },
+    appState: restoredAppStatePatch as never,
     captureUpdate: CaptureUpdateAction.NEVER,
   });
-  const pinkApplied = penColor === DEFAULT_PINK;
+  // Cancel any onChange debounce queued synchronously by resetScene() / updateScene()
+  cancelPendingScenePersist();
 
   if (storage) {
     silently(() => storage.setItem(LS_ELEMENTS_KEY, '[]'));
-    patchSavedAppState({ currentItemStrokeColor: penColor }, storage);
+    patchSavedAppState(restoredAppStatePatch, storage);
   }
 
   await clearIndexedDbFiles(idb);
+  resetPersistedFilesCache(idb);
   savePrefs(prefs, storage);
 
   showToast?.(getMessages(prefs.lang).toastResetDone);
-  return { ok: true, pinkApplied };
+  return { ok: true };
 }
 
-export async function applyPenColorWithApi(
+export function applyPenColorWithApi(
   api: ExcalidrawImperativeAPI | null,
   hex: string,
   {
@@ -240,7 +271,7 @@ export async function applyPenColorWithApi(
     showToast?: (msg: string) => void;
     storage?: Storage | null;
   } = {},
-): Promise<{ ok: boolean; color: string }> {
+): { ok: boolean; color: string } {
   const normalized = normalizeHexColor(hex, DEFAULT_PEN_COLOR);
   if (!api) {
     return { ok: false, color: normalized };
@@ -259,7 +290,7 @@ export async function applyPenColorWithApi(
   return { ok: true, color: normalized };
 }
 
-export async function applyCanvasBackgroundWithApi(
+export function applyCanvasBackgroundWithApi(
   api: ExcalidrawImperativeAPI | null,
   hex: string,
   {
@@ -271,7 +302,7 @@ export async function applyCanvasBackgroundWithApi(
     showToast?: (msg: string) => void;
     storage?: Storage | null;
   } = {},
-): Promise<{ ok: boolean; color: string }> {
+): { ok: boolean; color: string } {
   const normalized = normalizeHexColor(hex, '#ffffff');
   if (!api) {
     return { ok: false, color: normalized };
@@ -292,6 +323,7 @@ export async function applyCanvasBackgroundWithApi(
 type SaveFilePickerWritable = {
   write: (data: Blob | BufferSource | string) => Promise<void>;
   close: () => Promise<void>;
+  abort?: () => Promise<void>;
 };
 type SaveFilePickerHandle = {
   createWritable: () => Promise<SaveFilePickerWritable>;
@@ -315,15 +347,21 @@ export async function runDirectDiskSaveWithApi(
   const elements = api.getSceneElements();
   const appState = api.getAppState();
   const files = api.getFiles();
-  const json = serializeAsJSON(elements, appState, files, 'local');
+  let json: string;
+  try {
+    json = serializeAsJSON(elements, appState, files, 'local');
+  } catch {
+    showToast?.(getMessages(lang).toastExportFailed);
+    return false;
+  }
   const blob = new Blob([json], { type: MIME_TYPES.excalidraw });
-  const baseName = (typeof api.getName === 'function' && api.getName()) || 'sakuttodraw';
-  const suggestedName = baseName.endsWith('.excalidraw') ? baseName : `${baseName}.excalidraw`;
+  const suggestedName = `${resolveExportBaseName(api)}.excalidraw`;
 
   const picker = (globalThis as { showSaveFilePicker?: ShowSaveFilePickerFn }).showSaveFilePicker;
   if (typeof picker === 'function') {
+    let handle: SaveFilePickerHandle | null = null;
     try {
-      const handle = await picker({
+      handle = await picker({
         suggestedName,
         types: [
           {
@@ -334,16 +372,26 @@ export async function runDirectDiskSaveWithApi(
           },
         ],
       });
-      const writable = await handle.createWritable();
-      await writable.write(blob);
-      await writable.close();
-      showToast?.(getMessages(lang).toastSceneSaved);
-      return true;
     } catch (err) {
       if ((err as { name?: string } | null)?.name === 'AbortError') {
         return false;
       }
-      // Fall back to direct blob download if File System Access API is blocked/unavailable
+      handle = null;
+    }
+
+    if (handle) {
+      let writable: SaveFilePickerWritable | null = null;
+      try {
+        writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        showToast?.(getMessages(lang).toastSceneSaved);
+        return true;
+      } catch {
+        await writable?.abort?.().catch(() => {});
+        showToast?.(getMessages(lang).toastExportFailed);
+        return false;
+      }
     }
   }
 
@@ -367,25 +415,36 @@ export async function runDirectFileLoadWithApi(
 ): Promise<boolean> {
   if (!api) return false;
   const t = getMessages(lang);
-  cancelPendingScenePersist();
-  clearRedactStyleIsolationState();
   try {
     const currentAppState = api.getAppState();
     const currentElements = api.getSceneElements();
     const loaded = await loadFromBlob(file, currentAppState, currentElements);
+
+    cancelPendingScenePersist();
+    clearRedactStyleIsolationState();
+    runSceneReplaceHooks();
+    resetPersistedFilesCache();
+
     if (loaded.files) {
       api.addFiles(Object.values(loaded.files));
     }
     const nextAppState = {
       ...currentAppState,
       ...loaded.appState,
-      ...(defaultPenColor ? { currentItemStrokeColor: normalizeHexColor(defaultPenColor, DEFAULT_PEN_COLOR) } : {}),
+      ...(defaultPenColor
+        ? { currentItemStrokeColor: normalizeHexColor(defaultPenColor, DEFAULT_PEN_COLOR) }
+        : {}),
     };
     api.updateScene({
       elements: loaded.elements,
       appState: nextAppState as AppState,
       captureUpdate: CaptureUpdateAction.IMMEDIATELY,
     });
+    silently(() =>
+      (api as unknown as { scrollToContent?: (target?: unknown) => void }).scrollToContent?.(
+        loaded.elements,
+      ),
+    );
     showToast?.(t.toastFileLoaded);
     return true;
   } catch {

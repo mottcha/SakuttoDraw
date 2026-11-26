@@ -89,7 +89,7 @@ export function App() {
       boxSelectionMode: runtime.prefs.boxSelectionMode,
       inputDevice: runtime.prefs.inputDevice,
       stylesPanelMode: runtime.prefs.stylesPanelMode,
-      initialDataPromise: loadInitialSceneData(),
+      initialDataPromise: loadInitialSceneData(undefined, undefined, runtime.prefs),
     };
   }, []);
 
@@ -130,7 +130,7 @@ export function App() {
 
   useEffect(() => {
     setLangChangeListener((nextLang) => setLang(nextLang));
-    const cleanup = bootQuickAnnotator();
+    const cleanup = bootQuickAnnotator({ skipInitialPrefsLoad: true });
     const onUnload = () => flushPendingScenePersist();
     const onResize = () => {
       syncDesktopUIMode(runtime.prefs.stylesPanelMode);
@@ -225,7 +225,10 @@ export function App() {
       });
 
       const selectedIdsMap = appState.selectedElementIds || {};
-      const selectedElements = elements.filter((item) => !item.isDeleted && Boolean(selectedIdsMap[item.id]));
+      const hasSelectedIds = Object.values(selectedIdsMap).some(Boolean);
+      const selectedElements = hasSelectedIds
+        ? elements.filter((item) => !item.isDeleted && Boolean(selectedIdsMap[item.id]))
+        : [];
       const redactToolActive =
         appState.activeTool?.type === 'custom' &&
         appState.activeTool?.customType === REDACT_TOOL_CUSTOM_TYPE;

@@ -8,9 +8,9 @@ import { applyLanguage, attachExcalidrawAPI, runtime } from '../annotator/quickA
 import { syncToolbar } from '../annotator/quickAnnotator/toolbar';
 import { syncTopRightBar } from '../annotator/quickAnnotator/topRightBar';
 import * as apiActions from '../annotator/apiActions';
+import { EXCALIDRAW_LS_KEYS } from '../excalidraw/domContract';
 import {
   loadPrefs,
-  LS_DESKTOP_UI_MODE_KEY,
   resolveDesktopUIMode,
   sakuttoGetFormFactor,
   savePrefs,
@@ -81,7 +81,7 @@ describe('quickAnnotator desktop DOM sync, language switcher, and layout modes',
     expect(document.querySelector('[data-exq-main-action="copy"]')?.textContent).toBe('Copy to clipboard');
   });
 
-  it('renders transparent background switch as OFF by default and toggles background=false when turned ON', () => {
+  it('renders transparent background and padding switches as OFF by default and toggles + persists state', () => {
     applyLanguage('ja-JP');
     document.body.innerHTML = `
       <div class="dropdown-menu-container">
@@ -90,13 +90,25 @@ describe('quickAnnotator desktop DOM sync, language switcher, and layout modes',
     `;
     expect(syncMainMenu()).toBe(true);
     const bgSwitch = document.querySelector<HTMLButtonElement>('[data-exq-exp-opt="background"]');
+    const padSwitch = document.querySelector<HTMLButtonElement>('[data-exq-exp-opt="padding"]');
     expect(bgSwitch).toBeTruthy();
+    expect(padSwitch).toBeTruthy();
     expect(bgSwitch?.classList.contains('exq-on')).toBe(false);
+    expect(padSwitch?.classList.contains('exq-on')).toBe(false);
+    expect(bgSwitch?.getAttribute('role')).toBe('switch');
+    expect(bgSwitch?.getAttribute('aria-checked')).toBe('false');
     expect(bgSwitch?.getAttribute('aria-label')).toBe('背景の透明化');
+    expect(padSwitch?.getAttribute('aria-label')).toBe('余白を追加');
 
-    bgSwitch?.parentElement?.click();
+    bgSwitch?.click();
     expect(runtime.prefs.exportOpts.background).toBe(false);
     expect(bgSwitch?.classList.contains('exq-on')).toBe(true);
+    expect(bgSwitch?.getAttribute('aria-checked')).toBe('true');
+
+    padSwitch?.click();
+    expect(runtime.prefs.exportOpts.padding).toBe(true);
+    expect(padSwitch?.classList.contains('exq-on')).toBe(true);
+    expect(loadPrefs(localStorage).exportOpts.padding).toBe(true);
   });
 
   it('injects top-right Copy/Save bar and unified extra tools menu in mobile layout', () => {
@@ -140,13 +152,13 @@ describe('quickAnnotator desktop DOM sync, language switcher, and layout modes',
     const resizeSpy = vi.fn();
     window.addEventListener('resize', resizeSpy);
     expect(syncDesktopUIMode('auto', { width: 750, height: 520, storage: localStorage })).toBe('compact');
-    expect(localStorage.getItem(LS_DESKTOP_UI_MODE_KEY)).toBe('compact');
+    expect(localStorage.getItem(EXCALIDRAW_LS_KEYS.desktopUIMode)).toBe('compact');
     expect(resizeSpy).toHaveBeenCalledTimes(0);
 
     expect(
       syncDesktopUIMode('full', { width: 750, height: 520, storage: localStorage, triggerResize: true }),
     ).toBe('full');
-    expect(localStorage.getItem(LS_DESKTOP_UI_MODE_KEY)).toBe('full');
+    expect(localStorage.getItem(EXCALIDRAW_LS_KEYS.desktopUIMode)).toBe('full');
     expect(resizeSpy).toHaveBeenCalledTimes(1);
     window.removeEventListener('resize', resizeSpy);
 
@@ -235,10 +247,9 @@ describe('quickAnnotator desktop DOM sync, language switcher, and layout modes',
       document.querySelector<HTMLButtonElement>(`[data-exq-assist-opt="${key}"]`)!;
     const expectSwitch = (key: string, expected: boolean) => {
       const btn = getBtn(key);
-      const row = btn.closest('[role="menuitemcheckbox"]')!;
       expect(btn.classList.contains('exq-on')).toBe(expected);
-      expect(btn.getAttribute('aria-pressed')).toBe(String(expected));
-      expect(row.getAttribute('aria-checked')).toBe(String(expected));
+      expect(btn.getAttribute('aria-checked')).toBe(String(expected));
+      expect(btn.getAttribute('role')).toBe('switch');
     };
 
     expectSwitch('objectsSnapMode', false);
@@ -246,34 +257,24 @@ describe('quickAnnotator desktop DOM sync, language switcher, and layout modes',
     expectSwitch('arrowBinding', true);
     expectSwitch('midpointSnapping', true);
 
-    getBtn('objectsSnapMode').closest('[role="menuitemcheckbox"]')!.dispatchEvent(
-      new MouseEvent('click', { bubbles: true, cancelable: true }),
-    );
+    getBtn('objectsSnapMode').click();
     expectSwitch('objectsSnapMode', true);
     expectSwitch('gridMode', false);
 
     await Promise.resolve();
-    getBtn('gridMode').closest('[role="menuitemcheckbox"]')!.dispatchEvent(
-      new MouseEvent('click', { bubbles: true, cancelable: true }),
-    );
+    getBtn('gridMode').click();
     expectSwitch('gridMode', true);
     expectSwitch('objectsSnapMode', false);
 
     await Promise.resolve();
-    getBtn('gridMode').closest('[role="menuitemcheckbox"]')!.dispatchEvent(
-      new MouseEvent('click', { bubbles: true, cancelable: true }),
-    );
+    getBtn('gridMode').click();
     expectSwitch('gridMode', false);
 
     await Promise.resolve();
-    getBtn('arrowBinding').closest('[role="menuitemcheckbox"]')!.dispatchEvent(
-      new MouseEvent('click', { bubbles: true, cancelable: true }),
-    );
+    getBtn('arrowBinding').click();
     expectSwitch('arrowBinding', false);
 
-    getBtn('midpointSnapping').closest('[role="menuitemcheckbox"]')!.dispatchEvent(
-      new MouseEvent('click', { bubbles: true, cancelable: true }),
-    );
+    getBtn('midpointSnapping').click();
     expectSwitch('midpointSnapping', false);
   });
 
@@ -303,8 +304,8 @@ describe('quickAnnotator desktop DOM sync, language switcher, and layout modes',
     const snapBtn = document.querySelector<HTMLButtonElement>('[data-exq-assist-opt="objectsSnapMode"]')!;
     const bindBtn = document.querySelector<HTMLButtonElement>('[data-exq-assist-opt="arrowBinding"]')!;
     expect(snapBtn.classList.contains('exq-on')).toBe(true);
-    expect(snapBtn.getAttribute('aria-pressed')).toBe('true');
+    expect(snapBtn.getAttribute('aria-checked')).toBe('true');
     expect(bindBtn.classList.contains('exq-on')).toBe(false);
-    expect(bindBtn.getAttribute('aria-pressed')).toBe('false');
+    expect(bindBtn.getAttribute('aria-checked')).toBe('false');
   });
 });

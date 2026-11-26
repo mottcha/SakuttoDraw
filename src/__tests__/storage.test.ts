@@ -13,7 +13,7 @@ import {
 import {
   bootstrapCleanCanvas,
   cancelPendingScenePersist,
-  DEFAULT_PINK,
+  DEFAULT_PEN_COLOR,
   flushPendingScenePersist,
   loadInitialSceneData,
   loadPrefs,
@@ -22,6 +22,7 @@ import {
   LS_STATE_KEY,
   normalizeFormat,
   normalizeScale,
+  resetPersistedFilesCache,
   savePrefs,
   scheduleScenePersist,
   shouldSkipAutoReset,
@@ -30,11 +31,13 @@ import {
 describe('storageBridge, filesDb & debounced persistence race prevention', () => {
   beforeEach(() => {
     localStorage.clear();
+    resetPersistedFilesCache();
     vi.useRealTimers();
   });
 
   afterEach(() => {
     cancelPendingScenePersist();
+    resetPersistedFilesCache();
     vi.useRealTimers();
   });
 
@@ -48,25 +51,32 @@ describe('storageBridge, filesDb & debounced persistence race prevention', () =>
     expect(normalizeFormat('invalid')).toBe('png');
   });
 
-  it('bootstraps clean canvas and applies default pink stroke color and overlap selection', () => {
+  it('bootstraps clean canvas and applies default pen color, padding=false, and overlap selection', () => {
     localStorage.setItem(LS_ELEMENTS_KEY, JSON.stringify([{ id: 'old-el' }]));
     const res = bootstrapCleanCanvas({ storage: localStorage, hash: '' });
     expect(res.skipped).toBe(false);
     expect(res.autoReset).toBe(true);
-    expect(res.pinkApplied).toBe(true);
     expect(res.prefs.boxSelectionMode).toBe('overlap');
     expect(res.prefs.inputDevice).toBe('trackpad');
+    expect(res.prefs.exportOpts.padding).toBe(false);
     expect(localStorage.getItem(LS_ELEMENTS_KEY)).toBe('[]');
     const st = JSON.parse(localStorage.getItem(LS_STATE_KEY) || '{}');
-    expect(st.currentItemStrokeColor).toBe(DEFAULT_PINK);
+    expect(st.currentItemStrokeColor).toBe(DEFAULT_PEN_COLOR);
     expect(st.boxSelectionMode).toBe('overlap');
     expect(st.inputDevice).toBe('trackpad');
   });
 
-  it('migrates legacy defaultPink: false preference to #1e1e1e defaultPenColor', () => {
+  it('migrates legacy defaultPink: false preference and handles corrupted storage payloads gracefully', () => {
     localStorage.setItem(LS_PREFS_KEY, JSON.stringify({ quickOpts: { defaultPink: false } }));
     const prefs = loadPrefs(localStorage);
     expect(prefs.quickOpts.defaultPenColor).toBe('#1e1e1e');
+    expect(prefs.exportOpts.padding).toBe(false);
+
+    localStorage.setItem(LS_PREFS_KEY, '[]');
+    expect(loadPrefs(localStorage).exportOpts.padding).toBe(false);
+
+    localStorage.setItem(LS_PREFS_KEY, '{broken-json');
+    expect(loadPrefs(localStorage).quickOpts.defaultPenColor).toBe(DEFAULT_PEN_COLOR);
   });
 
   it('skips auto-reset when hash contains #json= or #addLibrary=', () => {

@@ -4,35 +4,36 @@ import {
   EXCALIDRAW_SELECTORS,
   EXCALIDRAW_TESTIDS,
   testIdSelector,
-  toolbarTestIdSelector,
 } from '../../excalidraw/domContract';
 import { getMessages } from '../../i18n/messages';
 import { silently } from '../../utils/common';
 import { DRAW_ASSIST_DEFS, EXTRA_T3_LEFT_ITEMS, EXTRA_T3_LOCK_ITEM } from './constants';
-import { createAccordionSection, createSwitchRow, el, svgIcon } from './dom';
+import {
+  createAccordionSection,
+  createMountedSlot,
+  createSwitchRow,
+  el,
+  makeDropdownActionItem,
+  svgIcon,
+} from './dom';
 import { clickNativeTool, runtime, scheduleSync, sendEscape, showToast } from './runtime';
 
 type DrawAssistKey = (typeof DRAW_ASSIST_DEFS)[number]['key'];
 
-const extraMenuMounts = new WeakMap<Element, { refreshAssist: () => void }>();
+const extraMenuSlot = createMountedSlot<{
+  hasMobileBar: boolean;
+  needsImageProxy: boolean;
+  needsFrameProxy: boolean;
+  refreshAssist: () => void;
+  refreshT3: () => void;
+}>();
 
-export async function activateLassoTool(): Promise<boolean> {
-  if (runtime.api) {
-    runtime.api.setActiveTool({ type: 'lasso' });
-    sendEscape();
-    scheduleSync();
-    return true;
-  }
-  const menuLasso = document.querySelector<HTMLElement>(
-    `${EXCALIDRAW_SELECTORS.dropdownMenuContainer} ${testIdSelector(EXCALIDRAW_TESTIDS.lasso)}`,
-  );
-  if (menuLasso) {
-    menuLasso.click();
-    sendEscape();
-    scheduleSync();
-    return true;
-  }
-  return false;
+function activateLassoTool(): boolean {
+  if (!runtime.api) return false;
+  runtime.api.setActiveTool({ type: 'lasso' });
+  sendEscape();
+  scheduleSync();
+  return true;
 }
 
 /* ================= Extra Tools Menu Injection (T3 Row + Drawing Assist) ================= */
@@ -93,19 +94,17 @@ function buildQuickOptionsAccordion(): {
   root.addEventListener('click', (e) => e.stopPropagation());
 
   const sep = el('div', { class: 'exq-extra-sep', 'aria-hidden': 'true' });
-  const assistSwitchMap = new Map<DrawAssistKey, { row: HTMLElement; switchBtn: HTMLButtonElement }>();
+  const assistSwitchMap = new Map<DrawAssistKey, (on: boolean) => void>();
   let acc: ReturnType<typeof createAccordionSection> | null = null;
 
   const refreshAssist = (overrides?: Partial<Record<DrawAssistKey, boolean>>) => {
     acc?.setOpen(runtime.drawAssistAccOpen);
-    for (const [key, { row, switchBtn }] of assistSwitchMap) {
+    for (const [key, setChecked] of assistSwitchMap) {
       const on =
-        overrides && Object.prototype.hasOwnProperty.call(overrides, key)
+        overrides && Object.hasOwn(overrides, key)
           ? Boolean(overrides[key])
           : getDrawAssistValue(key);
-      switchBtn.classList.toggle('exq-on', on);
-      switchBtn.setAttribute('aria-pressed', String(on));
-      row.setAttribute('aria-checked', String(on));
+      setChecked(on);
     }
   };
 
@@ -124,7 +123,7 @@ function buildQuickOptionsAccordion(): {
 
   for (const def of DRAW_ASSIST_DEFS) {
     const label = t[def.msgKey];
-    const { row, switchBtn } = createSwitchRow({
+    const { row, setChecked } = createSwitchRow({
       label,
       optAttr: 'data-exq-assist-opt',
       optValue: def.key,
@@ -132,11 +131,12 @@ function buildQuickOptionsAccordion(): {
       onClick: () => {
         const { next, patch } = toggleDrawAssistOption(def.key);
         refreshAssist(patch);
-        showToast(`${label}: ${next ? 'ON' : 'OFF'}`);
+        const curMessages = getMessages(runtime.prefs.lang);
+        showToast(`${label}: ${next ? curMessages.stateOn : curMessages.stateOff}`);
         scheduleSync();
       },
     });
-    assistSwitchMap.set(def.key, { row, switchBtn });
+    assistSwitchMap.set(def.key, setChecked);
     acc.nest.append(row);
   }
 
@@ -145,34 +145,28 @@ function buildQuickOptionsAccordion(): {
   return { root, refreshAssist };
 }
 
+type T3ItemId = (typeof EXTRA_T3_LEFT_ITEMS)[number]['id'] | typeof EXTRA_T3_LOCK_ITEM.id;
+
+function isT3ItemChecked(id: T3ItemId): boolean {
+  const activeTool = silently(() => runtime.api?.getAppState()?.activeTool);
+  if (!activeTool) return false;
+  if (id === 'lasso') return activeTool.type === 'lasso';
+  if (id === 'lock') return Boolean(activeTool.locked);
+  return activeTool.type === (id === 'sticky' ? 'stickynote' : id);
+}
+
 function makeExtraT3Button(
-  item: { id: string; testId: string; msgKey: 'toolEraser' | 'toolSticky' | 'toolLasso' | 'toolLock'; shortcut: string },
-  root: ParentNode,
-): HTMLButtonElement {
+  item: { id: T3ItemId; testId: string; msgKey: 'toolEraser' | 'toolSticky' | 'toolLasso' | 'toolLock'; shortcut: string },
+): { btn: HTMLButtonElement; refresh: () => void } {
   const t = getMessages(runtime.prefs.lang);
   const label = t[item.msgKey];
-  const activeTool = silently(() => runtime.api?.getAppState()?.activeTool);
-  const isChecked =
-    item.id === 'lasso'
-      ? activeTool?.type === 'lasso' ||
-        !!(
-          root.querySelector(`${EXCALIDRAW_SELECTORS.dropdownMenuContainer} ${testIdSelector(EXCALIDRAW_TESTIDS.lasso)}.active`) ||
-          root.querySelector(`${EXCALIDRAW_SELECTORS.toolPopoverContent} ${testIdSelector(EXCALIDRAW_TESTIDS.lasso)}.ToolIcon--checked`) ||
-          root.querySelector(`${toolbarTestIdSelector(EXCALIDRAW_TESTIDS.lasso)}.ToolIcon--checked`)
-        )
-      : item.id === 'lock'
-        ? !!activeTool?.locked ||
-          !!root.querySelector(toolbarTestIdSelector(item.testId))?.classList.contains('ToolIcon--checked')
-        : activeTool?.type === (item.id === 'sticky' ? 'stickynote' : item.id) ||
-          !!root.querySelector(toolbarTestIdSelector(item.testId))?.classList.contains('ToolIcon--checked');
-
   const titleText = item.shortcut ? `${label} (${item.shortcut})` : label;
   const btn = el(
     'button',
     {
       type: 'button',
       role: 'menuitem',
-      class: 'exq-extra-tb-btn' + (isChecked ? ' exq-active' : ''),
+      class: 'exq-extra-tb-btn',
       'data-exq-proxy': item.testId,
       title: titleText,
       'aria-label': titleText,
@@ -180,12 +174,19 @@ function makeExtraT3Button(
     svgIcon(item.id, 16, '0 0 24 24', 1.85),
     item.shortcut ? el('span', { class: 'exq-extra-tb-key', 'aria-hidden': 'true' }, item.shortcut) : null,
   );
+  const refresh = () => {
+    btn.classList.toggle('exq-active', isT3ItemChecked(item.id));
+  };
+  refresh();
+
   btn.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
     if (item.id === 'lasso') {
-      void activateLassoTool();
-    } else if (item.id === 'lock') {
+      activateLassoTool();
+      return;
+    }
+    if (item.id === 'lock') {
       if (runtime.api) {
         const cur = runtime.api.getAppState().activeTool;
         runtime.api.updateScene({
@@ -194,24 +195,22 @@ function makeExtraT3Button(
           },
           captureUpdate: CaptureUpdateAction.NEVER,
         });
-      } else {
-        clickNativeTool(item.testId);
       }
       sendEscape();
       scheduleSync();
-    } else if (runtime.api && (item.id === 'eraser' || item.id === 'sticky')) {
+      return;
+    }
+    if (runtime.api && (item.id === 'eraser' || item.id === 'sticky')) {
       runtime.api.setActiveTool({
         type: item.id === 'sticky' ? ('stickynote' as never) : 'eraser',
       });
-      sendEscape();
-      scheduleSync();
     } else {
       clickNativeTool(item.testId);
-      sendEscape();
-      scheduleSync();
     }
+    sendEscape();
+    scheduleSync();
   });
-  return btn;
+  return { btn, refresh };
 }
 
 function makeExtraMenuProxyItem(
@@ -220,66 +219,89 @@ function makeExtraMenuProxyItem(
   toolTestId: string,
   extraToolId: string,
 ): HTMLButtonElement {
-  const btn = el(
-    'button',
-    {
-      type: 'button',
-      role: 'menuitem',
-      class: 'dropdown-menu-item dropdown-menu-item-base exq-extra-proxy-item',
+  return makeDropdownActionItem({
+    className: 'exq-extra-proxy-item',
+    attrs: {
       'data-exq-extra-tool': extraToolId,
       title: label,
       'aria-label': label,
     },
-    el('div', { class: 'dropdown-menu-item__icon' }, svgIcon(iconName, 16, '0 0 24 24', 1.85)),
-    el('div', { class: 'dropdown-menu-item__text' }, label),
-  );
-  btn.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    clickNativeTool(toolTestId);
-    sendEscape();
-    scheduleSync();
+    icon: svgIcon(iconName, 16, '0 0 24 24', 1.85),
+    label,
+    onClick: () => {
+      clickNativeTool(toolTestId);
+      sendEscape();
+      scheduleSync();
+    },
   });
-  return btn;
 }
 
 export function syncExtraToolsMenu(root: ParentNode = document): boolean {
   const menu = root.querySelector(EXCALIDRAW_SELECTORS.extraToolsMenuContainer);
   if (!menu) return false;
-  const mounted = extraMenuMounts.get(menu);
-  if (mounted) {
-    mounted.refreshAssist();
+
+  const hasMobileBar = Boolean(root.querySelector(EXCALIDRAW_SELECTORS.mobileToolbar));
+  const needsImageProxy =
+    hasMobileBar && !menu.querySelector(`:scope > ${testIdSelector(EXCALIDRAW_TESTIDS.image)}`);
+  const needsFrameProxy =
+    hasMobileBar && !menu.querySelector(`:scope > ${testIdSelector(EXCALIDRAW_TESTIDS.frame)}`);
+
+  const mounted = extraMenuSlot.get(menu);
+  if (
+    mounted &&
+    mounted.lang === runtime.prefs.lang &&
+    mounted.nodes.every((n) => n.isConnected) &&
+    mounted.state.hasMobileBar === hasMobileBar &&
+    mounted.state.needsImageProxy === needsImageProxy &&
+    mounted.state.needsFrameProxy === needsFrameProxy
+  ) {
+    mounted.state.refreshT3();
+    mounted.state.refreshAssist();
     return false;
   }
 
+  // Clear previously injected nodes before inspecting first native child
+  extraMenuSlot.clear(menu);
   const firstNative = menu.firstElementChild;
   if (!firstNative) return false;
 
-  const topFrag = document.createDocumentFragment();
+  const t3Refreshes: Array<() => void> = [];
   const t3Row = el('div', { class: 'exq-extra-tb-row', 'data-exq-t3-row': '1' });
   for (const item of EXTRA_T3_LEFT_ITEMS) {
-    t3Row.append(makeExtraT3Button(item, root));
+    const built = makeExtraT3Button(item);
+    t3Row.append(built.btn);
+    t3Refreshes.push(built.refresh);
   }
   t3Row.append(el('div', { class: 'exq-extra-tb-vdiv', 'aria-hidden': 'true' }));
-  t3Row.append(makeExtraT3Button(EXTRA_T3_LOCK_ITEM, root));
-  topFrag.append(t3Row, el('div', { class: 'exq-extra-sep', 'aria-hidden': 'true' }));
+  const lockBuilt = makeExtraT3Button(EXTRA_T3_LOCK_ITEM);
+  t3Row.append(lockBuilt.btn);
+  t3Refreshes.push(lockBuilt.refresh);
 
-  // On mobile, A-2 hides toolbar-image/toolbar-frame from .mobile-toolbar for uniform 7-slot layout;
-  // recover them inside Extra Tools whenever Excalidraw moved them out of the dropdown (>=356px / >=396px).
-  if (root.querySelector('.mobile-toolbar')) {
-    const t = getMessages(runtime.prefs.lang);
-    if (!menu.querySelector(testIdSelector(EXCALIDRAW_TESTIDS.image))) {
-      topFrag.append(makeExtraMenuProxyItem('imgSave', t.toolImage, EXCALIDRAW_TESTIDS.image, 'image'));
-    }
-    if (!menu.querySelector(testIdSelector(EXCALIDRAW_TESTIDS.frame))) {
-      topFrag.append(makeExtraMenuProxyItem('frame', t.toolFrame, EXCALIDRAW_TESTIDS.frame, 'frame'));
-    }
+  const topNodes: Element[] = [t3Row, el('div', { class: 'exq-extra-sep', 'aria-hidden': 'true' })];
+  const t = getMessages(runtime.prefs.lang);
+  if (needsImageProxy) {
+    topNodes.push(makeExtraMenuProxyItem('imgSave', t.toolImage, EXCALIDRAW_TESTIDS.image, 'image'));
+  }
+  if (needsFrameProxy) {
+    topNodes.push(makeExtraMenuProxyItem('frame', t.toolFrame, EXCALIDRAW_TESTIDS.frame, 'frame'));
   }
 
+  const topFrag = document.createDocumentFragment();
+  topFrag.append(...topNodes);
   menu.insertBefore(topFrag, firstNative);
+
   const { root: assistRoot, refreshAssist } = buildQuickOptionsAccordion();
   menu.append(assistRoot);
 
-  extraMenuMounts.set(menu, { refreshAssist });
+  const refreshT3 = () => {
+    for (const fn of t3Refreshes) fn();
+  };
+  extraMenuSlot.mount(menu, runtime.prefs.lang, [...topNodes, assistRoot], {
+    hasMobileBar,
+    needsImageProxy,
+    needsFrameProxy,
+    refreshAssist,
+    refreshT3,
+  });
   return true;
 }

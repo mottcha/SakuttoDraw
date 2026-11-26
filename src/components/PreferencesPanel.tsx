@@ -8,7 +8,9 @@ import type {
 import { runtime } from '../annotator/quickAnnotator/runtime';
 import { getMessages } from '../i18n/messages';
 import { savePrefs } from '../services/storageBridge';
+import { isMacPlatform } from '../utils/common';
 import { Icon } from './Icon';
+import { handleRadioGroupKeyDown, PanelHeader } from './PanelPrimitives';
 import { closeExcalidrawMainMenu, useMainMenuSubmenuDismiss } from './useOutsideDismiss';
 
 export interface PreferencesLiveState {
@@ -29,6 +31,7 @@ export function PreferencesVisualPanel({
   onStylesPanelModeChange: (mode: StylesPanelPref) => void;
 }) {
   const t = getMessages(lang);
+  const isMac = isMacPlatform();
 
   useMainMenuSubmenuDismiss();
 
@@ -74,23 +77,18 @@ export function PreferencesVisualPanel({
       onPointerDown={(e) => e.stopPropagation()}
     >
       <div className="exq-pref-group">
-        <div className="exq-pref-group-header">
-          <div className="exq-pref-group-title">{t.prefBoxSelectionTitle}</div>
-          <button
-            type="button"
-            className="exq-pref-close-btn"
-            data-exq-pref-close="1"
-            aria-label="Close"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              closeExcalidrawMainMenu();
-            }}
-          >
-            <Icon name="close" size={13} strokeWidth={2.2} />
-          </button>
-        </div>
-        <div className="exq-pref-card-grid" role="radiogroup" aria-label={t.prefBoxSelectionTitle}>
+        <PanelHeader
+          title={t.prefBoxSelectionTitle}
+          closeLabel={t.closeLabel}
+          onClose={closeExcalidrawMainMenu}
+          closeDataAttr="data-exq-pref-close"
+        />
+        <div
+          className="exq-pref-card-grid"
+          role="radiogroup"
+          aria-label={t.prefBoxSelectionTitle}
+          onKeyDown={handleRadioGroupKeyDown}
+        >
           <button
             type="button"
             role="radio"
@@ -118,7 +116,12 @@ export function PreferencesVisualPanel({
 
       <div className="exq-pref-group">
         <div className="exq-pref-group-title">{t.prefScrollActionTitle}</div>
-        <div className="exq-pref-card-grid" role="radiogroup" aria-label={t.prefScrollActionTitle}>
+        <div
+          className="exq-pref-card-grid"
+          role="radiogroup"
+          aria-label={t.prefScrollActionTitle}
+          onKeyDown={handleRadioGroupKeyDown}
+        >
           <button
             type="button"
             role="radio"
@@ -146,14 +149,19 @@ export function PreferencesVisualPanel({
 
       <div className="exq-pref-group">
         <div className="exq-pref-group-title">{t.prefStylesPanelTitle}</div>
-        <div className="exq-pref-card-grid exq-pref-card-grid--3" role="radiogroup" aria-label={t.prefStylesPanelTitle}>
+        <div
+          className="exq-pref-card-grid exq-pref-card-grid--3"
+          role="radiogroup"
+          aria-label={t.prefStylesPanelTitle}
+          onKeyDown={handleRadioGroupKeyDown}
+        >
           {(
             [
-              ['auto', t.prefStylesPanelAuto],
-              ['compact', t.prefStylesPanelCompact],
-              ['full', t.prefStylesPanelFull],
+              ['auto', 'panelAuto', t.prefStylesPanelAuto],
+              ['compact', 'panelCompact', t.prefStylesPanelCompact],
+              ['full', 'panelFull', t.prefStylesPanelFull],
             ] as const
-          ).map(([mode, label]) => (
+          ).map(([mode, iconName, label]) => (
             <button
               key={mode}
               type="button"
@@ -163,21 +171,7 @@ export function PreferencesVisualPanel({
               data-exq-pref-styles-panel={mode}
               onClick={() => onStylesPanelModeChange(mode)}
             >
-              <svg width="18" height="13" viewBox="0 0 26 18" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
-                <rect x="1" y="1" width="24" height="16" rx="2.5" opacity="0.45" />
-                {mode === 'full' ? (
-                  <rect x="3" y="3.5" width="9.5" height="11" rx="1.2" fill="currentColor" stroke="none" />
-                ) : (
-                  <rect x="3" y="3.5" width="3.5" height="11" rx="1" fill="currentColor" stroke="none" />
-                )}
-                {mode === 'auto' && (
-                  <path
-                    d="M11 9h9m-2.5-2.5L20 9l-2.5 2.5M13.5 6.5L11 9l2.5 2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                )}
-              </svg>
+              <Icon name={iconName} width={18} height={13} strokeWidth={1.6} />
               <span>{label}</span>
             </button>
           ))}
@@ -196,7 +190,7 @@ export function PreferencesVisualPanel({
           >
             <Icon name="zen" size={14} strokeWidth={2} />
             <span>{t.prefZenMode}</span>
-            <span className="exq-pref-shortcut">Alt+Z</span>
+            <span className="exq-pref-shortcut">{isMac ? '⌥Z' : 'Alt+Z'}</span>
           </button>
           <button
             type="button"
@@ -207,7 +201,7 @@ export function PreferencesVisualPanel({
           >
             <Icon name="view" size={14} strokeWidth={2} />
             <span>{t.prefViewMode}</span>
-            <span className="exq-pref-shortcut">Alt+R</span>
+            <span className="exq-pref-shortcut">{isMac ? '⌥R' : 'Alt+R'}</span>
           </button>
         </div>
       </div>

@@ -15,6 +15,8 @@ export function installRedactDragController(): () => void {
     curY: number;
     shiftKey: boolean;
     canvas: HTMLCanvasElement;
+    hostLeft: number;
+    hostTop: number;
     boxEl: HTMLElement;
   } | null = null;
   let spaceHeld = false;
@@ -34,9 +36,23 @@ export function installRedactDragController(): () => void {
     return { left, top, width, height };
   };
 
+  const applyBoxGeometry = (s: NonNullable<typeof dragState>) => {
+    const { left, top, width, height } = computeViewportBox(s);
+    s.boxEl.style.left = `${Math.round(left - s.hostLeft)}px`;
+    s.boxEl.style.top = `${Math.round(top - s.hostTop)}px`;
+    s.boxEl.style.width = `${Math.round(width)}px`;
+    s.boxEl.style.height = `${Math.round(height)}px`;
+  };
+
   const clearDrag = () => {
     if (!dragState) return;
-    dragState.boxEl.remove();
+    const { canvas, pointerId, boxEl } = dragState;
+    silently(() => {
+      if (canvas.hasPointerCapture?.(pointerId)) {
+        canvas.releasePointerCapture(pointerId);
+      }
+    });
+    boxEl.remove();
     dragState = null;
   };
 
@@ -61,6 +77,12 @@ export function installRedactDragController(): () => void {
   };
 
   const onPointerDown = (e: PointerEvent) => {
+    // Reject secondary pointers during multi-touch (and abort active drag to allow pinch-zoom)
+    if (dragState) {
+      clearDrag();
+      return;
+    }
+    if (e.isPrimary === false) return;
     if (!runtime.api || runtime.isBusy || spaceHeld) return;
     if (e.button !== 0 || e.altKey) return;
     if (!isRedactToolActive()) return;
@@ -71,9 +93,8 @@ export function installRedactDragController(): () => void {
     e.stopImmediatePropagation();
 
     const host = e.target.closest(EXCALIDRAW_SELECTORS.root) || document.body;
+    const hostRect = host.getBoundingClientRect();
     const boxEl = el('div', { class: 'exq-redact-rubberband', 'data-exq-redact-rubberband': '1' });
-    host.append(boxEl);
-
     dragState = {
       pointerId: e.pointerId,
       startX: e.clientX,
@@ -82,8 +103,12 @@ export function installRedactDragController(): () => void {
       curY: e.clientY,
       shiftKey: e.shiftKey,
       canvas: e.target,
+      hostLeft: hostRect.left,
+      hostTop: hostRect.top,
       boxEl,
     };
+    applyBoxGeometry(dragState);
+    host.append(boxEl);
 
     silently(() => e.target instanceof Element && e.target.setPointerCapture?.(e.pointerId));
   };
@@ -97,13 +122,7 @@ export function installRedactDragController(): () => void {
     dragState.curX = e.clientX;
     dragState.curY = e.clientY;
     dragState.shiftKey = e.shiftKey;
-
-    const { left, top, width, height } = computeViewportBox(dragState);
-    const hostRect = (dragState.boxEl.parentElement || document.body).getBoundingClientRect();
-    dragState.boxEl.style.left = `${Math.round(left - hostRect.left)}px`;
-    dragState.boxEl.style.top = `${Math.round(top - hostRect.top)}px`;
-    dragState.boxEl.style.width = `${Math.round(width)}px`;
-    dragState.boxEl.style.height = `${Math.round(height)}px`;
+    applyBoxGeometry(dragState);
   };
 
   const onPointerUp = (e: PointerEvent) => {

@@ -1,6 +1,7 @@
 // Quick annotator entry point: UI sync loop and boot lifecycle.
 import { EXCALIDRAW_SELECTORS } from '../../excalidraw/domContract';
 import { loadPrefs } from '../../services/storageBridge';
+import { registerSceneReplaceHook } from '../apiActions';
 import { getCurrentPenColor } from './actions';
 import { syncContextMenu } from './contextMenu';
 import { isEditableFocused } from './dom';
@@ -20,7 +21,10 @@ import {
 import { syncMainMenu } from './mainMenu';
 import { installRedactDragController } from './redactDrag';
 import {
+  cancelScheduledSync,
+  clearToastState,
   closeFloatingPopovers,
+  notifyRuntimeChange,
   runtime,
   scheduleSync,
   setSyncHandler,
@@ -33,23 +37,34 @@ let observer: MutationObserver | null = null;
 
 /* ================= Sync Loop & Boot ================= */
 export function syncUI(): void {
-  syncToolbar();
-  syncMobileToolbar();
-  syncMobileShapeActions();
-  syncStylesPanelColorSwap();
-  syncTopRightBar();
-  syncMainMenu();
-  syncExtraToolsMenu();
-  syncFontPicker();
-  syncContextMenu();
-  observer?.takeRecords();
+  try {
+    syncToolbar();
+    syncMobileToolbar();
+    syncMobileShapeActions();
+    syncStylesPanelColorSwap();
+    syncTopRightBar();
+    syncMainMenu();
+    syncExtraToolsMenu();
+    syncFontPicker();
+    syncContextMenu();
+  } finally {
+    observer?.takeRecords();
+  }
 }
 
 setSyncHandler(syncUI);
 
-export function bootQuickAnnotator(): () => void {
+export function bootQuickAnnotator(
+  options: { skipInitialPrefsLoad?: boolean } = {},
+): () => void {
+  observer?.disconnect();
+  observer = null;
+  cancelScheduledSync();
   setSyncHandler(syncUI);
-  runtime.prefs = loadPrefs();
+
+  if (!options.skipInitialPrefsLoad) {
+    runtime.prefs = loadPrefs();
+  }
   if (typeof document !== 'undefined' && document.documentElement) {
     document.documentElement.lang = runtime.prefs.lang;
   }
@@ -59,6 +74,7 @@ export function bootQuickAnnotator(): () => void {
   const cleanupFastLoadSave = installFastLoadSaveInterceptor();
   const cleanupPrimaryToolGuard = installPrimaryToolRestoreGuard();
   const cleanupRedactDrag = installRedactDragController();
+  const unregisterSceneReplace = registerSceneReplaceHook(notifyRuntimeChange);
 
   const onDocClick = (e: MouseEvent) => {
     closeFloatingPopovers(e.target instanceof Node ? e.target : null);
@@ -69,6 +85,8 @@ export function bootQuickAnnotator(): () => void {
       return;
     }
     if (
+      !e.repeat &&
+      !e.isComposing &&
       e.shiftKey &&
       !e.ctrlKey &&
       !e.metaKey &&
@@ -122,9 +140,13 @@ export function bootQuickAnnotator(): () => void {
     cleanupFastLoadSave();
     cleanupPrimaryToolGuard();
     cleanupRedactDrag();
+    unregisterSceneReplace();
     document.removeEventListener('click', onDocClick);
     document.removeEventListener('keydown', onDocKeyDown);
     observer?.disconnect();
     observer = null;
+    cancelScheduledSync();
+    setSyncHandler(null);
+    clearToastState();
   };
 }

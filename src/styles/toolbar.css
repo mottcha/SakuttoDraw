@@ -18,7 +18,6 @@
 .App-toolbar [data-testid="toolbar-selection"] { order: 10; }
 .App-toolbar .exq-div-1 { order: 15; }
 .App-toolbar [data-testid="toolbar-freedraw"] { order: 20; }
-.App-toolbar [data-testid="toolbar-freedraw"] + div:has(.tool-popover-content) { order: 21; }
 .App-toolbar [data-testid="toolbar-text"] { order: 22; }
 .App-toolbar .exq-div-2 { order: 25; }
 .App-toolbar [data-testid="toolbar-rectangle"] { order: 30; }
@@ -27,7 +26,7 @@
 .App-toolbar .exq-div-3 { order: 38; }
 .App-toolbar [data-testid="toolbar-hand"] { order: 40; }
 .App-toolbar .exq-toolbar-reset { order: 41; }
-.App-toolbar .App-toolbar__extra-tools-trigger { order: 42; position: relative !important; }
+.App-toolbar .App-toolbar__extra-tools-trigger { order: 42; position: relative; }
 
 .App-toolbar .exq-divider {
   width: 1px;
@@ -116,7 +115,7 @@
   display: none;
   flex-direction: column;
   gap: 2px;
-  z-index: 120;
+  z-index: var(--exq-z-popover);
 }
 .exq-shape-group.exq-open .exq-popover { display: flex; }
 

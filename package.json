@@ -11,9 +11,13 @@
     "dev": "vite",
     "prebuild": "npm run sync-assets",
     "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json --noEmit",
+    "lint": "biome check src scripts vite.config.ts",
+    "verify-dist": "node scripts/verify-dist.mjs",
     "preview": "vite preview",
     "pretest": "npm run sync-assets",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@excalidraw/excalidraw": "0.18.0-dabd83c",
@@ -21,10 +25,12 @@
     "react-dom": "19.0.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.6.9",
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.4",
+    "@vitest/coverage-v8": "^3.2.7",
     "fake-indexeddb": "^6.0.0",
     "jsdom": "^25.0.1",
     "typescript": "~5.7.2",

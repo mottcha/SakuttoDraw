@@ -5,6 +5,17 @@ export const FILES_DB_NAME = 'files-db';
 export const FILES_STORE_NAME = 'files-store';
 export const FILES_DB_VERSION = 2;
 
+let idbWriteQueue: Promise<unknown> = Promise.resolve();
+
+function enqueueIdbMutation<T>(fn: () => Promise<T>): Promise<T> {
+  const next = idbWriteQueue.then(fn, fn);
+  idbWriteQueue = next.then(
+    () => undefined,
+    () => undefined,
+  );
+  return next;
+}
+
 function openFilesDb(idb: IDBFactory): Promise<IDBDatabase | null> {
   return new Promise((resolve) => {
     try {
@@ -15,8 +26,17 @@ function openFilesDb(idb: IDBFactory): Promise<IDBDatabase | null> {
           db.createObjectStore(FILES_STORE_NAME, { keyPath: 'id' });
         }
       };
+      req.onblocked = () => resolve(null);
       req.onerror = () => resolve(null);
-      req.onsuccess = () => resolve(req.result);
+      req.onsuccess = () => {
+        const db = req.result;
+        try {
+          db.onversionchange = () => silently(() => db.close());
+        } catch {
+          // ignore read-only onversionchange in minimal IDB shims
+        }
+        resolve(db);
+      };
     } catch {
       resolve(null);
     }
@@ -64,10 +84,12 @@ async function withFilesStore<T>(
 export async function clearIndexedDbFiles(
   idb: IDBFactory | null = typeof indexedDB !== 'undefined' ? indexedDB : null,
 ): Promise<boolean> {
-  return withFilesStore(idb, 'readwrite', false, (store, tx, finish) => {
-    tx.oncomplete = () => finish(true);
-    store.clear();
-  });
+  return enqueueIdbMutation(() =>
+    withFilesStore(idb, 'readwrite', false, (store, tx, finish) => {
+      tx.oncomplete = () => finish(true);
+      store.clear();
+    }),
+  );
 }
 
 /**
@@ -76,19 +98,21 @@ export async function clearIndexedDbFiles(
 export async function loadFilesFromIndexedDb(
   idb: IDBFactory | null = typeof indexedDB !== 'undefined' ? indexedDB : null,
 ): Promise<BinaryFiles> {
-  return withFilesStore<BinaryFiles>(idb, 'readonly', {}, (store, _tx, finish) => {
-    const req = store.getAll();
-    req.onsuccess = () => {
-      const files: BinaryFiles = {};
-      for (const item of (req.result || []) as BinaryFileData[]) {
-        if (item && item.id) {
-          files[item.id] = item;
+  return enqueueIdbMutation(() =>
+    withFilesStore<BinaryFiles>(idb, 'readonly', {}, (store, _tx, finish) => {
+      const req = store.getAll();
+      req.onsuccess = () => {
+        const files: BinaryFiles = {};
+        for (const item of (req.result || []) as BinaryFileData[]) {
+          if (item?.id) {
+            files[item.id] = item;
+          }
         }
-      }
-      finish(files);
-    };
-    req.onerror = () => finish({});
-  });
+        finish(files);
+      };
+      req.onerror = () => finish({});
+    }),
+  );
 }
 
 /**
@@ -100,12 +124,14 @@ export async function saveFilesToIndexedDb(
 ): Promise<boolean> {
   const entries = Object.values(files || {});
   if (entries.length === 0) return true;
-  return withFilesStore(idb, 'readwrite', false, (store, tx, finish) => {
-    tx.oncomplete = () => finish(true);
-    for (const file of entries) {
-      if (file && file.id) {
-        store.put(file);
+  return enqueueIdbMutation(() =>
+    withFilesStore(idb, 'readwrite', false, (store, tx, finish) => {
+      tx.oncomplete = () => finish(true);
+      for (const file of entries) {
+        if (file?.id) {
+          store.put(file);
+        }
       }
-    }
-  });
+    }),
+  );
 }
