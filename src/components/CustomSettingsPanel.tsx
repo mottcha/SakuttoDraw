@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { type CSSProperties, useState } from 'react';
 import type { AppLang } from '../types/annotator';
 import {
   applyCanvasBackground,
@@ -10,6 +10,7 @@ import { CANVAS_BG_SWATCHES, QUICK_OPT_DEFS } from '../annotator/quickAnnotator/
 import { runtime, showToast } from '../annotator/quickAnnotator/runtime';
 import { getMessages } from '../i18n/messages';
 import { PEN_COLOR_SWATCHES, savePrefs } from '../services/storageBridge';
+import { getSwatchToneClass } from '../utils/common';
 import { Icon } from './Icon';
 import { closeExcalidrawMainMenu, useMainMenuSubmenuDismiss } from './useOutsideDismiss';
 
@@ -89,25 +90,31 @@ export function CustomSettingsVisualPanel({ lang }: { lang: AppLang }) {
           <span>{t.penColor}</span>
         </div>
         <div className="exq-custom-swatch-row" role="radiogroup" aria-label={t.penColorLabel}>
-          {PEN_COLOR_SWATCHES.map((hex) => (
-            <button
-              key={hex}
-              type="button"
-              role="radio"
-              aria-checked={curPen === hex}
-              className={`exq-custom-swatch${curPen === hex ? ' exq-active' : ''}`}
-              style={{ background: hex }}
-              data-exq-pen-color={hex}
-              title={hex}
-              aria-label={`${t.penColorLabel} ${hex}`}
-              onClick={async (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                await applyPenColor(hex);
-                setTick((n) => n + 1);
-              }}
-            />
-          ))}
+          {PEN_COLOR_SWATCHES.map((hex) => {
+            const isSelected = curPen === hex;
+            const toneClass = getSwatchToneClass(hex);
+            return (
+              <button
+                key={hex}
+                type="button"
+                role="radio"
+                aria-checked={isSelected}
+                className={`color-picker__button exq-custom-swatch${toneClass ? ` ${toneClass}` : ''}${isSelected ? ' active exq-active' : ''}`}
+                style={{ '--swatch-color': hex, backgroundColor: hex } as CSSProperties}
+                data-exq-pen-color={hex}
+                title={hex}
+                aria-label={`${t.penColorLabel} ${hex}`}
+                onClick={async (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  await applyPenColor(hex);
+                  setTick((n) => n + 1);
+                }}
+              >
+                <div className="color-picker__button-outline" aria-hidden="true" />
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -117,25 +124,31 @@ export function CustomSettingsVisualPanel({ lang }: { lang: AppLang }) {
           <span>{t.canvasBackground}</span>
         </div>
         <div className="exq-custom-swatch-row" role="radiogroup" aria-label={t.bgColorLabel}>
-          {CANVAS_BG_SWATCHES.map((hex) => (
-            <button
-              key={hex}
-              type="button"
-              role="radio"
-              aria-checked={curBg === hex}
-              className={`exq-custom-swatch${curBg === hex ? ' exq-active' : ''}`}
-              style={{ background: hex }}
-              data-exq-bg-color={hex}
-              title={hex}
-              aria-label={`${t.bgColorLabel} ${hex}`}
-              onClick={async (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                await applyCanvasBackground(hex);
-                setTick((n) => n + 1);
-              }}
-            />
-          ))}
+          {CANVAS_BG_SWATCHES.map((hex) => {
+            const isSelected = curBg === hex;
+            const toneClass = getSwatchToneClass(hex);
+            return (
+              <button
+                key={hex}
+                type="button"
+                role="radio"
+                aria-checked={isSelected}
+                className={`color-picker__button exq-custom-swatch${toneClass ? ` ${toneClass}` : ''}${isSelected ? ' active exq-active' : ''}`}
+                style={{ '--swatch-color': hex, backgroundColor: hex } as CSSProperties}
+                data-exq-bg-color={hex}
+                title={hex}
+                aria-label={`${t.bgColorLabel} ${hex}`}
+                onClick={async (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  await applyCanvasBackground(hex);
+                  setTick((n) => n + 1);
+                }}
+              >
+                <div className="color-picker__button-outline" aria-hidden="true" />
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>

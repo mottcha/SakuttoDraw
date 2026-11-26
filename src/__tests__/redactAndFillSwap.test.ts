@@ -46,6 +46,13 @@ describe('CustomSettings, Stroke-Fill Swap, and Blackout/Redact Tool', () => {
     expect(host.querySelectorAll('.exq-custom-toggle-icon svg').length).toBe(4);
     expect(host.querySelectorAll('[data-exq-pen-color]').length).toBe(6);
     expect(host.querySelectorAll('[data-exq-bg-color]').length).toBe(5);
+    expect(host.querySelectorAll('[data-exq-pen-color].color-picker__button .color-picker__button-outline').length).toBe(6);
+    expect(host.querySelectorAll('[data-exq-bg-color].color-picker__button .color-picker__button-outline').length).toBe(5);
+    expect(host.querySelector('[data-exq-pen-color="#1e1e1e"]')?.classList.contains('exq-swatch--dark')).toBe(true);
+    expect(host.querySelector('[data-exq-pen-color="#c2255c"]')?.classList.contains('exq-swatch--dark')).toBe(false);
+    expect(host.querySelector('[data-exq-pen-color="#c2255c"]')?.classList.contains('exq-swatch--light')).toBe(false);
+    expect(host.querySelector('[data-exq-bg-color="#ffffff"]')?.classList.contains('exq-swatch--light')).toBe(true);
+    expect(host.querySelector('[data-exq-bg-color="#f8f9fa"]')?.classList.contains('exq-swatch--light')).toBe(true);
 
     const fastSaveBtn = host.querySelector<HTMLButtonElement>('[data-exq-quick-opt="fastLoadSave"]');
     expect(fastSaveBtn?.classList.contains('exq-on')).toBe(true);
@@ -332,8 +339,28 @@ describe('CustomSettings, Stroke-Fill Swap, and Blackout/Redact Tool', () => {
     expect(document.querySelector('.App-menu_top__left .exq-redact-full-header')).toBeNull();
     expect(document.querySelector('.App-menu_top__left .selected-shape-actions-container.exq-redact-integrated-container .App-menu__left')).toBeTruthy();
     expect(document.querySelectorAll('.App-menu_top__left [data-exq-redact-color]').length).toBe(6);
+    expect(document.querySelectorAll('.App-menu_top__left [data-exq-redact-color].color-picker__button .color-picker__button-outline').length).toBe(6);
+    expect(document.querySelector('.App-menu_top__left [data-exq-redact-color="#111111"]')?.classList.contains('exq-swatch--dark')).toBe(true);
+    expect(document.querySelector('.App-menu_top__left [data-exq-redact-color="#ffffff"]')?.classList.contains('exq-swatch--light')).toBe(true);
+    expect(document.querySelector('.App-menu_top__left [data-exq-redact-color="#c2255c"]')?.classList.contains('exq-swatch--dark')).toBe(false);
     document.querySelector<HTMLButtonElement>('.App-menu_top__left [data-exq-redact-color="#c2255c"]')?.click();
     expect(onColorChange).toHaveBeenCalledWith('#c2255c');
+
+    await act(async () => {
+      root.render(
+        createElement(SakuttoRedactPanel, {
+          lang: 'ja-JP',
+          active: true,
+          uiLayout: 'compact',
+          color: '#ffffff',
+          onColorChange,
+        }),
+      );
+    });
+    const compactTriggerLight = document.querySelector<HTMLButtonElement>(
+      '.App-menu_top__left .selected-shape-actions-container--compact [data-exq-redact-trigger="1"]',
+    );
+    expect(compactTriggerLight?.classList.contains('exq-swatch--light')).toBe(true);
 
     await act(async () => {
       root.render(
@@ -353,6 +380,7 @@ describe('CustomSettings, Stroke-Fill Swap, and Blackout/Redact Tool', () => {
     expect(compactTrigger?.classList.contains('color-picker__button')).toBe(true);
     expect(compactTrigger?.classList.contains('compact-sizing')).toBe(true);
     expect(compactTrigger?.classList.contains('exq-redact-trigger-btn')).toBe(true);
+    expect(compactTrigger?.classList.contains('exq-swatch--light')).toBe(false);
     expect(compactTrigger?.style.getPropertyValue('--swatch-color')).toBe('#c2255c');
     expect(document.querySelector('.exq-redact-trigger-swatch')).toBeNull();
 

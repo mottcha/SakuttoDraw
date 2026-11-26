@@ -115,33 +115,25 @@
   gap: 6px;
   padding-top: 2px;
 }
-.exq-redact-color-swatch {
+.excalidraw .exq-redact-color-swatch {
+  --radius: 6px;
   width: 100%;
+  height: auto;
   aspect-ratio: 1 / 1;
   min-width: 22px;
   padding: 0;
-  border-radius: 6px;
-  border: 1.5px solid rgba(128, 128, 148, 0.42);
+  border: 0;
+  border-radius: var(--radius);
   cursor: pointer;
-  transition: transform 0.1s ease, outline-color 0.1s ease;
 }
-.exq-redact-color-swatch:hover {
-  transform: scale(1.06);
-}
-.exq-redact-color-swatch.exq-active {
-  outline: 2px solid var(--color-primary, #6965db);
-  outline-offset: 2px;
+.excalidraw .exq-redact-color-swatch:hover:not(.active) {
+  box-shadow: inset 0 0 0 1px var(--color-primary);
 }
 .excalidraw .exq-redact-trigger-btn {
   width: var(--mobile-action-button-size, 2rem);
   height: var(--mobile-action-button-size, 2rem);
-  border: 1px solid var(--default-border-color, rgba(128, 128, 148, 0.35));
   cursor: pointer;
   flex-shrink: 0;
-}
-.excalidraw .exq-redact-trigger-btn.active {
-  outline: 2px solid var(--color-primary, #6965db);
-  outline-offset: 1px;
 }
 .exq-redact-rubberband {
   position: absolute;

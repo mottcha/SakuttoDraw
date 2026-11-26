@@ -7,6 +7,7 @@ const MAIN_MENU_SUBMENU_IGNORE_SELECTORS = [
   EXCALIDRAW_SELECTORS.preferencesSubmenu,
   '.exq-custom-settings-submenu',
   '.exq-font-settings-submenu',
+  '[data-exq-font-license-modal="1"]',
   EXCALIDRAW_SELECTORS.mainMenu,
   EXCALIDRAW_SELECTORS.mainMenuTrigger,
 ] as const;

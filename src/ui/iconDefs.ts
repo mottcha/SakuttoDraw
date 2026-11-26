@@ -419,6 +419,19 @@ export const ICON_DEFS = {
       ['path', { d: 'M20.7 12.3v6.4' }],
     ],
   },
+  code: {
+    shapes: [
+      ['polyline', { points: '16 18 22 12 16 6' }],
+      ['polyline', { points: '8 6 2 12 8 18' }],
+    ],
+  },
+  info: {
+    shapes: [
+      ['circle', { cx: 12, cy: 12, r: 10 }],
+      ['line', { x1: 12, y1: 16, x2: 12, y2: 12 }],
+      ['line', { x1: 12, y1: 8, x2: 12.01, y2: 8 }],
+    ],
+  },
 } as const satisfies Record<string, IconEntry>;
 
 export type IconName = keyof typeof ICON_DEFS;

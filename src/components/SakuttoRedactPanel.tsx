@@ -4,6 +4,7 @@ import type { AppLang } from '../types/annotator';
 import { EXCALIDRAW_SELECTORS } from '../excalidraw/domContract';
 import { getMessages } from '../i18n/messages';
 import { REDACT_COLOR_SWATCHES } from '../services/storageBridge';
+import { getSwatchToneClass } from '../utils/common';
 import { Icon } from './Icon';
 import { useOutsideDismiss } from './useOutsideDismiss';
 
@@ -63,6 +64,7 @@ function RedactSwatchContent({
       <div className="exq-redact-color-grid" role="radiogroup" aria-label={t.redactColorTitle}>
         {REDACT_COLOR_SWATCHES.map((hex) => {
           const isSelected = normalized === hex;
+          const toneClass = getSwatchToneClass(hex);
           return (
             <button
               key={hex}
@@ -71,11 +73,13 @@ function RedactSwatchContent({
               aria-checked={isSelected}
               aria-label={`${t.redactColorTitle} ${hex}`}
               title={hex}
-              className={`exq-redact-color-swatch${isSelected ? ' exq-active' : ''}`}
+              className={`color-picker__button exq-redact-color-swatch${toneClass ? ` ${toneClass}` : ''}${isSelected ? ' active exq-active' : ''}`}
               data-exq-redact-color={hex}
-              style={{ background: hex }}
+              style={{ '--swatch-color': hex, backgroundColor: hex } as CSSProperties}
               onClick={() => onColorChange(hex)}
-            />
+            >
+              <div className="color-picker__button-outline" aria-hidden="true" />
+            </button>
           );
         })}
       </div>
@@ -182,6 +186,7 @@ export function SakuttoRedactPanel({
   if (!active || !mountTarget) return null;
 
   const t = getMessages(lang);
+  const triggerToneClass = getSwatchToneClass(color);
   const triggerSwatchStyle = { '--swatch-color': color, backgroundColor: color } as CSSProperties;
 
   if (uiLayout === 'full') {
@@ -223,7 +228,7 @@ export function SakuttoRedactPanel({
                 <div className="compact-action-item">
                   <button
                     type="button"
-                    className={`color-picker__button active-color properties-trigger compact-sizing exq-redact-trigger-btn${popoverOpen ? ' active' : ''}`}
+                    className={`color-picker__button active-color properties-trigger compact-sizing exq-redact-trigger-btn${triggerToneClass ? ` ${triggerToneClass}` : ''}${popoverOpen ? ' active' : ''}`}
                     data-exq-redact-trigger="1"
                     style={triggerSwatchStyle}
                     title={t.redactColorTitle}
@@ -275,7 +280,7 @@ export function SakuttoRedactPanel({
           <button
             ref={mobileBtnRef}
             type="button"
-            className={`color-picker__button active-color properties-trigger compact-sizing mobile-border exq-redact-trigger-btn${popoverOpen ? ' active' : ''}`}
+            className={`color-picker__button active-color properties-trigger compact-sizing mobile-border exq-redact-trigger-btn${triggerToneClass ? ` ${triggerToneClass}` : ''}${popoverOpen ? ' active' : ''}`}
             data-exq-redact-trigger="1"
             style={triggerSwatchStyle}
             title={t.redactColorTitle}

@@ -111,3 +111,13 @@ body,
   opacity: 1;
   transform: translateX(-50%) translateY(0);
 }
+
+/* Native-matched low-contrast swatch outline (light swatches in light theme, dark swatches in dark theme) */
+.excalidraw:not(.theme--dark) .color-picker__button.exq-swatch--light,
+.excalidraw.theme--dark .color-picker__button.exq-swatch--dark {
+  box-shadow: 0 0 0 1px var(--color-outline, rgba(128, 128, 148, 0.35));
+}
+.excalidraw:not(.theme--dark) .color-picker__button.exq-swatch--light:hover:not(.active),
+.excalidraw.theme--dark .color-picker__button.exq-swatch--dark:hover:not(.active) {
+  box-shadow: 0 0 0 1px var(--color-outline, rgba(128, 128, 148, 0.35)), inset 0 0 0 1px var(--color-primary);
+}

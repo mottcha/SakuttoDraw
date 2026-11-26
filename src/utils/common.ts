@@ -22,6 +22,30 @@ export function normalizeHexColor(value: unknown, fallback: string): string {
 }
 
 /**
+ * Classifies very light or very dark hex colors so low-contrast swatches receive
+ * an Excalidraw-style 1px outline only in matching light or dark themes.
+ */
+export function getSwatchToneClass(hex: string): 'exq-swatch--light' | 'exq-swatch--dark' | '' {
+  const normalized = normalizeHexColor(hex, '');
+  if (!normalized) return '';
+  const expanded =
+    normalized.length === 4
+      ? `#${normalized[1]}${normalized[1]}${normalized[2]}${normalized[2]}${normalized[3]}${normalized[3]}`
+      : normalized;
+  const toLinear = (byte: number): number => {
+    const c = byte / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  const r = toLinear(parseInt(expanded.slice(1, 3), 16));
+  const g = toLinear(parseInt(expanded.slice(3, 5), 16));
+  const b = toLinear(parseInt(expanded.slice(5, 7), 16));
+  const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  if (lum >= 0.85) return 'exq-swatch--light';
+  if (lum <= 0.04) return 'exq-swatch--dark';
+  return '';
+}
+
+/**
  * Generates a positive 31-bit random versionNonce (`>= 1`) compatible with Excalidraw elements.
  */
 export function nextElementNonce(): number {

@@ -1,5 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { act, createElement } from 'react';
+import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FONT_FAMILY } from '@excalidraw/excalidraw';
 import {
@@ -22,6 +24,7 @@ import {
 } from '../excalidraw/fontsAdapter';
 import { syncFontPicker } from '../annotator/quickAnnotator/fontPicker';
 import { applyLanguage, applyPreferJpFont, runtime } from '../annotator/quickAnnotator/runtime';
+import { FontSettingsPanel } from '../components/FontSettingsPanel';
 import {
   DEFAULT_FONT_TOP_PICKS,
   loadInitialSceneData,
@@ -878,5 +881,125 @@ describe('5-font architecture (all active slots, ligatures, SVG dedup, picker & 
     expect(updatedElements.find((e) => e.id === 'auto-1')?.width).toBe(6 * 14);
     expect(updatedElements.find((e) => e.id === 'fixed-2')?.width).toBe(50);
     expect(updatedElements.find((e) => e.id === 'bound-3')?.width).toBe(50);
+  });
+});
+
+describe('FontSettingsPanel UI (5-slot linkage, codeLigatures, other CJK, and license modal)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    document.body.innerHTML = '';
+    resetJpGlyphOverrideStateForTests();
+    runtime.prefs = loadPrefs(localStorage);
+    applyLanguage('ja-JP');
+    applyPreferJpFont(true);
+  });
+
+  afterEach(() => {
+    document.body.innerHTML = '';
+    resetJpGlyphOverrideStateForTests();
+    localStorage.clear();
+  });
+
+  it('shows Code Ligatures above 優先フォント, updates all 5 slots dynamically, expands other languages, and opens/closes license modal', async () => {
+    const rootShell = document.createElement('div');
+    rootShell.className = 'excalidraw';
+    const host = document.createElement('div');
+    rootShell.append(host);
+    document.body.append(rootShell);
+
+    const root = createRoot(host);
+    await act(async () => {
+      root.render(createElement(FontSettingsPanel, { lang: 'ja-JP' }));
+    });
+
+    const panel = host.querySelector('[data-exq-font-settings-panel="1"]')!;
+    const ligGroup = panel.querySelector('[data-exq-code-ligatures-group="1"]')!;
+    const preferGroup = panel.querySelector('[data-exq-prefer-jp-group="1"]')!;
+    expect(
+      Boolean(ligGroup.compareDocumentPosition(preferGroup) & Node.DOCUMENT_POSITION_FOLLOWING),
+    ).toBe(true);
+    expect(preferGroup.querySelector('.exq-pref-group-title')?.textContent).toBe('優先フォント');
+
+    const getSub = (slotId: string) =>
+      panel.querySelector(`[data-exq-font-slot="${slotId}"] .exq-font-slot-sub`)?.textContent;
+
+    expect(getSub('hand-drawn')).toBe('Excalifont + SetoJP');
+    expect(getSub('normal')).toBe('M PLUS Rounded 1c');
+    expect(getSub('pop')).toBe('Lilita One + Mochiy Pop P One');
+    expect(getSub('code')).toBe('Cascadia Code + M PLUS Rounded 1c');
+    expect(getSub('code-hand')).toBe('Comic Shanns + SetoJP');
+
+    // Toggle Code Ligatures OFF -> Code slot switches to Cascadia Mono + M PLUS Rounded 1c
+    await act(async () => {
+      panel.querySelector<HTMLButtonElement>('[data-exq-code-ligatures="off"]')?.click();
+    });
+    expect(getSub('code')).toBe('Cascadia Mono + M PLUS Rounded 1c');
+
+    // Expand Other languages drawer -> reveals full 中国語 and 韓国語 buttons
+    expect(panel.querySelector('.exq-font-other-cjk [data-exq-cjk-btn="zh"]')).toBeNull();
+    await act(async () => {
+      panel.querySelector<HTMLButtonElement>('[data-exq-other-cjk-toggle="1"]')?.click();
+    });
+    expect(panel.querySelector('.exq-font-other-cjk [data-exq-cjk-btn="zh"]')?.textContent).toContain('中国語');
+    expect(panel.querySelector('.exq-font-other-cjk [data-exq-cjk-btn="ko"]')?.textContent).toContain('韓国語');
+
+    // Switch 優先フォント to 標準・中国語
+    await act(async () => {
+      panel.querySelector<HTMLButtonElement>('[data-exq-prefer-jp-card="zh"]')?.click();
+    });
+    expect(getSub('hand-drawn')).toBe('Excalifont + Xiaolai');
+    expect(getSub('normal')).toBe('Nunito');
+    expect(getSub('pop')).toBe('Lilita One');
+    expect(getSub('code')).toBe('Cascadia Mono');
+    expect(getSub('code-hand')).toBe('Comic Shanns');
+    expect(
+      panel.querySelector('[data-exq-font-slot="hand-drawn"] [data-exq-cjk-btn="zh"]')?.textContent,
+    ).toContain('中国語');
+    expect(
+      panel.querySelector('[data-exq-font-slot="hand-drawn"] [data-exq-cjk-btn="ko"]')?.textContent,
+    ).toContain('韓国語');
+    expect(
+      panel.querySelector('[data-exq-font-slot="normal"] .exq-font-builtin-badge')?.textContent,
+    ).toBe('同梱済み');
+    expect(panel.querySelector('[data-exq-other-cjk-toggle="1"]')).toBeNull();
+
+    // Open License modal, verify all 9 fonts, close with button, reopen and close with Escape
+    await act(async () => {
+      panel.querySelector<HTMLButtonElement>('[data-exq-font-licenses-btn="1"]')?.click();
+    });
+    const modal = document.querySelector('[data-exq-font-license-modal="1"]');
+    expect(modal).toBeTruthy();
+    const modalText = modal?.textContent ?? '';
+    for (const fontName of [
+      'Excalifont',
+      'SetoJP',
+      'Xiaolai',
+      'M PLUS Rounded 1c',
+      'Nunito',
+      'Lilita One',
+      'Mochiy Pop P One',
+      'Cascadia Code / Mono',
+      'Comic Shanns',
+    ]) {
+      expect(modalText).toContain(fontName);
+    }
+
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('[data-exq-font-licenses-close="1"]')?.click();
+    });
+    expect(document.querySelector('[data-exq-font-license-modal="1"]')).toBeNull();
+
+    await act(async () => {
+      panel.querySelector<HTMLButtonElement>('[data-exq-font-licenses-btn="1"]')?.click();
+    });
+    expect(document.querySelector('[data-exq-font-license-modal="1"]')).toBeTruthy();
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    expect(document.querySelector('[data-exq-font-license-modal="1"]')).toBeNull();
+
+    await act(async () => {
+      root.unmount();
+    });
   });
 });
