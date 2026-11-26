@@ -1,9 +1,10 @@
 /* === Hide unwanted Excalidraw UI (locale-independent) === */
-/* Welcome screen, corner hints, toolbar bottom hint, and selection/pen sub-popovers */
+/* Welcome screen, corner hints, toolbar bottom hint, selection/pen sub-popovers, and font search bar */
 .welcome-screen-center,
 .welcome-screen-decor,
 .HintViewer,
-.tool-popover-content {
+.tool-popover-content,
+.properties-content:has(.dropdown-menu.fonts) .QuickSearch__wrapper {
   display: none !important;
 }
 

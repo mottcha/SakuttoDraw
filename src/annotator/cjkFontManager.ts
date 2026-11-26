@@ -4,7 +4,9 @@ import { silently } from '../utils/common';
 
 export const CJK_FONT_CACHE_NAME = 'sakuttodraw-cjk-fonts';
 export const LS_CJK_INSTALLED_KEY = 'exq-cjk-installed-sets';
-export const CJK_LANG_ORDER: readonly CjkLang[] = ['ja', 'ko', 'zh'] as const;
+export const CJK_LANG_ORDER: readonly CjkLang[] = ['ja', 'jaStandard', 'jaPop', 'ko', 'zh'] as const;
+
+const VALID_CJK_LANGS = new Set<string>(CJK_LANG_ORDER);
 
 export const cjkFontManifest: CjkFontManifest = rawManifest as CjkFontManifest;
 
@@ -34,7 +36,7 @@ export function getRecordedInstalledSets(
   if (!raw) return new Set();
   const parsed = silently(() => JSON.parse(raw));
   if (!Array.isArray(parsed)) return new Set();
-  return new Set(parsed.filter((x): x is CjkLang => x === 'ja' || x === 'ko' || x === 'zh'));
+  return new Set(parsed.filter((x): x is CjkLang => typeof x === 'string' && VALID_CJK_LANGS.has(x)));
 }
 
 export function saveRecordedInstalledSets(

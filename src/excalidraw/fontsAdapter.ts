@@ -1,4 +1,4 @@
-import { Fonts } from '@excalidraw/excalidraw';
+import { FONT_FAMILY, Fonts } from '@excalidraw/excalidraw';
 
 export const XIAOLAI_FALLBACK_FAMILY_ID = 100;
 export const XIAOLAI_FAMILY_NAME = 'Xiaolai';
@@ -38,14 +38,35 @@ export function findXiaolaiFamilyId(registeredFonts: RegisteredFontsMap): number
 }
 
 /**
- * Purges cached `Xiaolai` entries from Excalidraw's internal `Fonts.loadedFontsCache`
- * so newly swapped faces (e.g. SetoJP) load immediately on next draw/export.
+ * Clears deprecated flag from Excalidraw's built-in `Cascadia` entry (ID 3)
+ * so it appears cleanly in FontPicker without an "OLD" badge.
  */
-export function clearXiaolaiLoadedCache(): void {
+export function enableCascadiaFontInRegistry(
+  registeredFonts: RegisteredFontsMap | null = getDefaultRegisteredFonts(),
+): boolean {
+  if (!registeredFonts) return false;
+  const entry = registeredFonts.get(FONT_FAMILY.Cascadia);
+  if (!entry) return false;
+  if (entry.metadata?.deprecated) {
+    const { deprecated: _deprecated, ...rest } = entry.metadata;
+    entry.metadata = rest;
+  }
+  return true;
+}
+
+/**
+ * Purges cached entries for the specified font-family names from Excalidraw's
+ * internal `Fonts.loadedFontsCache` so swapped faces load immediately on next draw/export.
+ */
+export function clearLoadedFontCacheForFamilies(familyNames: readonly string[]): void {
   const cache = (Fonts as unknown as { loadedFontsCache?: Set<string> }).loadedFontsCache;
-  if (!cache || typeof cache.forEach !== 'function') return;
+  if (!cache || typeof cache.forEach !== 'function' || familyNames.length === 0) return;
   for (const sig of Array.from(cache)) {
-    if (sig.startsWith(`${XIAOLAI_FAMILY_NAME}-`) || sig.startsWith(`"${XIAOLAI_FAMILY_NAME}"-`)) {
+    if (
+      familyNames.some(
+        (name) => sig.startsWith(`${name}-`) || sig.startsWith(`"${name}"-`),
+      )
+    ) {
       cache.delete(sig);
     }
   }

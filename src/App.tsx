@@ -11,7 +11,7 @@ import type {
   StylesPanelPref,
   ThemeMode,
 } from './types/annotator';
-import { applyJapaneseGlyphOverride } from './annotator/jpGlyphOverride';
+import { applySakuttoFontOverrides } from './annotator/jpGlyphOverride';
 import { REDACT_TOOL_CUSTOM_TYPE } from './annotator/quickAnnotator/constants';
 import { restoreTempFillIfToolChanged } from './annotator/quickAnnotator/fillSwap';
 import { bootQuickAnnotator } from './annotator/quickAnnotator/index';
@@ -77,7 +77,10 @@ export function App() {
       if (typeof document !== 'undefined' && document.documentElement) {
         document.documentElement.lang = initResult.prefs.lang;
       }
-      applyJapaneseGlyphOverride(resolvePreferJpFont(initResult.prefs));
+      applySakuttoFontOverrides({
+        preferJpFont: resolvePreferJpFont(initResult.prefs),
+        codeLigatures: initResult.prefs.codeLigatures,
+      });
     }
     syncDesktopUIMode(runtime.prefs.stylesPanelMode);
     return {

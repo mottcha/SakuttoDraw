@@ -5,6 +5,7 @@ import { getCurrentPenColor } from './actions';
 import { syncContextMenu } from './contextMenu';
 import { isEditableFocused } from './dom';
 import { syncExtraToolsMenu } from './extraToolsMenu';
+import { syncFontPicker } from './fontPicker';
 import {
   getActiveStrokeFillState,
   syncStylesPanelColorSwap,
@@ -39,6 +40,7 @@ export function syncUI(): void {
   syncTopRightBar();
   syncMainMenu();
   syncExtraToolsMenu();
+  syncFontPicker();
   syncContextMenu();
   observer?.takeRecords();
 }

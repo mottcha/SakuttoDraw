@@ -8,27 +8,16 @@ import {
 } from '../annotator/quickAnnotator/actions';
 import { CANVAS_BG_SWATCHES, QUICK_OPT_DEFS } from '../annotator/quickAnnotator/constants';
 import { runtime, showToast } from '../annotator/quickAnnotator/runtime';
-import { EXCALIDRAW_SELECTORS } from '../excalidraw/domContract';
 import { getMessages } from '../i18n/messages';
 import { PEN_COLOR_SWATCHES, savePrefs } from '../services/storageBridge';
 import { Icon } from './Icon';
-import { closeExcalidrawMainMenu, useOutsideDismiss } from './useOutsideDismiss';
-
-const CUSTOM_DISMISS_IGNORE_SELECTORS = [
-  '.exq-custom-settings-submenu',
-  EXCALIDRAW_SELECTORS.preferencesSubmenu,
-  EXCALIDRAW_SELECTORS.mainMenu,
-  EXCALIDRAW_SELECTORS.mainMenuTrigger,
-] as const;
+import { closeExcalidrawMainMenu, useMainMenuSubmenuDismiss } from './useOutsideDismiss';
 
 export function CustomSettingsVisualPanel({ lang }: { lang: AppLang }) {
   const [, setTick] = useState(0);
   const t = getMessages(lang);
 
-  useOutsideDismiss({
-    ignoreSelectors: CUSTOM_DISMISS_IGNORE_SELECTORS,
-    onDismiss: closeExcalidrawMainMenu,
-  });
+  useMainMenuSubmenuDismiss();
 
   const curPen = getCurrentPenColor();
   const curBg = getCurrentCanvasBg();

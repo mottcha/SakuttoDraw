@@ -3,9 +3,9 @@ import type { AppLang, StylesPanelPref, ThemeMode } from '../types/annotator';
 import { applyLanguage } from '../annotator/quickAnnotator/runtime';
 import { getMessages, SUPPORTED_LANGS } from '../i18n/messages';
 import { CustomSettingsVisualPanel } from './CustomSettingsPanel';
+import { FontSettingsPanel } from './FontSettingsPanel';
 import { Icon } from './Icon';
 import {
-  CjkFontCacheSection,
   type PreferencesLiveState,
   PreferencesVisualPanel,
 } from './PreferencesPanel';
@@ -32,9 +32,7 @@ export function SakuttoMainMenu({
       <MainMenu.DefaultItems.Export />
       <MainMenu.DefaultItems.SaveAsImage />
       <MainMenu.Separator />
-      <MainMenu.DefaultItems.Preferences
-        additionalItems={<CjkFontCacheSection lang={lang} />}
-      >
+      <MainMenu.DefaultItems.Preferences>
         <PreferencesVisualPanel
           lang={lang}
           prefState={prefState}
@@ -50,6 +48,17 @@ export function SakuttoMainMenu({
         </MainMenu.Sub.Trigger>
         <MainMenu.Sub.Content className="exq-custom-settings-submenu">
           <CustomSettingsVisualPanel lang={lang} />
+        </MainMenu.Sub.Content>
+      </MainMenu.Sub>
+      <MainMenu.Sub>
+        <MainMenu.Sub.Trigger
+          icon={<Icon name="fontSettings" size={16} strokeWidth={1.5} />}
+          className="exq-font-settings-trigger"
+        >
+          {t.fontSettings}
+        </MainMenu.Sub.Trigger>
+        <MainMenu.Sub.Content className="exq-font-settings-submenu">
+          <FontSettingsPanel lang={lang} />
         </MainMenu.Sub.Content>
       </MainMenu.Sub>
       <MainMenu.DefaultItems.ToggleTheme

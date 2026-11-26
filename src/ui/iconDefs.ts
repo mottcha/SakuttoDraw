@@ -411,6 +411,14 @@ export const ICON_DEFS = {
       ['path', { d: 'M3 15l5-5 4 4 3-3 6 6' }],
     ],
   },
+  fontSettings: {
+    shapes: [
+      ['path', { d: 'M3.5 19 7.8 5.5 12.1 19' }],
+      ['path', { d: 'M4.9 14.5h5.8' }],
+      ['circle', { cx: 17.5, cy: 15.5, r: 3.2 }],
+      ['path', { d: 'M20.7 12.3v6.4' }],
+    ],
+  },
 } as const satisfies Record<string, IconEntry>;
 
 export type IconName = keyof typeof ICON_DEFS;

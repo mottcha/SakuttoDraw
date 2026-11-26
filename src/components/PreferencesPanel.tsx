@@ -1,23 +1,15 @@
-import { useEffect, useState } from 'react';
-import { CaptureUpdateAction, MainMenu } from '@excalidraw/excalidraw';
+import { CaptureUpdateAction } from '@excalidraw/excalidraw';
 import type {
   AppLang,
   BoxSelectionPref,
   InputDevicePref,
   StylesPanelPref,
 } from '../types/annotator';
-import { CJK_LANG_ORDER, cjkFontManifest, formatBytesToMB } from '../annotator/cjkFontManager';
-import { applyPreferJpFont, runtime } from '../annotator/quickAnnotator/runtime';
-import { EXCALIDRAW_SELECTORS } from '../excalidraw/domContract';
+import { runtime } from '../annotator/quickAnnotator/runtime';
 import { getMessages } from '../i18n/messages';
-import { resolvePreferJpFont, savePrefs } from '../services/storageBridge';
+import { savePrefs } from '../services/storageBridge';
 import { Icon } from './Icon';
-import {
-  refreshCjkCacheStatuses,
-  toggleLanguageFontCache,
-  useCjkFontCacheState,
-} from './cjkFontStore';
-import { closeExcalidrawMainMenu, useOutsideDismiss } from './useOutsideDismiss';
+import { closeExcalidrawMainMenu, useMainMenuSubmenuDismiss } from './useOutsideDismiss';
 
 export interface PreferencesLiveState {
   boxSelectionMode: BoxSelectionPref;
@@ -26,13 +18,6 @@ export interface PreferencesLiveState {
   zenModeEnabled: boolean;
   viewModeEnabled: boolean;
 }
-
-const MENU_DISMISS_IGNORE_SELECTORS = [
-  EXCALIDRAW_SELECTORS.preferencesSubmenu,
-  '.exq-custom-settings-submenu',
-  EXCALIDRAW_SELECTORS.mainMenu,
-  EXCALIDRAW_SELECTORS.mainMenuTrigger,
-] as const;
 
 export function PreferencesVisualPanel({
   lang,
@@ -45,10 +30,7 @@ export function PreferencesVisualPanel({
 }) {
   const t = getMessages(lang);
 
-  useOutsideDismiss({
-    ignoreSelectors: MENU_DISMISS_IGNORE_SELECTORS,
-    onDismiss: closeExcalidrawMainMenu,
-  });
+  useMainMenuSubmenuDismiss();
 
   const setBoxSelectionMode = (mode: BoxSelectionPref) => {
     runtime.prefs.boxSelectionMode = mode;
@@ -230,127 +212,5 @@ export function PreferencesVisualPanel({
         </div>
       </div>
     </div>
-  );
-}
-
-export function CjkFontCacheSection({ lang }: { lang: AppLang }) {
-  const cjkState = useCjkFontCacheState();
-  const [, setPreferTick] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    refreshCjkCacheStatuses(() => cancelled);
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const t = getMessages(lang);
-  const preferJpActive = resolvePreferJpFont({
-    lang,
-    preferJpFont: runtime.prefs.preferJpFont,
-  });
-
-  const selectPreferJpFont = (enabled: boolean) => {
-    applyPreferJpFont(enabled);
-    setPreferTick((n) => n + 1);
-  };
-
-  return (
-    <>
-      <MainMenu.Separator />
-      <div
-        className="exq-pref-fonts"
-        data-exq-pref-fonts="1"
-        onClick={(e) => e.stopPropagation()}
-        onPointerDown={(e) => e.stopPropagation()}
-      >
-        <div className="exq-pref-group" data-exq-prefer-jp-group="1">
-          <div className="exq-pref-group-title">{t.prefPreferJpFont}</div>
-          <div className="exq-pref-card-grid" role="radiogroup" aria-label={t.prefPreferJpFont}>
-            <button
-              type="button"
-              role="radio"
-              aria-checked={preferJpActive}
-              className={`exq-pref-card${preferJpActive ? ' exq-active' : ''}`}
-              data-exq-prefer-jp-card="jp"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                selectPreferJpFont(true);
-              }}
-            >
-              <Icon name="kanjiJp" size={15} strokeWidth={1.8} />
-              <span>{t.cjkLangName.ja}</span>
-            </button>
-            <button
-              type="button"
-              role="radio"
-              aria-checked={!preferJpActive}
-              className={`exq-pref-card${!preferJpActive ? ' exq-active' : ''}`}
-              data-exq-prefer-jp-card="zh"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                selectPreferJpFont(false);
-              }}
-            >
-              <Icon name="kanjiZh" size={15} strokeWidth={1.8} />
-              <span>{t.cjkLangName.zh}</span>
-            </button>
-          </div>
-        </div>
-        <div className="exq-pref-group">
-          <div className="exq-font-section-title">{t.offlineFontsTitle}</div>
-          <div className="exq-font-chip-grid">
-            {CJK_LANG_ORDER.map((cjkLang) => {
-              const meta = cjkFontManifest.sets[cjkLang];
-              const sizeLabel = formatBytesToMB(meta.totalBytes);
-              const status = cjkState.statuses[cjkLang];
-              const label = t.cjkLangName[cjkLang];
-              const actionHint =
-                status === 'downloading'
-                  ? `${cjkState.progress[cjkLang]}%`
-                  : status === 'installed'
-                    ? t.fontDelete
-                    : sizeLabel;
-              const titleText =
-                status === 'installed'
-                  ? `${label} (${sizeLabel}) — ${t.fontDelete}`
-                  : `${label} (${sizeLabel}) — ${t.fontDownload}`;
-
-              return (
-                <button
-                  key={cjkLang}
-                  type="button"
-                  className={`exq-font-chip${status === 'installed' ? ' exq-font-chip--installed' : ''}`}
-                  data-exq-cjk-row={cjkLang}
-                  data-exq-cjk-btn={cjkLang}
-                  data-exq-cjk-state={status}
-                  title={titleText}
-                  aria-label={titleText}
-                  disabled={status === 'downloading'}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    void toggleLanguageFontCache(cjkLang, lang);
-                  }}
-                >
-                  <span className="exq-font-chip-name">{label}</span>
-                  <span className="exq-font-chip-sub">
-                    {status === 'installed' ? (
-                      <Icon name="reset" size={11} strokeWidth={2.2} />
-                    ) : status === 'uninstalled' ? (
-                      <Icon name="download" size={11} strokeWidth={2.2} />
-                    ) : null}
-                    <span>{actionHint}</span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    </>
   );
 }

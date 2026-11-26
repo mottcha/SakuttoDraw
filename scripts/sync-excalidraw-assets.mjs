@@ -23,6 +23,82 @@ function parseUnicodeRange(rangeStr) {
   return cps;
 }
 
+function syncFontPackDir(projectRoot, destFontsDir, folderName, defaultSourceLabel) {
+  const srcDir = path.join(projectRoot, 'assets', 'fonts', folderName);
+  const destDir = path.join(destFontsDir, folderName);
+  const manifestSrc = path.join(srcDir, 'manifest.json');
+
+  if (!fs.existsSync(srcDir) || !fs.existsSync(manifestSrc)) {
+    throw new Error(`${folderName} font assets or manifest not found: ${manifestSrc}`);
+  }
+
+  fs.rmSync(destDir, { recursive: true, force: true });
+  fs.mkdirSync(destDir, { recursive: true });
+
+  const rawManifest = JSON.parse(fs.readFileSync(manifestSrc, 'utf8'));
+  const rawChunks = Array.isArray(rawManifest.chunks) ? rawManifest.chunks : [];
+  if (rawChunks.length === 0) {
+    throw new Error(`Unexpected empty ${folderName} font manifest: ${manifestSrc}`);
+  }
+
+  const normalizedChunks = [];
+  let totalBytes = 0;
+  for (const chunk of rawChunks) {
+    const relPath = String(chunk.file || '').replace(/^\.?\/+/, '');
+    const fileName = path.basename(relPath);
+    const srcFile = path.join(srcDir, fileName);
+    if (!fs.existsSync(srcFile)) {
+      throw new Error(`Missing ${folderName} font chunk file: ${srcFile}`);
+    }
+    fs.copyFileSync(srcFile, path.join(destDir, fileName));
+    const size = fs.statSync(srcFile).size;
+    totalBytes += size;
+    normalizedChunks.push({
+      file: `fonts/${folderName}/${fileName}`,
+      unicodeRange: String(chunk.unicodeRange || ''),
+      bytes: size,
+    });
+  }
+
+  return {
+    source: rawManifest.source || defaultSourceLabel,
+    totalBytes,
+    chunks: normalizedChunks,
+  };
+}
+
+function syncCascadiaMono(projectRoot, destFontsDir) {
+  const srcDir = path.join(projectRoot, 'assets', 'fonts', 'CascadiaMono');
+  const destDir = path.join(destFontsDir, 'CascadiaMono');
+  const manifestPath = path.join(srcDir, 'manifest.json');
+  const codeRangePath = path.join(srcDir, 'cascadia-code-range.json');
+
+  if (!fs.existsSync(manifestPath) || !fs.existsSync(codeRangePath)) {
+    throw new Error(`CascadiaMono manifest files not found in: ${srcDir}`);
+  }
+
+  const monoMeta = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  const codeMeta = JSON.parse(fs.readFileSync(codeRangePath, 'utf8'));
+  const fileName = path.basename(String(monoMeta.file || 'CascadiaMono-Regular.woff2'));
+  const srcWoff2 = path.join(srcDir, fileName);
+  if (!fs.existsSync(srcWoff2)) {
+    throw new Error(`Missing CascadiaMono font file: ${srcWoff2}`);
+  }
+
+  fs.rmSync(destDir, { recursive: true, force: true });
+  fs.mkdirSync(destDir, { recursive: true });
+  fs.copyFileSync(srcWoff2, path.join(destDir, fileName));
+
+  return {
+    cascadiaMono: {
+      file: `fonts/CascadiaMono/${fileName}`,
+      unicodeRange: String(monoMeta.unicodeRange || ''),
+      bytes: fs.statSync(srcWoff2).size,
+    },
+    cascadiaCodeRange: String(codeMeta.unicodeRange || ''),
+  };
+}
+
 export function syncExcalidrawAssets(projectRoot = rootDir) {
   const prodDir = path.join(
     projectRoot,
@@ -40,41 +116,23 @@ export function syncExcalidrawAssets(projectRoot = rootDir) {
     throw new Error(`Excalidraw fonts directory not found: ${srcFontsDir}`);
   }
 
-  const srcSetoJpDir = path.join(projectRoot, 'assets', 'fonts', 'SetoJP');
-  const destSetoJpDir = path.join(destFontsDir, 'SetoJP');
-  const setoJpManifestSrc = path.join(srcSetoJpDir, 'manifest.json');
-
-  if (!fs.existsSync(srcSetoJpDir) || !fs.existsSync(setoJpManifestSrc)) {
-    throw new Error(`SetoJP font assets or manifest not found: ${setoJpManifestSrc}`);
-  }
-
   fs.mkdirSync(path.dirname(destFontsDir), { recursive: true });
   fs.cpSync(srcFontsDir, destFontsDir, { recursive: true, force: true });
 
-  fs.rmSync(destSetoJpDir, { recursive: true, force: true });
-  fs.mkdirSync(destSetoJpDir, { recursive: true });
-  const rawJpManifest = JSON.parse(fs.readFileSync(setoJpManifestSrc, 'utf8'));
-  const jpChunks = Array.isArray(rawJpManifest.chunks) ? rawJpManifest.chunks : [];
-  if (jpChunks.length === 0) {
-    throw new Error(`Unexpected empty SetoJP font manifest: ${setoJpManifestSrc}`);
-  }
-
-  const normalizedJpChunks = [];
-  for (const chunk of jpChunks) {
-    const relPath = String(chunk.file || '').replace(/^\.?\/+/, '');
-    const fileName = path.basename(relPath);
-    const srcFile = path.join(srcSetoJpDir, fileName);
-    if (!fs.existsSync(srcFile)) {
-      throw new Error(`Missing SetoJP font chunk file: ${srcFile}`);
-    }
-    fs.copyFileSync(srcFile, path.join(destSetoJpDir, fileName));
-    const size = fs.statSync(srcFile).size;
-    normalizedJpChunks.push({
-      file: `fonts/SetoJP/${fileName}`,
-      unicodeRange: String(chunk.unicodeRange || ''),
-      bytes: size,
-    });
-  }
+  const setoJp = syncFontPackDir(projectRoot, destFontsDir, 'SetoJP', 'KosefontP-JP');
+  const mPlusRounded = syncFontPackDir(
+    projectRoot,
+    destFontsDir,
+    'MPlusRounded',
+    'M PLUS Rounded 1c Medium (SIL OFL 1.1)',
+  );
+  const mochiyPop = syncFontPackDir(
+    projectRoot,
+    destFontsDir,
+    'MochiyPop',
+    'Mochiy Pop P One Regular (SIL OFL 1.1)',
+  );
+  const { cascadiaMono, cascadiaCodeRange } = syncCascadiaMono(projectRoot, destFontsDir);
 
   // Scan chunk-*.js without relying on minified array variable names (e.g. "Vo")
   const jsFiles = fs
@@ -101,18 +159,31 @@ export function syncExcalidrawAssets(projectRoot = rootDir) {
   }
 
   const sets = {
-    ja: { label: '日本語', files: [], totalBytes: 0 },
+    ja: { label: '日本語（手書き）', files: [], totalBytes: 0 },
+    jaStandard: { label: '日本語（標準・コード）', files: [], totalBytes: 0 },
+    jaPop: { label: '日本語（ポップ）', files: [], totalBytes: 0 },
     ko: { label: '한국어', files: [], totalBytes: 0 },
     zh: { label: '中文', files: [], totalBytes: 0 },
   };
-  const seenFiles = { ja: new Set(), ko: new Set(), zh: new Set() };
+  const seenFiles = {
+    ja: new Set(),
+    jaStandard: new Set(),
+    jaPop: new Set(),
+    ko: new Set(),
+    zh: new Set(),
+  };
 
-  // Japanese offline font pack uses the compact, Japanese-glyph SetoJP chunks
-  for (const chunk of normalizedJpChunks) {
-    if (!seenFiles.ja.has(chunk.file)) {
-      seenFiles.ja.add(chunk.file);
-      sets.ja.files.push(chunk.file);
-      sets.ja.totalBytes += chunk.bytes;
+  for (const [setKey, pack] of [
+    ['ja', setoJp],
+    ['jaStandard', mPlusRounded],
+    ['jaPop', mochiyPop],
+  ]) {
+    for (const chunk of pack.chunks) {
+      if (!seenFiles[setKey].has(chunk.file)) {
+        seenFiles[setKey].add(chunk.file);
+        sets[setKey].files.push(chunk.file);
+        sets[setKey].totalBytes += chunk.bytes;
+      }
     }
   }
 
@@ -153,9 +224,15 @@ export function syncExcalidrawAssets(projectRoot = rootDir) {
   }
 
   // Fail-fast guard against upstream chunk format changes
-  if (sets.ja.files.length === 0 || sets.ko.files.length === 0 || sets.zh.files.length === 0) {
+  if (
+    sets.ja.files.length === 0 ||
+    sets.jaStandard.files.length === 0 ||
+    sets.jaPop.files.length === 0 ||
+    sets.ko.files.length === 0 ||
+    sets.zh.files.length === 0
+  ) {
     throw new Error(
-      `Unexpected empty CJK font set detected (ja=${sets.ja.files.length}, ko=${sets.ko.files.length}, zh=${sets.zh.files.length})`,
+      `Unexpected empty CJK font set detected (ja=${sets.ja.files.length}, jaStandard=${sets.jaStandard.files.length}, jaPop=${sets.jaPop.files.length}, ko=${sets.ko.files.length}, zh=${sets.zh.files.length})`,
     );
   }
 
@@ -168,9 +245,13 @@ export function syncExcalidrawAssets(projectRoot = rootDir) {
     jpManifestPath,
     JSON.stringify(
       {
-        source: rawJpManifest.source || 'KosefontP-JP',
-        totalBytes: sets.ja.totalBytes,
-        chunks: normalizedJpChunks,
+        source: setoJp.source,
+        totalBytes: setoJp.totalBytes,
+        chunks: setoJp.chunks,
+        mPlusRounded,
+        mochiyPop,
+        cascadiaMono,
+        cascadiaCodeRange,
       },
       null,
       2,
@@ -179,9 +260,9 @@ export function syncExcalidrawAssets(projectRoot = rootDir) {
   );
 
   console.log(
-    `[sync-excalidraw-assets] Synced fonts (incl. SetoJP) to public/fonts and generated manifests (ja=${sets.ja.files.length}, ko=${sets.ko.files.length}, zh=${sets.zh.files.length})`,
+    `[sync-excalidraw-assets] Synced fonts (SetoJP, MPlusRounded, MochiyPop, CascadiaMono) and generated manifests (ja=${sets.ja.files.length}, jaStandard=${sets.jaStandard.files.length}, jaPop=${sets.jaPop.files.length}, ko=${sets.ko.files.length}, zh=${sets.zh.files.length})`,
   );
-  return { sets, jpChunks: normalizedJpChunks };
+  return { sets, jpChunks: setoJp.chunks, mPlusRounded, mochiyPop, cascadiaMono };
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

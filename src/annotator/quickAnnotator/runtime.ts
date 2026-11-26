@@ -1,4 +1,5 @@
 // Shared runtime state (Excalidraw API / prefs), language switching, toast, and native tool helpers.
+import { FONT_FAMILY } from '@excalidraw/excalidraw';
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 import type { AppLang, Prefs } from '../../types/annotator';
 import {
@@ -9,7 +10,7 @@ import {
 } from '../../excalidraw/domContract';
 import { createDefaultPrefs, resolvePreferJpFont, savePrefs } from '../../services/storageBridge';
 import { silently } from '../../utils/common';
-import { applyJapaneseGlyphOverride, refreshSceneHandDrawnTextFonts } from '../jpGlyphOverride';
+import { applySakuttoFontOverrides, refreshSceneTextFonts } from '../jpGlyphOverride';
 import { REDACT_TOOL_CUSTOM_TYPE, SHAPE_OTHER_ITEMS } from './constants';
 import { el } from './dom';
 
@@ -76,8 +77,11 @@ export function applyLanguage(nextLang: AppLang): void {
   if (typeof document !== 'undefined' && document.documentElement) {
     document.documentElement.lang = nextLang;
   }
-  applyJapaneseGlyphOverride(resolvePreferJpFont(runtime.prefs));
-  void refreshSceneHandDrawnTextFonts(runtime.api);
+  applySakuttoFontOverrides({
+    preferJpFont: resolvePreferJpFont(runtime.prefs),
+    codeLigatures: runtime.prefs.codeLigatures,
+  });
+  void refreshSceneTextFonts(runtime.api);
   runtime.onLangChange?.(nextLang);
   scheduleSync();
 }
@@ -85,8 +89,21 @@ export function applyLanguage(nextLang: AppLang): void {
 export function applyPreferJpFont(enabled: boolean): void {
   runtime.prefs.preferJpFont = enabled;
   savePrefs(runtime.prefs);
-  applyJapaneseGlyphOverride(enabled);
-  void refreshSceneHandDrawnTextFonts(runtime.api);
+  applySakuttoFontOverrides({
+    preferJpFont: enabled,
+    codeLigatures: runtime.prefs.codeLigatures,
+  });
+  void refreshSceneTextFonts(runtime.api);
+}
+
+export function applyCodeLigatures(enabled: boolean): void {
+  runtime.prefs.codeLigatures = enabled;
+  savePrefs(runtime.prefs);
+  applySakuttoFontOverrides({
+    preferJpFont: resolvePreferJpFont(runtime.prefs),
+    codeLigatures: enabled,
+  });
+  void refreshSceneTextFonts(runtime.api, { targetFamilyIds: [FONT_FAMILY.Cascadia] });
 }
 
 export function showToast(message: string): void {

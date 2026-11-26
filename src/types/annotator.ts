@@ -38,12 +38,13 @@ export interface Prefs {
   inputDevice: InputDevicePref;
   stylesPanelMode: StylesPanelPref;
   preferJpFont: boolean | null;
+  codeLigatures: boolean;
   exportOpts: ExportOpts;
   quickOpts: QuickOpts;
   redactOpts: RedactOpts;
 }
 
-export type CjkLang = 'ja' | 'ko' | 'zh';
+export type CjkLang = 'ja' | 'jaStandard' | 'jaPop' | 'ko' | 'zh';
 export type CjkSetStatus = 'uninstalled' | 'downloading' | 'installed';
 
 export interface CjkFontSetMeta {
@@ -62,10 +63,26 @@ export interface JpFontChunkMeta {
   bytes: number;
 }
 
+export interface FontPackManifest {
+  source: string;
+  totalBytes: number;
+  chunks: JpFontChunkMeta[];
+}
+
+export interface CascadiaMonoManifest {
+  file: string;
+  unicodeRange: string;
+  bytes: number;
+}
+
 export interface JpFontManifest {
   source: string;
   totalBytes: number;
   chunks: JpFontChunkMeta[];
+  mPlusRounded?: FontPackManifest;
+  mochiyPop?: FontPackManifest;
+  cascadiaMono?: CascadiaMonoManifest;
+  cascadiaCodeRange?: string;
 }
 
 export type { ExcalidrawImperativeAPI };

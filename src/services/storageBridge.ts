@@ -1,3 +1,4 @@
+import { FONT_FAMILY } from '@excalidraw/excalidraw';
 import type { BinaryFiles, ExcalidrawInitialDataState } from '@excalidraw/excalidraw/types';
 import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types';
 import type {
@@ -28,6 +29,12 @@ export const LS_STATE_KEY = 'excalidraw-state';
 export const LS_PREFS_KEY = 'exq-annotator-prefs';
 export const LS_DESKTOP_UI_MODE_KEY = 'excalidraw.desktopUIMode';
 
+export const DEFAULT_FONT_TOP_PICKS = [
+  FONT_FAMILY.Excalifont,
+  FONT_FAMILY.Nunito,
+  FONT_FAMILY.Cascadia,
+] as const;
+
 export const DEFAULT_PREFS: Prefs = {
   lang: 'en',
   themeMode: 'light',
@@ -35,6 +42,7 @@ export const DEFAULT_PREFS: Prefs = {
   inputDevice: 'trackpad',
   stylesPanelMode: 'auto',
   preferJpFont: null,
+  codeLigatures: true,
   exportOpts: {
     onlySelected: true,
     background: true,
@@ -63,6 +71,7 @@ export function createDefaultPrefs(lang: AppLang = DEFAULT_PREFS.lang): Prefs {
     inputDevice: DEFAULT_PREFS.inputDevice,
     stylesPanelMode: DEFAULT_PREFS.stylesPanelMode,
     preferJpFont: DEFAULT_PREFS.preferJpFont,
+    codeLigatures: DEFAULT_PREFS.codeLigatures,
     exportOpts: { ...DEFAULT_PREFS.exportOpts },
     quickOpts: { ...DEFAULT_PREFS.quickOpts },
     redactOpts: { ...DEFAULT_PREFS.redactOpts },
@@ -227,6 +236,9 @@ export function loadPrefs(
       if (typeof saved.preferJpFont === 'boolean' || saved.preferJpFont === null) {
         base.preferJpFont = saved.preferJpFont;
       }
+      if (typeof saved.codeLigatures === 'boolean') {
+        base.codeLigatures = saved.codeLigatures;
+      }
       if (saved.exportOpts && typeof saved.exportOpts === 'object') {
         for (const k of ['onlySelected', 'background', 'darkMode', 'embedScene'] as const) {
           if (typeof saved.exportOpts[k] === 'boolean') base.exportOpts[k] = saved.exportOpts[k];
@@ -350,6 +362,13 @@ export async function loadInitialSceneData(
   const files = elements.length > 0 ? await loadFilesFromIndexedDb(idb) : {};
   const defaultPenColor = normalizeHexColor(prefs.quickOpts.defaultPenColor, DEFAULT_PEN_COLOR);
 
+  const savedTopPicks =
+    Array.isArray(savedState.fontTopPicks) &&
+    savedState.fontTopPicks.length > 0 &&
+    savedState.fontTopPicks.every((v) => typeof v === 'number')
+      ? (savedState.fontTopPicks as number[])
+      : [...DEFAULT_FONT_TOP_PICKS];
+
   return {
     elements,
     files,
@@ -368,6 +387,7 @@ export async function loadInitialSceneData(
       exportWithDarkMode: prefs.exportOpts.darkMode,
       exportEmbedScene: prefs.exportOpts.embedScene,
       exportScale: normalizeScale(prefs.exportOpts.scale) as unknown as number,
+      fontTopPicks: savedTopPicks as NonNullable<ExcalidrawInitialDataState['appState']>['fontTopPicks'],
       theme: resolveTheme(prefs.themeMode),
     },
   };
@@ -400,6 +420,9 @@ export function persistSceneSnapshot(
       exportWithDarkMode: appState.exportWithDarkMode ?? prev.exportWithDarkMode ?? false,
       exportEmbedScene: appState.exportEmbedScene ?? prev.exportEmbedScene ?? false,
       exportScale: normalizeScale(appState.exportScale ?? prev.exportScale ?? 1),
+      fontTopPicks: Array.isArray(appState.fontTopPicks)
+        ? appState.fontTopPicks
+        : prev.fontTopPicks ?? [...DEFAULT_FONT_TOP_PICKS],
       theme: appState.theme ?? prev.theme ?? 'light',
     }),
     storage,

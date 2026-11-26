@@ -16,6 +16,14 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
+function formatCssFontFamily(family: string): string {
+  const trimmed = family.trim();
+  if (/\s/.test(trimmed) && !/^["'].*["']$/.test(trimmed)) {
+    return `"${trimmed}"`;
+  }
+  return trimmed;
+}
+
 /**
  * Inlines pre-split local WOFF2 font chunks matching the exact characters used
  * in the exported SVG, avoiding WASM/Emscripten `new Function` calls under strict CSP.
@@ -71,7 +79,9 @@ export async function inlinePreSplitFontsIntoSvg(
   }
 
   const declarations: string[] = [];
-  const seenUrls = new Set<string>();
+  // Deduplicate @font-face declarations by (family, url) while memoizing fetched Base64 per url
+  const emittedFaceKeys = new Set<string>();
+  const dataUrlByUrl = new Map<string, string>();
 
   for (const [familyId, charSet] of charsByFamily.entries()) {
     const entry = registeredFonts.get(familyId);
@@ -84,23 +94,28 @@ export async function inlinePreSplitFontsIntoSvg(
       const rawUrl = face.urls[0];
       if (!rawUrl) continue;
       const urlStr = typeof rawUrl === 'string' ? rawUrl : rawUrl.toString();
-      if (seenUrls.has(urlStr)) continue;
-      seenUrls.add(urlStr);
+      const family = face.fontFace.family;
+      const emitKey = `${family}::${urlStr}`;
+      if (emittedFaceKeys.has(emitKey)) continue;
+      emittedFaceKeys.add(emitKey);
 
       try {
-        let dataUrl: string;
-        if (urlStr.startsWith('data:')) {
-          dataUrl = urlStr;
-        } else {
-          const resp = await fetchFn(urlStr, { credentials: 'same-origin', cache: 'force-cache' });
-          if (!resp.ok) continue;
-          const buf = await resp.arrayBuffer();
-          dataUrl = `data:font/woff2;base64,${arrayBufferToBase64(buf)}`;
+        let dataUrl = dataUrlByUrl.get(urlStr);
+        if (!dataUrl) {
+          if (urlStr.startsWith('data:')) {
+            dataUrl = urlStr;
+          } else {
+            const resp = await fetchFn(urlStr, { credentials: 'same-origin', cache: 'force-cache' });
+            if (!resp.ok) continue;
+            const buf = await resp.arrayBuffer();
+            dataUrl = `data:font/woff2;base64,${arrayBufferToBase64(buf)}`;
+          }
+          dataUrlByUrl.set(urlStr, dataUrl);
         }
-        const family = face.fontFace.family;
+        const cssFamily = formatCssFontFamily(family);
         const rangeRule = unicodeRange ? ` unicode-range: ${unicodeRange};` : '';
         declarations.push(
-          `@font-face { font-family: ${family}; src: url(${dataUrl}) format('woff2');${rangeRule} }`,
+          `@font-face { font-family: ${cssFamily}; src: url(${dataUrl}) format('woff2');${rangeRule} }`,
         );
       } catch {
         // Skip unreadable chunk silently so SVG export always succeeds

@@ -95,9 +95,9 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // Precache app shell, PNG/SVG icons, and the 8 standard fonts (~512KB), excluding Xiaolai & SetoJP CJK chunks
-        globPatterns: ['**/*.{js,css,html,svg,png}', 'fonts/!(Xiaolai|SetoJP)/**/*.woff2'],
-        globIgnores: ['**/fonts/Xiaolai/**', '**/fonts/SetoJP/**'],
+        // Precache app shell, PNG/SVG icons, UI Assistant fonts, and lightweight Latin/Mono fonts, excluding CJK chunk packs
+        globPatterns: ['**/*.{js,css,html,svg,png}', 'assets/*.woff2', 'fonts/!(Xiaolai|SetoJP|MPlusRounded|MochiyPop)/**/*.woff2'],
+        globIgnores: ['**/fonts/Xiaolai/**', '**/fonts/SetoJP/**', '**/fonts/MPlusRounded/**', '**/fonts/MochiyPop/**'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         manifestTransforms: [
           (entries) => {
@@ -121,12 +121,12 @@ export default defineConfig({
         ],
         runtimeCaching: [
           {
-            urlPattern: /\/fonts\/(Xiaolai|SetoJP)\/.*\.woff2$/i,
+            urlPattern: /\/fonts\/(Xiaolai|SetoJP|MPlusRounded|MochiyPop)\/.*\.woff2$/i,
             handler: 'CacheFirst',
             options: {
               cacheName: 'sakuttodraw-cjk-fonts',
               expiration: {
-                maxEntries: 300,
+                maxEntries: 600,
                 maxAgeSeconds: 60 * 60 * 24 * 365,
               },
               cacheableResponse: {

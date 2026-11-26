@@ -49,6 +49,8 @@ export const EXCALIDRAW_SELECTORS = {
   mainMenu: '.main-menu',
   mainMenuTrigger: '.main-menu-trigger',
   preferencesSubmenu: '.excalidraw-main-menu-preferences-submenu',
+  fontPickerMenu: '.dropdown-menu.fonts',
+  fontPickerTopPicks: '.FontPicker__top-picks',
   zIndexButton: '.zIndexButton',
   compactActionItem: '.compact-action-item',
   strokePopupTrigger: '[data-openpopup="elementStroke"]',

@@ -15,8 +15,14 @@ export interface CjkUiSnapshot {
 }
 
 let snapshot: CjkUiSnapshot = {
-  statuses: { ja: 'uninstalled', ko: 'uninstalled', zh: 'uninstalled' },
-  progress: { ja: 0, ko: 0, zh: 0 },
+  statuses: {
+    ja: 'uninstalled',
+    jaStandard: 'uninstalled',
+    jaPop: 'uninstalled',
+    ko: 'uninstalled',
+    zh: 'uninstalled',
+  },
+  progress: { ja: 0, jaStandard: 0, jaPop: 0, ko: 0, zh: 0 },
 };
 
 const listeners = new Set<() => void>();

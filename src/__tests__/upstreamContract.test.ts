@@ -32,6 +32,7 @@ describe('upstream contracts & architecture invariants', () => {
       'fillSwap.ts',
       'redactDrag.ts',
       'guards.ts',
+      'fontPicker.ts',
     ];
     const forbiddenTargets = new Set([
       './index',
@@ -65,9 +66,14 @@ describe('upstream contracts & architecture invariants', () => {
 
   it('keeps generated CJK/JP manifests valid and domContract tool mapping consistent', () => {
     expect(cjkFontManifest.sets.ja.files.length).toBeGreaterThan(0);
+    expect(cjkFontManifest.sets.jaStandard.files.length).toBeGreaterThan(0);
+    expect(cjkFontManifest.sets.jaPop.files.length).toBeGreaterThan(0);
     expect(cjkFontManifest.sets.ko.files.length).toBeGreaterThan(0);
     expect(cjkFontManifest.sets.zh.files.length).toBeGreaterThan(0);
     expect(jpFontManifest.chunks.length).toBeGreaterThan(0);
+    expect(jpFontManifest.mPlusRounded?.chunks.length).toBeGreaterThan(0);
+    expect(jpFontManifest.mochiyPop?.chunks.length).toBeGreaterThan(0);
+    expect(Boolean(jpFontManifest.cascadiaMono?.file)).toBe(true);
 
     const knownTestIds = new Set<string>(Object.values(EXCALIDRAW_TESTIDS));
     for (const testId of Object.keys(TESTID_TO_TOOL_TYPE)) {
