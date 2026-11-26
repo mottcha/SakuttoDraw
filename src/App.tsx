@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Excalidraw } from '@excalidraw/excalidraw';
 import type { AppState, BinaryFiles, ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 import type { OrderedExcalidrawElement } from '@excalidraw/excalidraw/element/types';
@@ -18,6 +18,7 @@ import { bootQuickAnnotator } from './annotator/quickAnnotator/index';
 import {
   attachExcalidrawAPI,
   runtime,
+  scheduleSync,
   setLangChangeListener,
 } from './annotator/quickAnnotator/runtime';
 import {
@@ -109,6 +110,12 @@ export function App() {
       ? window.matchMedia('(prefers-color-scheme: dark)').matches
       : false,
   );
+  const drawAssistSnapshotRef = useRef<{
+    objectsSnapMode: boolean;
+    gridMode: boolean;
+    arrowBinding: boolean;
+    midpointSnapping: boolean;
+  } | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
@@ -264,6 +271,24 @@ export function App() {
           uiLayout: nextLayout,
         };
       });
+
+      const nextDrawAssist = {
+        objectsSnapMode: Boolean(appState.objectsSnapModeEnabled),
+        gridMode: Boolean(appState.gridModeEnabled),
+        arrowBinding: appState.bindingPreference !== 'disabled',
+        midpointSnapping: Boolean(appState.isMidpointSnappingEnabled),
+      };
+      const prevDrawAssist = drawAssistSnapshotRef.current;
+      drawAssistSnapshotRef.current = nextDrawAssist;
+      if (
+        prevDrawAssist &&
+        (prevDrawAssist.objectsSnapMode !== nextDrawAssist.objectsSnapMode ||
+          prevDrawAssist.gridMode !== nextDrawAssist.gridMode ||
+          prevDrawAssist.arrowBinding !== nextDrawAssist.arrowBinding ||
+          prevDrawAssist.midpointSnapping !== nextDrawAssist.midpointSnapping)
+      ) {
+        scheduleSync();
+      }
 
       scheduleScenePersist(elements, appState as unknown as Record<string, unknown>, files);
     },

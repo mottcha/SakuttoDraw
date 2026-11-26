@@ -12,7 +12,9 @@ import { DRAW_ASSIST_DEFS, EXTRA_T3_LEFT_ITEMS, EXTRA_T3_LOCK_ITEM } from './con
 import { createAccordionSection, createSwitchRow, el, svgIcon } from './dom';
 import { clickNativeTool, runtime, scheduleSync, sendEscape, showToast } from './runtime';
 
-const extraMenuInjected = new WeakSet<Element>();
+type DrawAssistKey = (typeof DRAW_ASSIST_DEFS)[number]['key'];
+
+const extraMenuMounts = new WeakMap<Element, { refreshAssist: () => void }>();
 
 export async function activateLassoTool(): Promise<boolean> {
   if (runtime.api) {
@@ -34,7 +36,7 @@ export async function activateLassoTool(): Promise<boolean> {
 }
 
 /* ================= Extra Tools Menu Injection (T3 Row + Drawing Assist) ================= */
-function getDrawAssistValue(key: (typeof DRAW_ASSIST_DEFS)[number]['key']): boolean {
+function getDrawAssistValue(key: DrawAssistKey): boolean {
   const st = silently(() => runtime.api?.getAppState());
   if (!st) {
     return key === 'arrowBinding' || key === 'midpointSnapping';
@@ -45,52 +47,65 @@ function getDrawAssistValue(key: (typeof DRAW_ASSIST_DEFS)[number]['key']): bool
   return Boolean(st.isMidpointSnappingEnabled);
 }
 
-function toggleDrawAssistOption(key: (typeof DRAW_ASSIST_DEFS)[number]['key']): boolean {
+function toggleDrawAssistOption(key: DrawAssistKey): {
+  next: boolean;
+  patch: Partial<Record<DrawAssistKey, boolean>>;
+} {
   const next = !getDrawAssistValue(key);
-  if (runtime.api) {
-    if (key === 'objectsSnapMode') {
-      runtime.api.updateScene({
-        appState: { objectsSnapModeEnabled: next, gridModeEnabled: false },
-        captureUpdate: CaptureUpdateAction.EVENTUALLY,
-      });
-    } else if (key === 'gridMode') {
-      runtime.api.updateScene({
-        appState: { gridModeEnabled: next, objectsSnapModeEnabled: false },
-        captureUpdate: CaptureUpdateAction.EVENTUALLY,
-      });
-    } else if (key === 'arrowBinding') {
-      runtime.api.updateScene({
-        appState: {
-          bindingPreference: next ? 'enabled' : 'disabled',
-          isBindingEnabled: next,
-        },
-        captureUpdate: CaptureUpdateAction.NEVER,
-      });
-    } else {
-      runtime.api.updateScene({
-        appState: { isMidpointSnappingEnabled: next },
-        captureUpdate: CaptureUpdateAction.NEVER,
-      });
-    }
+  let patch: Partial<Record<DrawAssistKey, boolean>>;
+  if (key === 'objectsSnapMode') {
+    patch = { objectsSnapMode: next, gridMode: false };
+    runtime.api?.updateScene({
+      appState: { objectsSnapModeEnabled: next, gridModeEnabled: false },
+      captureUpdate: CaptureUpdateAction.EVENTUALLY,
+    });
+  } else if (key === 'gridMode') {
+    patch = { gridMode: next, objectsSnapMode: false };
+    runtime.api?.updateScene({
+      appState: { gridModeEnabled: next, objectsSnapModeEnabled: false },
+      captureUpdate: CaptureUpdateAction.EVENTUALLY,
+    });
+  } else if (key === 'arrowBinding') {
+    patch = { arrowBinding: next };
+    runtime.api?.updateScene({
+      appState: {
+        bindingPreference: next ? 'enabled' : 'disabled',
+        isBindingEnabled: next,
+      },
+      captureUpdate: CaptureUpdateAction.NEVER,
+    });
+  } else {
+    patch = { midpointSnapping: next };
+    runtime.api?.updateScene({
+      appState: { isMidpointSnappingEnabled: next },
+      captureUpdate: CaptureUpdateAction.NEVER,
+    });
   }
-  return next;
+  return { next, patch };
 }
 
-function buildQuickOptionsAccordion(): HTMLElement {
+function buildQuickOptionsAccordion(): {
+  root: HTMLElement;
+  refreshAssist: (overrides?: Partial<Record<DrawAssistKey, boolean>>) => void;
+} {
   const t = getMessages(runtime.prefs.lang);
   const root = el('div', { class: 'exq-extra-options-root' });
   root.addEventListener('click', (e) => e.stopPropagation());
 
   const sep = el('div', { class: 'exq-extra-sep', 'aria-hidden': 'true' });
-  const assistSwitchMap = new Map<(typeof DRAW_ASSIST_DEFS)[number]['key'], HTMLButtonElement>();
+  const assistSwitchMap = new Map<DrawAssistKey, { row: HTMLElement; switchBtn: HTMLButtonElement }>();
   let acc: ReturnType<typeof createAccordionSection> | null = null;
 
-  const refreshAssist = () => {
+  const refreshAssist = (overrides?: Partial<Record<DrawAssistKey, boolean>>) => {
     acc?.setOpen(runtime.drawAssistAccOpen);
-    for (const [key, sw] of assistSwitchMap) {
-      const on = getDrawAssistValue(key);
-      sw.classList.toggle('exq-on', on);
-      sw.setAttribute('aria-pressed', String(on));
+    for (const [key, { row, switchBtn }] of assistSwitchMap) {
+      const on =
+        overrides && Object.prototype.hasOwnProperty.call(overrides, key)
+          ? Boolean(overrides[key])
+          : getDrawAssistValue(key);
+      switchBtn.classList.toggle('exq-on', on);
+      switchBtn.setAttribute('aria-pressed', String(on));
+      row.setAttribute('aria-checked', String(on));
     }
   };
 
@@ -115,18 +130,19 @@ function buildQuickOptionsAccordion(): HTMLElement {
       optValue: def.key,
       shortcut: def.shortcut || undefined,
       onClick: () => {
-        const nextVal = toggleDrawAssistOption(def.key);
-        refreshAssist();
-        showToast(`${label}: ${nextVal ? 'ON' : 'OFF'}`);
+        const { next, patch } = toggleDrawAssistOption(def.key);
+        refreshAssist(patch);
+        showToast(`${label}: ${next ? 'ON' : 'OFF'}`);
+        scheduleSync();
       },
     });
-    assistSwitchMap.set(def.key, switchBtn);
+    assistSwitchMap.set(def.key, { row, switchBtn });
     acc.nest.append(row);
   }
 
   refreshAssist();
   root.append(sep, acc.root);
-  return root;
+  return { root, refreshAssist };
 }
 
 function makeExtraT3Button(
@@ -229,7 +245,12 @@ function makeExtraMenuProxyItem(
 
 export function syncExtraToolsMenu(root: ParentNode = document): boolean {
   const menu = root.querySelector(EXCALIDRAW_SELECTORS.extraToolsMenuContainer);
-  if (!menu || extraMenuInjected.has(menu)) return false;
+  if (!menu) return false;
+  const mounted = extraMenuMounts.get(menu);
+  if (mounted) {
+    mounted.refreshAssist();
+    return false;
+  }
 
   const firstNative = menu.firstElementChild;
   if (!firstNative) return false;
@@ -256,8 +277,9 @@ export function syncExtraToolsMenu(root: ParentNode = document): boolean {
   }
 
   menu.insertBefore(topFrag, firstNative);
-  menu.append(buildQuickOptionsAccordion());
+  const { root: assistRoot, refreshAssist } = buildQuickOptionsAccordion();
+  menu.append(assistRoot);
 
-  extraMenuInjected.add(menu);
+  extraMenuMounts.set(menu, { refreshAssist });
   return true;
 }

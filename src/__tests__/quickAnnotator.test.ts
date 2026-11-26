@@ -4,7 +4,7 @@ import { cloneNativeToolbarIcon } from '../annotator/quickAnnotator/dom';
 import { syncExtraToolsMenu } from '../annotator/quickAnnotator/extraToolsMenu';
 import { syncUI } from '../annotator/quickAnnotator/index';
 import { syncMainMenu } from '../annotator/quickAnnotator/mainMenu';
-import { applyLanguage, runtime } from '../annotator/quickAnnotator/runtime';
+import { applyLanguage, attachExcalidrawAPI, runtime } from '../annotator/quickAnnotator/runtime';
 import { syncToolbar } from '../annotator/quickAnnotator/toolbar';
 import { syncTopRightBar } from '../annotator/quickAnnotator/topRightBar';
 import * as apiActions from '../annotator/apiActions';
@@ -16,7 +16,7 @@ import {
   savePrefs,
   syncDesktopUIMode,
 } from '../services/storageBridge';
-import { resetDomAndRuntime } from './testHelpers';
+import { createMockApi, resetDomAndRuntime } from './testHelpers';
 
 describe('quickAnnotator desktop DOM sync, language switcher, and layout modes', () => {
   beforeEach(() => {
@@ -200,5 +200,111 @@ describe('quickAnnotator desktop DOM sync, language switcher, and layout modes',
     // After full 1100ms from second click, .exq-done clears cleanly
     vi.advanceTimersByTime(800);
     expect(copyBtn.classList.contains('exq-done')).toBe(false);
+  });
+
+  it('updates draw-assist switches synchronously without 1-step lag under async updateScene', async () => {
+    let appState: Record<string, unknown> = {
+      viewBackgroundColor: '#ffffff',
+      selectedElementIds: {},
+      objectsSnapModeEnabled: false,
+      gridModeEnabled: false,
+      bindingPreference: 'enabled',
+      isBindingEnabled: true,
+      isMidpointSnappingEnabled: true,
+    };
+    const mockApi = createMockApi({
+      getAppState: () => appState,
+      updateScene: ({ appState: patch }: { appState?: Record<string, unknown> }) => {
+        if (patch) {
+          void Promise.resolve().then(() => {
+            appState = { ...appState, ...patch };
+          });
+        }
+      },
+    });
+    attachExcalidrawAPI(mockApi);
+
+    document.body.innerHTML = `
+      <div class="dropdown-menu-container">
+        <button data-testid="toolbar-image"></button>
+      </div>
+    `;
+    expect(syncExtraToolsMenu()).toBe(true);
+
+    const getBtn = (key: string) =>
+      document.querySelector<HTMLButtonElement>(`[data-exq-assist-opt="${key}"]`)!;
+    const expectSwitch = (key: string, expected: boolean) => {
+      const btn = getBtn(key);
+      const row = btn.closest('[role="menuitemcheckbox"]')!;
+      expect(btn.classList.contains('exq-on')).toBe(expected);
+      expect(btn.getAttribute('aria-pressed')).toBe(String(expected));
+      expect(row.getAttribute('aria-checked')).toBe(String(expected));
+    };
+
+    expectSwitch('objectsSnapMode', false);
+    expectSwitch('gridMode', false);
+    expectSwitch('arrowBinding', true);
+    expectSwitch('midpointSnapping', true);
+
+    getBtn('objectsSnapMode').closest('[role="menuitemcheckbox"]')!.dispatchEvent(
+      new MouseEvent('click', { bubbles: true, cancelable: true }),
+    );
+    expectSwitch('objectsSnapMode', true);
+    expectSwitch('gridMode', false);
+
+    await Promise.resolve();
+    getBtn('gridMode').closest('[role="menuitemcheckbox"]')!.dispatchEvent(
+      new MouseEvent('click', { bubbles: true, cancelable: true }),
+    );
+    expectSwitch('gridMode', true);
+    expectSwitch('objectsSnapMode', false);
+
+    await Promise.resolve();
+    getBtn('gridMode').closest('[role="menuitemcheckbox"]')!.dispatchEvent(
+      new MouseEvent('click', { bubbles: true, cancelable: true }),
+    );
+    expectSwitch('gridMode', false);
+
+    await Promise.resolve();
+    getBtn('arrowBinding').closest('[role="menuitemcheckbox"]')!.dispatchEvent(
+      new MouseEvent('click', { bubbles: true, cancelable: true }),
+    );
+    expectSwitch('arrowBinding', false);
+
+    getBtn('midpointSnapping').closest('[role="menuitemcheckbox"]')!.dispatchEvent(
+      new MouseEvent('click', { bubbles: true, cancelable: true }),
+    );
+    expectSwitch('midpointSnapping', false);
+  });
+
+  it('re-syncs already-mounted draw-assist switches when appState changes externally', () => {
+    const appState: Record<string, unknown> = {
+      viewBackgroundColor: '#ffffff',
+      selectedElementIds: {},
+      objectsSnapModeEnabled: false,
+      gridModeEnabled: false,
+      bindingPreference: 'enabled',
+      isBindingEnabled: true,
+      isMidpointSnappingEnabled: true,
+    };
+    attachExcalidrawAPI(createMockApi({ getAppState: () => appState }));
+
+    document.body.innerHTML = `
+      <div class="dropdown-menu-container">
+        <button data-testid="toolbar-image"></button>
+      </div>
+    `;
+    expect(syncExtraToolsMenu()).toBe(true);
+
+    appState.objectsSnapModeEnabled = true;
+    appState.bindingPreference = 'disabled';
+    expect(syncExtraToolsMenu()).toBe(false);
+
+    const snapBtn = document.querySelector<HTMLButtonElement>('[data-exq-assist-opt="objectsSnapMode"]')!;
+    const bindBtn = document.querySelector<HTMLButtonElement>('[data-exq-assist-opt="arrowBinding"]')!;
+    expect(snapBtn.classList.contains('exq-on')).toBe(true);
+    expect(snapBtn.getAttribute('aria-pressed')).toBe('true');
+    expect(bindBtn.classList.contains('exq-on')).toBe(false);
+    expect(bindBtn.getAttribute('aria-pressed')).toBe('false');
   });
 });
