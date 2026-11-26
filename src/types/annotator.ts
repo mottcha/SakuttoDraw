@@ -44,7 +44,7 @@ export interface Prefs {
   redactOpts: RedactOpts;
 }
 
-export type CjkLang = 'ja' | 'jaStandard' | 'jaPop' | 'ko' | 'zh';
+export type CjkLang = 'ja' | 'jaStandard' | 'jaPop' | 'jaCode' | 'ko' | 'zh';
 export type CjkSetStatus = 'uninstalled' | 'downloading' | 'installed';
 
 export interface CjkFontSetMeta {
@@ -79,8 +79,11 @@ export interface JpFontManifest {
   source: string;
   totalBytes: number;
   chunks: JpFontChunkMeta[];
-  mPlusRounded?: FontPackManifest;
+  bizUdpGothic?: FontPackManifest;
   mochiyPop?: FontPackManifest;
+  sakuttoCode?: FontPackManifest;
+  sakuttoCodeLgLatin?: JpFontChunkMeta;
+  comicShannsMono500?: FontPackManifest;
   cascadiaMono?: CascadiaMonoManifest;
   cascadiaCodeRange?: string;
 }

@@ -1,5 +1,5 @@
 /**
- * Upstream DOM contract for `@excalidraw/excalidraw` (`0.18.0-2c3dcc0`).
+ * Upstream DOM contract for `@excalidraw/excalidraw` (`0.18.0-dabd83c`).
  * Centralizing selectors, `data-testid`s, and tool mappings isolates DOM changes
  * during upstream upgrades to this module (and `src/styles/excalidraw-overrides.css`).
  */

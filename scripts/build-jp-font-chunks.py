@@ -18,6 +18,9 @@ import pathlib
 import sys
 from typing import Iterable
 
+from fontTools.pens.recordingPen import DecomposingRecordingPen
+from fontTools.pens.transformPen import TransformPen
+from fontTools.pens.ttGlyphPen import TTGlyphPen
 from fontTools.subset import Options, Subsetter
 from fontTools.ttLib import TTFont
 
@@ -64,8 +67,11 @@ def build_jis_x_0208_kanji_tiers() -> tuple[list[int], list[int]]:
     return level1, level2
 
 
-def build_latin_and_symbols(available_cps: set[int]) -> list[int]:
-    """Basic Latin, Latin-1, Latin-Ext, general punctuation, arrows, and math symbols."""
+def build_latin_and_symbols(
+    available_cps: set[int],
+    include_box_drawing: bool = False,
+) -> list[int]:
+    """Basic Latin, Latin-1, Latin-Ext, general punctuation, arrows, math, and optional Box Drawing."""
     ranges = [
         (0x0020, 0x007E),  # Basic Latin
         (0x00A0, 0x00FF),  # Latin-1 Supplement
@@ -77,6 +83,12 @@ def build_latin_and_symbols(available_cps: set[int]) -> list[int]:
         (0x2190, 0x21FF),  # Arrows
         (0x2200, 0x22FF),  # Mathematical Operators
     ]
+    if include_box_drawing:
+        ranges.extend([
+            (0x2500, 0x257F),  # Box Drawing
+            (0x2580, 0x259F),  # Block Elements
+            (0x25A0, 0x25FF),  # Geometric Shapes
+        ])
     cps: list[int] = []
     for start, end in ranges:
         for cp in range(start, end + 1):
@@ -149,13 +161,38 @@ def inspect_valid_codepoints(font: TTFont) -> set[int]:
     return set(cmap.keys())
 
 
-def subset_to_woff2_bytes(src_path: pathlib.Path, codepoints: list[int]) -> bytes:
+def _rename_family_records(font: TTFont, family_name: str) -> None:
+    if "name" not in font:
+        return
+    ps_name = family_name.replace(" ", "")
+    full_name = f"{family_name} Regular"
+    for rec in font["name"].names:
+        if rec.nameID in (1, 16):
+            val = family_name
+        elif rec.nameID == 4:
+            val = full_name
+        elif rec.nameID == 6:
+            val = ps_name
+        else:
+            continue
+        rec.string = val.encode("utf-16-be") if rec.isUnicode() else val.encode("latin-1", "replace")
+
+
+def subset_to_woff2_bytes(
+    src_path: pathlib.Path,
+    codepoints: list[int],
+    keep_ligatures: bool = False,
+    rename_family: str = "",
+) -> bytes:
     font = TTFont(str(src_path), recalcBBoxes=False, recalcTimestamp=False)
     options = Options()
     options.flavor = "woff2"
-    options.layout_features = ["kern", "ccmp", "locl", "mark", "mkmk"]
+    features = ["kern", "ccmp", "locl", "mark", "mkmk"]
+    if keep_ligatures:
+        features.extend(["calt", "liga"])
+    options.layout_features = features
     # Keep copyright, family, version, and SIL OFL 1.1 license strings in every chunk
-    options.name_IDs = [0, 1, 2, 4, 5, 6, 13, 14]
+    options.name_IDs = [0, 1, 2, 4, 5, 6, 13, 14, 16]
     options.name_legacy = False
     options.notdef_outline = True
     options.recalc_bounds = False
@@ -166,10 +203,115 @@ def subset_to_woff2_bytes(src_path: pathlib.Path, codepoints: list[int]) -> byte
     subsetter.populate(unicodes=codepoints)
     subsetter.subset(font)
 
+    if rename_family:
+        _rename_family_records(font, rename_family)
+
     buf = io.BytesIO()
     font.save(buf)
     font.close()
     return buf.getvalue()
+
+
+def scale_mono_x_dir(
+    src_dir: pathlib.Path,
+    out_dir: pathlib.Path,
+    prefix: str,
+    orig_adv: int,
+    target_adv: int,
+    rename_family: str,
+    source_label: str,
+) -> int:
+    if not src_dir.is_dir():
+        print(f"ERROR: Source WOFF2 directory not found: {src_dir}", file=sys.stderr)
+        return 1
+    src_files = sorted(src_dir.glob("*.woff2"))
+    if not src_files:
+        print(f"ERROR: No .woff2 files found in: {src_dir}", file=sys.stderr)
+        return 1
+
+    sx = float(target_adv) / float(orig_adv)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for old_file in out_dir.glob("*.woff2"):
+        old_file.unlink()
+
+    manifest_chunks = []
+    total_bytes = 0
+    for idx, src_path in enumerate(src_files):
+        font = TTFont(str(src_path))
+        glyf = font["glyf"]
+        hmtx = font["hmtx"]
+        glyph_set = font.getGlyphSet()
+        new_glyphs = {}
+        new_metrics = {}
+
+        for gname in font.getGlyphOrder():
+            orig_g = glyf[gname]
+            adv, orig_lsb = hmtx[gname]
+            new_adv = target_adv if adv == orig_adv else round(adv * sx)
+
+            if orig_g.numberOfContours == 0:
+                new_glyphs[gname] = orig_g
+                new_metrics[gname] = (new_adv, round(orig_lsb * sx))
+                continue
+
+            rec = DecomposingRecordingPen(glyph_set)
+            glyph_set[gname].draw(rec)
+            pen = TTGlyphPen(None)
+            tpen = TransformPen(pen, (sx, 0, 0, 1.0, 0, 0))
+            rec.replay(tpen)
+            built = pen.glyph()
+            built.recalcBounds(glyf)
+            new_glyphs[gname] = built
+            new_lsb = getattr(built, "xMin", round(orig_lsb * sx))
+            new_metrics[gname] = (new_adv, new_lsb)
+
+        for gname, g in new_glyphs.items():
+            glyf[gname] = g
+            hmtx[gname] = new_metrics[gname]
+
+        if rename_family:
+            _rename_family_records(font, rename_family)
+
+        font["hhea"].advanceWidthMax = max(adv for adv, _ in hmtx.metrics.values())
+        if "OS/2" in font:
+            font["OS/2"].xAvgCharWidth = target_adv
+        font.flavor = "woff2"
+        buf = io.BytesIO()
+        font.save(buf)
+        font.close()
+
+        woff2_bytes = buf.getvalue()
+        digest = hashlib.sha256(woff2_bytes).hexdigest()[:8]
+        filename = f"{prefix}-{idx:02d}-{digest}.woff2"
+        out_path = out_dir / filename
+        out_path.write_bytes(woff2_bytes)
+
+        probe = TTFont(io.BytesIO(woff2_bytes))
+        valid_cps = inspect_valid_codepoints(probe)
+        probe.close()
+
+        size = len(woff2_bytes)
+        total_bytes += size
+        manifest_chunks.append(
+            {
+                "file": f"fonts/{prefix}/{filename}",
+                "unicodeRange": serialize_unicode_range(valid_cps),
+                "bytes": size,
+                "glyphCount": len(valid_cps),
+            }
+        )
+
+    manifest = {
+        "source": source_label or f"{rename_family or prefix}",
+        "totalBytes": total_bytes,
+        "chunks": manifest_chunks,
+    }
+    (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    print(
+        f"[build-jp-font-chunks] Scaled {len(manifest_chunks)} {prefix} chunks "
+        f"(adv {orig_adv}->{target_adv}, {total_bytes / 1024:.1f} KB) in {out_dir}"
+    )
+    return 0
 
 
 def extract_woff2_range(
@@ -220,7 +362,32 @@ def main() -> int:
     parser.add_argument(
         "--include-latin",
         action="store_true",
-        help="Include a 00-latin chunk for full-replacement fonts (e.g. M PLUS Rounded 1c)",
+        help="Include a 00-latin chunk for full-replacement fonts (e.g. BizUdpGothic)",
+    )
+    parser.add_argument(
+        "--include-box-drawing",
+        action="store_true",
+        help="Include Box Drawing / Block Elements / Geometric Shapes (U+2500-25FF) in Latin chunk",
+    )
+    parser.add_argument(
+        "--keep-ligatures",
+        action="store_true",
+        help="Retain GSUB calt and liga layout features when subsetting",
+    )
+    parser.add_argument(
+        "--rename-family",
+        default="",
+        help="Rewrite nameID 1/4/6/16 to this family name for RFN-compliant derivative subsets",
+    )
+    parser.add_argument(
+        "--latin-only",
+        action="store_true",
+        help="Generate only the Latin chunk without deleting other chunks or requiring JIS kanji",
+    )
+    parser.add_argument(
+        "--chunk-tag",
+        default="latin",
+        help="Tag used in filename when --latin-only is set (default: latin)",
     )
     parser.add_argument(
         "--strict-jis-count",
@@ -230,7 +397,10 @@ def main() -> int:
     parser.add_argument("--kanji-per-chunk", type=int, default=140, help="Kanji count per WOFF2 chunk")
     parser.add_argument("--extract-range", help="Inspect an existing WOFF2 and output its unicodeRange manifest")
     parser.add_argument("--file-ref", default="", help="Relative file path for --extract-range manifest")
-    parser.add_argument("--output-manifest", default="", help="Output JSON path for --extract-range")
+    parser.add_argument("--output-manifest", default="", help="Output JSON path for --extract-range or --latin-only")
+    parser.add_argument("--scale-mono-x-dir", default="", help="Directory of WOFF2 files to horizontally scale cleanly to exact target-adv")
+    parser.add_argument("--orig-adv", type=int, default=550, help="Original advance width for --scale-mono-x-dir")
+    parser.add_argument("--target-adv", type=int, default=500, help="Target advance width for --scale-mono-x-dir")
     args = parser.parse_args()
 
     if args.extract_range:
@@ -240,17 +410,29 @@ def main() -> int:
             pathlib.Path(args.output_manifest).resolve() if args.output_manifest else None,
         )
 
-    if not args.input:
-        print("ERROR: --input is required unless --extract-range is used", file=sys.stderr)
-        return 1
-
     prefix = args.prefix.strip() or "SetoJP"
-    src_path = pathlib.Path(args.input).resolve()
     out_dir = (
         pathlib.Path(args.output_dir).resolve()
         if args.output_dir
         else (pathlib.Path(__file__).resolve().parent.parent / "assets" / "fonts" / prefix).resolve()
     )
+
+    if args.scale_mono_x_dir:
+        return scale_mono_x_dir(
+            pathlib.Path(args.scale_mono_x_dir).resolve(),
+            out_dir,
+            prefix,
+            args.orig_adv,
+            args.target_adv,
+            args.rename_family,
+            args.source_label,
+        )
+
+    if not args.input:
+        print("ERROR: --input is required unless --extract-range or --scale-mono-x-dir is used", file=sys.stderr)
+        return 1
+
+    src_path = pathlib.Path(args.input).resolve()
     if not src_path.is_file():
         print(f"ERROR: Source font not found: {src_path}", file=sys.stderr)
         return 1
@@ -262,12 +444,49 @@ def main() -> int:
     valid_cps = inspect_valid_codepoints(probe)
     probe.close()
 
+    if args.latin_only:
+        latin_cps = build_latin_and_symbols(valid_cps, include_box_drawing=args.include_box_drawing)
+        if not latin_cps:
+            print("ERROR: No Latin glyphs found for --latin-only", file=sys.stderr)
+            return 1
+        tag = args.chunk_tag.strip() or "latin"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        for old_file in out_dir.glob(f"{prefix}-*-{tag}-*.woff2"):
+            old_file.unlink()
+        woff2_bytes = subset_to_woff2_bytes(
+            src_path,
+            latin_cps,
+            keep_ligatures=args.keep_ligatures,
+            rename_family=args.rename_family,
+        )
+        digest = hashlib.sha256(woff2_bytes).hexdigest()[:8]
+        filename = f"{prefix}-00-{tag}-{digest}.woff2"
+        (out_dir / filename).write_bytes(woff2_bytes)
+        payload = {
+            "file": f"fonts/{prefix}/{filename}",
+            "unicodeRange": serialize_unicode_range(latin_cps),
+            "bytes": len(woff2_bytes),
+            "glyphCount": len(latin_cps),
+        }
+        if args.output_manifest:
+            out_m = pathlib.Path(args.output_manifest).resolve()
+            out_m.parent.mkdir(parents=True, exist_ok=True)
+            out_m.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        else:
+            print(json.dumps(payload, indent=2))
+        print(f"[build-jp-font-chunks] Generated latin-only {filename} ({len(latin_cps)} chars, {len(woff2_bytes) / 1024:.1f} KB) in {out_dir}")
+        return 0
+
     for cp, ch in REQUIRED_VERIFY_CODEPOINTS.items():
         if cp not in valid_cps:
             print(f"ERROR: Required glyph {ch} (U+{cp:04X}) missing or empty in source font", file=sys.stderr)
             return 1
 
-    latin_cps = build_latin_and_symbols(valid_cps) if args.include_latin else []
+    latin_cps = (
+        build_latin_and_symbols(valid_cps, include_box_drawing=args.include_box_drawing)
+        if args.include_latin
+        else []
+    )
     latin_set = set(latin_cps)
 
     core_cps = [cp for cp in build_core_kana_and_symbols(valid_cps) if cp not in latin_set]
@@ -326,7 +545,12 @@ def main() -> int:
     total_bytes = 0
 
     for idx, (tag, grp) in enumerate(chunk_groups):
-        woff2_bytes = subset_to_woff2_bytes(src_path, grp)
+        woff2_bytes = subset_to_woff2_bytes(
+            src_path,
+            grp,
+            keep_ligatures=args.keep_ligatures,
+            rename_family=args.rename_family,
+        )
         digest = hashlib.sha256(woff2_bytes).hexdigest()[:8]
         filename = f"{prefix}-{idx:02d}-{tag}-{digest}.woff2"
         (out_dir / filename).write_bytes(woff2_bytes)

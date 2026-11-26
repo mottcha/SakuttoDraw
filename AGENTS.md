@@ -34,7 +34,7 @@ SakuttoDraw を保守・改修する際の設計方針と不変条件（Invarian
 
 ## 2. 依存固定
 
-- `@excalidraw/excalidraw` は `0.18.0-2c3dcc0` に厳密固定する（`^`/`~` なし）。別バージョンへ移行する際は `src/excalidraw/`（`domContract.ts`, `fontsAdapter.ts`）、`src/styles/excalidraw-overrides.css`、`scripts/sync-excalidraw-assets.mjs` を起点に再検証する。
+- `@excalidraw/excalidraw` は `0.18.0-dabd83c` に厳密固定する（`^`/`~` なし）。別バージョンへ移行する際は `src/excalidraw/`（`domContract.ts`, `fontsAdapter.ts`）、`src/styles/excalidraw-overrides.css`、`scripts/sync-excalidraw-assets.mjs` を起点に再検証する。
 - `package.json` の `"overrides": { "nanoid@3.3.3": "^3.3.20" }` はピンポイント指定を維持する（グローバル指定にすると `@excalidraw/mermaid-to-excalidraw` の `nanoid@4` 依存と競合する）。
 
 ## 3. CSP と外部通信ゼロ
@@ -60,7 +60,7 @@ SakuttoDraw を保守・改修する際の設計方針と不変条件（Invarian
 ## 6. PWA・フォントキャッシュ・多言語
 
 - `vite.config.ts` の `base: './'` およびマニフェストの `start_url: './'`, `scope: './'`、`lang: 'en'`、PNG アイコンを維持し、サブパス（`/SakuttoDraw/`）でも同一ビルドで動作させる。
-- `fonts/Xiaolai/**` および `fonts/SetoJP/**` はプリキャッシュせず、`runtimeCaching`（`CacheFirst`, `sakuttodraw-cjk-fonts`）＋環境設定内の手動 DL / 削除とする。`manifestTransforms` で未使用チャンク（`CodeMirrorEditor-*`, `subset-shared*`, `subset-worker*`、5 ロケール以外の翻訳）を除外する。
+- `fonts/Xiaolai/**`・`fonts/SetoJP/**`・`fonts/BizUdpGothic/**`・`fonts/MochiyPop/**`・`fonts/SakuttoCode/**` はプリキャッシュせず、`runtimeCaching`（`CacheFirst`, `sakuttodraw-cjk-fonts`）＋環境設定内の手動 DL / 削除とする。`manifestTransforms` で未使用チャンク（`CodeMirrorEditor-*`, `subset-shared*`, `subset-worker*`、5 ロケール以外の翻訳）を除外する。
 - `deleteLanguageFontSet` では `computeExclusiveFilesForDeletion` で他言語セットとの共有チャンクを保護し、`isLanguageSetCached` は `cache.keys()` で全チャンクを照合する。
 - UI 文言の追加・変更時は 5 ロケール（`en`, `ja-JP`, `zh-CN`, `zh-TW`, `ko-KR`）すべてを更新する。
 

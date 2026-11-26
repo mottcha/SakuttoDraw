@@ -19,10 +19,11 @@ let snapshot: CjkUiSnapshot = {
     ja: 'uninstalled',
     jaStandard: 'uninstalled',
     jaPop: 'uninstalled',
+    jaCode: 'uninstalled',
     ko: 'uninstalled',
     zh: 'uninstalled',
   },
-  progress: { ja: 0, jaStandard: 0, jaPop: 0, ko: 0, zh: 0 },
+  progress: { ja: 0, jaStandard: 0, jaPop: 0, jaCode: 0, ko: 0, zh: 0 },
 };
 
 const listeners = new Set<() => void>();

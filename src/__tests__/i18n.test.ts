@@ -37,6 +37,7 @@ describe('i18n (en, ja-JP, zh-CN, zh-TW, ko-KR)', () => {
       expect(m.cjkLangName.ja.length).toBeGreaterThan(0);
       expect(m.cjkLangName.jaStandard.length).toBeGreaterThan(0);
       expect(m.cjkLangName.jaPop.length).toBeGreaterThan(0);
+      expect(m.cjkLangName.jaCode.length).toBeGreaterThan(0);
       expect(m.cjkLangName.ko.length).toBeGreaterThan(0);
       expect(m.cjkLangName.zh.length).toBeGreaterThan(0);
     }

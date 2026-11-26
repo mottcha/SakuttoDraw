@@ -9,7 +9,7 @@ Below are the copyright notices and license texts for the bundled components.
 1. Bundled Libraries
 --------------------------------------------------------------------------------
 
-### @excalidraw/excalidraw (0.18.0-2c3dcc0)
+### @excalidraw/excalidraw (0.18.0-dabd83c)
 https://github.com/excalidraw/excalidraw
 License: MIT
 
@@ -765,7 +765,8 @@ The following fonts are self-hosted in this distribution:
 - Excalifont (fonts/Excalifont/) — Copyright (c) 2024 Excalidraw — SIL Open Font License 1.1
 - Xiaolai / 小赖字体 (fonts/Xiaolai/) — SIL Open Font License 1.1
 - KosefontP-JP / SetoFont (fonts/SetoJP/) — Copyright (c) 2003-2014 Nozomi Seto (瀬戸のぞみ), Copyright (c) 2020-2024 LXGW — SIL Open Font License 1.1
-- M PLUS Rounded 1c (fonts/MPlusRounded/) — Copyright 2016 The Rounded M+ Project Authors — SIL Open Font License 1.1
+- BIZ UDPGothic Bold (fonts/BizUdpGothic/) — Copyright 2022 The BIZ UDGothic Project Authors (https://github.com/googlefonts/morisawa-biz-ud-gothic) — SIL Open Font License 1.1
+- SakuttoCode (fonts/SakuttoCode/, subset of UDEV Gothic) — Copyright 2022 Yuko Otawara / The JetBrains Mono Project Authors / The BIZ UDGothic Project Authors / Ryan L McIntyre (Nerd Fonts) — SIL Open Font License 1.1
 - Mochiy Pop P One (fonts/MochiyPop/) — Copyright 2020 The Mochiypop Project Authors (https://github.com/fontdasu/Mochiypop) — SIL Open Font License 1.1
 - Virgil (fonts/Virgil/) — Copyright (c) Excalidraw — SIL Open Font License 1.1
 - Assistant (fonts/Assistant/) — Copyright 2016 The Assistant Project Authors — SIL Open Font License 1.1
@@ -774,7 +775,7 @@ The following fonts are self-hosted in this distribution:
 - Nunito (fonts/Nunito/) — Copyright 2014 The Nunito Project Authors — SIL Open Font License 1.1
 - Lilita One (fonts/Lilita/) — Copyright (c) 2011 Juan Montoreano — SIL Open Font License 1.1
 - Liberation Sans (fonts/Liberation/) — Copyright (c) 2012 Red Hat, Inc. — SIL Open Font License 1.1
-- Comic Shanns (fonts/ComicShanns/) — Copyright (c) 2018 Shannon Miwa — MIT License
+- Comic Shanns (fonts/ComicShanns/) & Comic Shanns Narrow500 (fonts/ComicShannsMono500/) — Copyright (c) 2018 Shannon Miwa, Copyright (c) 2023 Jesus Gonzalez — MIT License
 
 ### SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
 

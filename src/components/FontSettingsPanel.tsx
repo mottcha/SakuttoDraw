@@ -41,7 +41,7 @@ const FONT_SLOT_DEFS: readonly FontSlotDef[] = [
       </span>
     ),
     getLabel: (t) => t.fontLabelNormal,
-    getSubtitle: (preferJp) => (preferJp ? 'M PLUS Rounded 1c' : 'Nunito'),
+    getSubtitle: (preferJp) => (preferJp ? 'BIZ UDPGothic Bold' : 'Nunito'),
   },
   {
     id: 'pop',
@@ -56,12 +56,14 @@ const FONT_SLOT_DEFS: readonly FontSlotDef[] = [
   },
   {
     id: 'code',
-    packWhenJp: 'jaStandard',
+    packWhenJp: 'jaCode',
     renderIcon: () => <Icon name="code" size={13} strokeWidth={1.9} />,
     getLabel: (t) => t.fontLabelCode,
     getSubtitle: (preferJp, codeLigatures) => {
-      const base = codeLigatures ? 'Cascadia Code' : 'Cascadia Mono';
-      return preferJp ? `${base} + M PLUS Rounded 1c` : base;
+      if (preferJp) {
+        return codeLigatures ? 'UDEV Gothic LG (Subset)' : 'UDEV Gothic (Subset)';
+      }
+      return codeLigatures ? 'Cascadia Code' : 'Cascadia Mono';
     },
   },
   {
@@ -69,7 +71,7 @@ const FONT_SLOT_DEFS: readonly FontSlotDef[] = [
     packWhenJp: 'ja',
     renderIcon: () => <Icon name="code" size={13} strokeWidth={1.9} />,
     getLabel: (t) => t.fontLabelCodeHandDrawn,
-    getSubtitle: (preferJp) => (preferJp ? 'Comic Shanns + SetoJP' : 'Comic Shanns'),
+    getSubtitle: (preferJp) => (preferJp ? 'Comic Shanns (1:2) + SetoJP' : 'Comic Shanns'),
   },
 ] as const;
 
@@ -100,10 +102,10 @@ const FONT_CREDITS: readonly FontCreditEntry[] = [
     getUsage: (t) => `${t.fontLabelHandDrawn} / ${t.fontLicenseCjkFallback}`,
   },
   {
-    name: 'M PLUS Rounded 1c',
-    author: 'The Rounded M+ Project Authors',
+    name: 'BIZ UDPGothic (Bold)',
+    author: 'The BIZ UDGothic Project Authors (Morisawa Inc.)',
     license: 'SIL OFL 1.1',
-    getUsage: (t) => `${t.fontLabelNormal} / ${t.fontLabelCode}`,
+    getUsage: (t) => t.fontLabelNormal,
   },
   {
     name: 'Nunito',
@@ -124,14 +126,20 @@ const FONT_CREDITS: readonly FontCreditEntry[] = [
     getUsage: (t) => t.fontLabelPop,
   },
   {
+    name: 'SakuttoCode (subset of UDEV Gothic)',
+    author: 'Yuko Otawara / JetBrains Mono / BIZ UDGothic / Nerd Fonts',
+    license: 'SIL OFL 1.1',
+    getUsage: (t) => t.fontLabelCode,
+  },
+  {
     name: 'Cascadia Code / Mono',
     author: 'Microsoft Corporation',
     license: 'SIL OFL 1.1',
     getUsage: (t) => t.fontLabelCode,
   },
   {
-    name: 'Comic Shanns',
-    author: 'Shannon Miwa',
+    name: 'Comic Shanns / Narrow500',
+    author: 'Shannon Miwa / Jesus Gonzalez / SakuttoDraw',
     license: 'MIT License',
     getUsage: (t) => t.fontLabelCodeHandDrawn,
   },

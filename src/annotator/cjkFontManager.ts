@@ -4,7 +4,7 @@ import { silently } from '../utils/common';
 
 export const CJK_FONT_CACHE_NAME = 'sakuttodraw-cjk-fonts';
 export const LS_CJK_INSTALLED_KEY = 'exq-cjk-installed-sets';
-export const CJK_LANG_ORDER: readonly CjkLang[] = ['ja', 'jaStandard', 'jaPop', 'ko', 'zh'] as const;
+export const CJK_LANG_ORDER: readonly CjkLang[] = ['ja', 'jaStandard', 'jaPop', 'jaCode', 'ko', 'zh'] as const;
 
 const VALID_CJK_LANGS = new Set<string>(CJK_LANG_ORDER);
 

@@ -120,11 +120,11 @@ export function syncExcalidrawAssets(projectRoot = rootDir) {
   fs.cpSync(srcFontsDir, destFontsDir, { recursive: true, force: true });
 
   const setoJp = syncFontPackDir(projectRoot, destFontsDir, 'SetoJP', 'KosefontP-JP');
-  const mPlusRounded = syncFontPackDir(
+  const bizUdpGothic = syncFontPackDir(
     projectRoot,
     destFontsDir,
-    'MPlusRounded',
-    'M PLUS Rounded 1c Medium (SIL OFL 1.1)',
+    'BizUdpGothic',
+    'BIZ UDPGothic Bold (SIL OFL 1.1)',
   );
   const mochiyPop = syncFontPackDir(
     projectRoot,
@@ -132,7 +132,39 @@ export function syncExcalidrawAssets(projectRoot = rootDir) {
     'MochiyPop',
     'Mochiy Pop P One Regular (SIL OFL 1.1)',
   );
+  const sakuttoCode = syncFontPackDir(
+    projectRoot,
+    destFontsDir,
+    'SakuttoCode',
+    'SakuttoCode (subset of UDEV Gothic, SIL OFL 1.1)',
+  );
+  const lgMetaPath = path.join(projectRoot, 'assets', 'fonts', 'SakuttoCode', 'latin-lg-manifest.json');
+  if (!fs.existsSync(lgMetaPath)) {
+    throw new Error(`SakuttoCode LG manifest not found: ${lgMetaPath}`);
+  }
+  const lgRaw = JSON.parse(fs.readFileSync(lgMetaPath, 'utf8'));
+  const lgFileName = path.basename(String(lgRaw.file || ''));
+  const lgSrcFile = path.join(projectRoot, 'assets', 'fonts', 'SakuttoCode', lgFileName);
+  if (!fs.existsSync(lgSrcFile)) {
+    throw new Error(`Missing SakuttoCode LG font file: ${lgSrcFile}`);
+  }
+  fs.copyFileSync(lgSrcFile, path.join(destFontsDir, 'SakuttoCode', lgFileName));
+  const sakuttoCodeLgLatin = {
+    file: `fonts/SakuttoCode/${lgFileName}`,
+    unicodeRange: String(lgRaw.unicodeRange || ''),
+    bytes: fs.statSync(lgSrcFile).size,
+  };
+  const comicShannsMono500 = syncFontPackDir(
+    projectRoot,
+    destFontsDir,
+    'ComicShannsMono500',
+    'Comic Shanns Narrow500 (modified from Comic Shanns, MIT License)',
+  );
   const { cascadiaMono, cascadiaCodeRange } = syncCascadiaMono(projectRoot, destFontsDir);
+
+  for (const staleFolder of ['MPlusRounded', 'MPlusU', 'MPlus1Code']) {
+    fs.rmSync(path.join(destFontsDir, staleFolder), { recursive: true, force: true });
+  }
 
   // Scan chunk-*.js without relying on minified array variable names (e.g. "Vo")
   const jsFiles = fs
@@ -160,8 +192,9 @@ export function syncExcalidrawAssets(projectRoot = rootDir) {
 
   const sets = {
     ja: { label: '日本語（手書き）', files: [], totalBytes: 0 },
-    jaStandard: { label: '日本語（標準・コード）', files: [], totalBytes: 0 },
+    jaStandard: { label: '日本語（標準）', files: [], totalBytes: 0 },
     jaPop: { label: '日本語（ポップ）', files: [], totalBytes: 0 },
+    jaCode: { label: '日本語（コード）', files: [], totalBytes: 0 },
     ko: { label: '한국어', files: [], totalBytes: 0 },
     zh: { label: '中文', files: [], totalBytes: 0 },
   };
@@ -169,16 +202,18 @@ export function syncExcalidrawAssets(projectRoot = rootDir) {
     ja: new Set(),
     jaStandard: new Set(),
     jaPop: new Set(),
+    jaCode: new Set(),
     ko: new Set(),
     zh: new Set(),
   };
 
-  for (const [setKey, pack] of [
-    ['ja', setoJp],
-    ['jaStandard', mPlusRounded],
-    ['jaPop', mochiyPop],
+  for (const [setKey, chunks] of [
+    ['ja', setoJp.chunks],
+    ['jaStandard', bizUdpGothic.chunks],
+    ['jaPop', mochiyPop.chunks],
+    ['jaCode', [sakuttoCodeLgLatin, ...sakuttoCode.chunks]],
   ]) {
-    for (const chunk of pack.chunks) {
+    for (const chunk of chunks) {
       if (!seenFiles[setKey].has(chunk.file)) {
         seenFiles[setKey].add(chunk.file);
         sets[setKey].files.push(chunk.file);
@@ -228,11 +263,12 @@ export function syncExcalidrawAssets(projectRoot = rootDir) {
     sets.ja.files.length === 0 ||
     sets.jaStandard.files.length === 0 ||
     sets.jaPop.files.length === 0 ||
+    sets.jaCode.files.length === 0 ||
     sets.ko.files.length === 0 ||
     sets.zh.files.length === 0
   ) {
     throw new Error(
-      `Unexpected empty CJK font set detected (ja=${sets.ja.files.length}, jaStandard=${sets.jaStandard.files.length}, jaPop=${sets.jaPop.files.length}, ko=${sets.ko.files.length}, zh=${sets.zh.files.length})`,
+      `Unexpected empty CJK font set detected (ja=${sets.ja.files.length}, jaStandard=${sets.jaStandard.files.length}, jaPop=${sets.jaPop.files.length}, jaCode=${sets.jaCode.files.length}, ko=${sets.ko.files.length}, zh=${sets.zh.files.length})`,
     );
   }
 
@@ -248,8 +284,11 @@ export function syncExcalidrawAssets(projectRoot = rootDir) {
         source: setoJp.source,
         totalBytes: setoJp.totalBytes,
         chunks: setoJp.chunks,
-        mPlusRounded,
+        bizUdpGothic,
         mochiyPop,
+        sakuttoCode,
+        sakuttoCodeLgLatin,
+        comicShannsMono500,
         cascadiaMono,
         cascadiaCodeRange,
       },
@@ -260,9 +299,18 @@ export function syncExcalidrawAssets(projectRoot = rootDir) {
   );
 
   console.log(
-    `[sync-excalidraw-assets] Synced fonts (SetoJP, MPlusRounded, MochiyPop, CascadiaMono) and generated manifests (ja=${sets.ja.files.length}, jaStandard=${sets.jaStandard.files.length}, jaPop=${sets.jaPop.files.length}, ko=${sets.ko.files.length}, zh=${sets.zh.files.length})`,
+    `[sync-excalidraw-assets] Synced fonts (SetoJP, BizUdpGothic, MochiyPop, SakuttoCode, ComicShannsMono500, CascadiaMono) and generated manifests (ja=${sets.ja.files.length}, jaStandard=${sets.jaStandard.files.length}, jaPop=${sets.jaPop.files.length}, jaCode=${sets.jaCode.files.length}, ko=${sets.ko.files.length}, zh=${sets.zh.files.length})`,
   );
-  return { sets, jpChunks: setoJp.chunks, mPlusRounded, mochiyPop, cascadiaMono };
+  return {
+    sets,
+    jpChunks: setoJp.chunks,
+    bizUdpGothic,
+    mochiyPop,
+    sakuttoCode,
+    sakuttoCodeLgLatin,
+    comicShannsMono500,
+    cascadiaMono,
+  };
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

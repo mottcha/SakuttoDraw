@@ -198,13 +198,43 @@ function buildCascadiaFaces(
   snapshot: readonly ExcalidrawFontFaceLike[],
   { preferJpFont, codeLigatures }: { preferJpFont: boolean; codeLigatures: boolean },
   manifest: JpFontManifest,
-  mPlusChunks: readonly JpFontChunkMeta[],
   baseUrl?: string,
 ): ExcalidrawFontFaceLike[] {
-  let baseFaces: ExcalidrawFontFaceLike[];
+  const sakuttoChunks = manifest.sakuttoCode?.chunks ?? [];
+  if (preferJpFont && (sakuttoChunks.length > 0 || manifest.sakuttoCodeLgLatin)) {
+    const regularLatin = sakuttoChunks.find((chunk) => /-00-latin-/i.test(chunk.file));
+    const chosenLatin =
+      codeLigatures && manifest.sakuttoCodeLgLatin
+        ? manifest.sakuttoCodeLgLatin
+        : (regularLatin ?? manifest.sakuttoCodeLgLatin);
+    const cjkChunks = regularLatin
+      ? sakuttoChunks.filter((chunk) => chunk !== regularLatin)
+      : sakuttoChunks;
+    const latinExcluded = chosenLatin
+      ? parseUnicodeRangeToSet(chosenLatin.unicodeRange)
+      : new Set<number>();
+    const cjkFaces = buildExcludedFallbackFaces(
+      'Cascadia',
+      cjkChunks,
+      latinExcluded,
+      baseUrl,
+      CASCADIA_WEIGHT,
+    );
+    if (!chosenLatin) return cjkFaces;
+    return [
+      createFontFaceEntry(
+        'Cascadia',
+        [resolveFontAssetUrl(chosenLatin.file, baseUrl)],
+        chosenLatin.unicodeRange,
+        CASCADIA_WEIGHT,
+      ),
+      ...cjkFaces,
+    ];
+  }
+
   if (codeLigatures || !manifest.cascadiaMono) {
     const codeRange = manifest.cascadiaCodeRange;
-    baseFaces = snapshot.map((face) => {
+    return snapshot.map((face) => {
       const existingRange = face.fontFace?.unicodeRange;
       const effectiveRange =
         existingRange && existingRange.toUpperCase() !== 'U+0-10FFFF'
@@ -217,19 +247,16 @@ function buildCascadiaFaces(
         CASCADIA_WEIGHT,
       );
     });
-  } else {
-    baseFaces = [
-      createFontFaceEntry(
-        'Cascadia',
-        [resolveFontAssetUrl(manifest.cascadiaMono.file, baseUrl)],
-        manifest.cascadiaMono.unicodeRange,
-        CASCADIA_WEIGHT,
-      ),
-    ];
   }
-  return preferJpFont
-    ? augmentFacesWithDisjointJp('Cascadia', baseFaces, mPlusChunks, baseUrl)
-    : baseFaces;
+
+  return [
+    createFontFaceEntry(
+      'Cascadia',
+      [resolveFontAssetUrl(manifest.cascadiaMono.file, baseUrl)],
+      manifest.cascadiaMono.unicodeRange,
+      CASCADIA_WEIGHT,
+    ),
+  ];
 }
 
 function snapshotAndSwapSlot(
@@ -272,8 +299,8 @@ export interface SakuttoFontOverrideOptions {
 }
 
 /**
- * Configures all 5 active SakuttoDraw font slots (Excalifont/Xiaolai, Nunito->M PLUS Rounded 1c,
- * Lilita One+Mochiy Pop P One, Cascadia Code/Mono+M PLUS Rounded 1c, Comic Shanns+SetoJP)
+ * Configures all 5 active SakuttoDraw font slots (Excalifont/Xiaolai, Nunito->BIZ UDPGothic Bold,
+ * Lilita One+Mochiy Pop P One, Cascadia->SakuttoCode/SakuttoCodeLG, Comic Shanns Narrow500+SetoJP)
  * with strictly disjoint `unicode-range` descriptors and clean restore when disabled.
  */
 export function applySakuttoFontOverrides(
@@ -325,8 +352,9 @@ export function applySakuttoFontOverrides(
 
   const swapJpSlots = !prevState || prevState.preferJpFont !== preferJpFont;
   const swapCascadiaSlot = swapJpSlots || prevState.codeLigatures !== codeLigatures;
-  const mPlusChunks = manifest.mPlusRounded?.chunks ?? [];
+  const bizChunks = manifest.bizUdpGothic?.chunks ?? [];
   const mochiyChunks = manifest.mochiyPop?.chunks ?? [];
+  const comicMono500Chunks = manifest.comicShannsMono500?.chunks ?? [];
 
   if (swapJpSlots) {
     if (xiaolaiId !== null) {
@@ -339,10 +367,10 @@ export function applySakuttoFontOverrides(
       xiaolaiTotal = res.totalFaces;
     }
 
-    if (mPlusChunks.length > 0) {
+    if (bizChunks.length > 0) {
       snapshotAndSwapSlot(targetFonts, state.snapshots, FONT_FAMILY.Nunito, fontFaceSet, (snapshot) =>
         preferJpFont
-          ? mPlusChunks.map((chunk) =>
+          ? bizChunks.map((chunk) =>
               createFontFaceEntry('Nunito', [resolveFontAssetUrl(chunk.file, baseUrl)], chunk.unicodeRange, '100 900'),
             )
           : [...snapshot],
@@ -355,14 +383,27 @@ export function applySakuttoFontOverrides(
       );
     }
 
-    snapshotAndSwapSlot(targetFonts, state.snapshots, FONT_FAMILY['Comic Shanns'], fontFaceSet, (snapshot) =>
-      preferJpFont ? augmentFacesWithDisjointJp('Comic Shanns', snapshot, manifest.chunks, baseUrl) : [...snapshot],
-    );
+    snapshotAndSwapSlot(targetFonts, state.snapshots, FONT_FAMILY['Comic Shanns'], fontFaceSet, (snapshot) => {
+      if (!preferJpFont) return [...snapshot];
+      const baseWeight = resolveSlotWeight(snapshot);
+      const baseFaces =
+        comicMono500Chunks.length > 0
+          ? comicMono500Chunks.map((chunk) =>
+              createFontFaceEntry(
+                'Comic Shanns',
+                [resolveFontAssetUrl(chunk.file, baseUrl)],
+                chunk.unicodeRange,
+                baseWeight,
+              ),
+            )
+          : snapshot;
+      return augmentFacesWithDisjointJp('Comic Shanns', baseFaces, manifest.chunks, baseUrl);
+    });
   }
 
   if (swapCascadiaSlot) {
     snapshotAndSwapSlot(targetFonts, state.snapshots, FONT_FAMILY.Cascadia, fontFaceSet, (snapshot) =>
-      buildCascadiaFaces(snapshot, { preferJpFont, codeLigatures }, manifest, mPlusChunks, baseUrl),
+      buildCascadiaFaces(snapshot, { preferJpFont, codeLigatures }, manifest, baseUrl),
     );
   }
 

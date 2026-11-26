@@ -68,11 +68,15 @@ describe('upstream contracts & architecture invariants', () => {
     expect(cjkFontManifest.sets.ja.files.length).toBeGreaterThan(0);
     expect(cjkFontManifest.sets.jaStandard.files.length).toBeGreaterThan(0);
     expect(cjkFontManifest.sets.jaPop.files.length).toBeGreaterThan(0);
+    expect(cjkFontManifest.sets.jaCode.files.length).toBeGreaterThan(0);
     expect(cjkFontManifest.sets.ko.files.length).toBeGreaterThan(0);
     expect(cjkFontManifest.sets.zh.files.length).toBeGreaterThan(0);
     expect(jpFontManifest.chunks.length).toBeGreaterThan(0);
-    expect(jpFontManifest.mPlusRounded?.chunks.length).toBeGreaterThan(0);
+    expect(jpFontManifest.bizUdpGothic?.chunks.length).toBeGreaterThan(0);
     expect(jpFontManifest.mochiyPop?.chunks.length).toBeGreaterThan(0);
+    expect(jpFontManifest.sakuttoCode?.chunks.length).toBeGreaterThan(0);
+    expect(Boolean(jpFontManifest.sakuttoCodeLgLatin?.file)).toBe(true);
+    expect(jpFontManifest.comicShannsMono500?.chunks.length).toBeGreaterThan(0);
     expect(Boolean(jpFontManifest.cascadiaMono?.file)).toBe(true);
 
     const knownTestIds = new Set<string>(Object.values(EXCALIDRAW_TESTIDS));

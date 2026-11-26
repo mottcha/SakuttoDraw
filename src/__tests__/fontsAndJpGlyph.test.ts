@@ -492,18 +492,18 @@ describe('5-font architecture (all active slots, ligatures, SVG dedup, picker & 
 
     assertUniformBucketAndDisjoint();
 
-    // Nunito replaced by MPlusRounded; Cascadia uses CascadiaCode + MPlusRounded; Lilita uses MochiyPop; Comic Shanns uses SetoJP
+    // Nunito replaced by BizUdpGothic; Cascadia uses SakuttoCode-LG; Lilita uses MochiyPop; Comic Shanns uses ComicShannsMono500 + SetoJP
     const nunitoUrls = getFaceSources(registered.get(FONT_FAMILY.Nunito));
-    expect(nunitoUrls.every((s) => s.includes('MPlusRounded'))).toBe(true);
+    expect(nunitoUrls.every((s) => s.includes('BizUdpGothic'))).toBe(true);
     const lilitaUrls = getFaceSources(registered.get(FONT_FAMILY['Lilita One']));
     expect(lilitaUrls.some((s) => s.includes('Lilita/latin'))).toBe(true);
     expect(lilitaUrls.some((s) => s.includes('MochiyPop'))).toBe(true);
     const comicUrls = getFaceSources(registered.get(FONT_FAMILY['Comic Shanns']));
-    expect(comicUrls.some((s) => s.includes('ComicShanns/latin'))).toBe(true);
+    expect(comicUrls.some((s) => s.includes('ComicShannsMono500'))).toBe(true);
     expect(comicUrls.some((s) => s.includes('SetoJP'))).toBe(true);
     const cascadiaCodeUrls = getFaceSources(registered.get(FONT_FAMILY.Cascadia));
-    expect(cascadiaCodeUrls.some((s) => s.includes('CascadiaCode-Regular'))).toBe(true);
-    expect(cascadiaCodeUrls.some((s) => s.includes('MPlusRounded'))).toBe(true);
+    expect(cascadiaCodeUrls.some((s) => s.includes('SakuttoCode-00-latin-lg'))).toBe(true);
+    expect(cascadiaCodeUrls.every((s) => s.includes('SakuttoCode'))).toBe(true);
 
     // Snapshot FontFace object identities for the 4 non-Cascadia slots before toggling codeLigatures
     const snapshotNonCascadiaRefs = () => ({
@@ -514,7 +514,7 @@ describe('5-font architecture (all active slots, ligatures, SVG dedup, picker & 
     });
     const refsBeforeLigatureToggle = snapshotNonCascadiaRefs();
 
-    // Toggle codeLigatures OFF -> swaps ONLY Cascadia to CascadiaMono, preserving loaded FontFaces on other 4 slots
+    // Toggle codeLigatures OFF -> swaps ONLY Cascadia from SakuttoCodeLG to SakuttoCode Regular, preserving loaded FontFaces on other 4 slots
     applySakuttoFontOverrides(
       { preferJpFont: true, codeLigatures: false },
       { registeredFonts: registered as never, fontFaceSet: fontFaceSet as never, baseUrl: 'https://example.test/' },
@@ -530,8 +530,8 @@ describe('5-font architecture (all active slots, ligatures, SVG dedup, picker & 
     expect(refsAfterLigatureToggle.comic).toHaveLength(refsBeforeLigatureToggle.comic.length);
     refsAfterLigatureToggle.comic.forEach((f, i) => expect(f).toBe(refsBeforeLigatureToggle.comic[i]));
     const cascadiaMonoUrls = getFaceSources(registered.get(FONT_FAMILY.Cascadia));
-    expect(cascadiaMonoUrls.some((s) => s.includes('CascadiaMono'))).toBe(true);
-    expect(cascadiaMonoUrls.some((s) => s.includes('CascadiaCode-Regular'))).toBe(false);
+    expect(cascadiaMonoUrls.some((s) => /SakuttoCode-00-latin-[0-9a-f]+\.woff2/.test(s))).toBe(true);
+    expect(cascadiaMonoUrls.some((s) => s.includes('latin-lg'))).toBe(false);
 
     // Toggle preferJpFont OFF -> restores originals while keeping Cascadia active & un-deprecated
     applySakuttoFontOverrides(
@@ -543,7 +543,7 @@ describe('5-font architecture (all active slots, ligatures, SVG dedup, picker & 
     expect(getFaceSources(registered.get(FONT_FAMILY.Nunito)).every((s) => s.includes('Nunito/latin'))).toBe(true);
     expect(getFaceSources(registered.get(FONT_FAMILY['Lilita One'])).every((s) => s.includes('Lilita/latin'))).toBe(true);
     expect(getFaceSources(registered.get(FONT_FAMILY['Comic Shanns'])).every((s) => s.includes('ComicShanns/latin'))).toBe(true);
-    expect(getFaceSources(registered.get(FONT_FAMILY.Cascadia)).every((s) => !s.includes('MPlusRounded'))).toBe(true);
+    expect(getFaceSources(registered.get(FONT_FAMILY.Cascadia)).every((s) => !s.includes('SakuttoCode'))).toBe(true);
 
     // Ensure separate registeredFonts maps maintain isolated snapshots/state without cross-leaking
     const secondEnv = createMockEnv();
@@ -555,8 +555,8 @@ describe('5-font architecture (all active slots, ligatures, SVG dedup, picker & 
     expect(getFaceSources(registered.get(FONT_FAMILY.Cascadia)).some((s) => s.includes('CascadiaMono'))).toBe(true);
   });
 
-  it('inlines shared MPlusRounded chunk once by fetch but emits @font-face for both Nunito and Cascadia', async () => {
-    const sharedUrl = '/fonts/MPlusRounded/mplus-001.woff2';
+  it('inlines shared font chunk once by fetch but emits @font-face for both families', async () => {
+    const sharedUrl = '/fonts/SetoJP/seto-001.woff2';
     const mockRegistered = new Map([
       [
         FONT_FAMILY.Nunito,
@@ -604,8 +604,8 @@ describe('5-font architecture (all active slots, ligatures, SVG dedup, picker & 
     expect(styleText).toContain('font-family: Cascadia;');
   });
 
-  it('supports all 5 CJK font packs and protects shared chunks during deletion', async () => {
-    expect(Object.keys(cjkFontManifest.sets).sort()).toEqual(['ja', 'jaPop', 'jaStandard', 'ko', 'zh']);
+  it('supports all 6 CJK font packs and protects shared chunks during deletion', async () => {
+    expect(Object.keys(cjkFontManifest.sets).sort()).toEqual(['ja', 'jaCode', 'jaPop', 'jaStandard', 'ko', 'zh']);
     const fakeCache = new Map<string, Response>();
     const cacheObj = {
       match: vi.fn(async (req: string) => fakeCache.get(req)),
@@ -626,11 +626,14 @@ describe('5-font architecture (all active slots, ligatures, SVG dedup, picker & 
       expect(await isLanguageSetCached('jaStandard', { baseUrl: '/' })).toBe(true);
       await downloadLanguageFontSet('jaPop', { fetchFn: fetchFn as unknown as typeof fetch, baseUrl: '/' });
       expect(await isLanguageSetCached('jaPop', { baseUrl: '/' })).toBe(true);
-      const exclusiveStd = computeExclusiveFilesForDeletion('jaStandard', ['jaStandard', 'jaPop']);
+      await downloadLanguageFontSet('jaCode', { fetchFn: fetchFn as unknown as typeof fetch, baseUrl: '/' });
+      expect(await isLanguageSetCached('jaCode', { baseUrl: '/' })).toBe(true);
+      const exclusiveStd = computeExclusiveFilesForDeletion('jaStandard', ['jaStandard', 'jaPop', 'jaCode']);
       expect(exclusiveStd.length).toBe(cjkFontManifest.sets.jaStandard.files.length);
       await deleteLanguageFontSet('jaStandard', { baseUrl: '/' });
       expect(await isLanguageSetCached('jaStandard', { baseUrl: '/' })).toBe(false);
       expect(await isLanguageSetCached('jaPop', { baseUrl: '/' })).toBe(true);
+      expect(await isLanguageSetCached('jaCode', { baseUrl: '/' })).toBe(true);
     } finally {
       Object.defineProperty(globalThis, 'caches', { configurable: true, value: origCaches });
     }
@@ -795,12 +798,14 @@ describe('5-font architecture (all active slots, ligatures, SVG dedup, picker & 
     expect(styleCss).toContain('font-family: Cascadia;');
     expect(styleCss).toContain('font-family: "Comic Shanns";');
 
-    // Every unique URL was fetched at most once despite MPlusRounded (Nunito+Cascadia) & SetoJP (Xiaolai+Comic Shanns) sharing
+    // Every unique URL was fetched at most once despite SetoJP (Xiaolai+Comic Shanns) sharing
     for (const count of fetchCounts.values()) {
       expect(count).toBe(1);
     }
     expect(Array.from(fetchCounts.keys()).some((u) => u.includes('/fonts/MochiyPop/'))).toBe(true);
-    expect(Array.from(fetchCounts.keys()).some((u) => u.includes('/fonts/MPlusRounded/'))).toBe(true);
+    expect(Array.from(fetchCounts.keys()).some((u) => u.includes('/fonts/BizUdpGothic/'))).toBe(true);
+    expect(Array.from(fetchCounts.keys()).some((u) => u.includes('/fonts/SakuttoCode/'))).toBe(true);
+    expect(Array.from(fetchCounts.keys()).some((u) => u.includes('/fonts/ComicShannsMono500/'))).toBe(true);
     expect(Array.from(fetchCounts.keys()).some((u) => u.includes('/fonts/SetoJP/'))).toBe(true);
 
     // Compact size: only used chunks (kana+latin) instead of all full packs (~9MB+)
@@ -924,16 +929,16 @@ describe('FontSettingsPanel UI (5-slot linkage, codeLigatures, other CJK, and li
       panel.querySelector(`[data-exq-font-slot="${slotId}"] .exq-font-slot-sub`)?.textContent;
 
     expect(getSub('hand-drawn')).toBe('Excalifont + SetoJP');
-    expect(getSub('normal')).toBe('M PLUS Rounded 1c');
+    expect(getSub('normal')).toBe('BIZ UDPGothic Bold');
     expect(getSub('pop')).toBe('Lilita One + Mochiy Pop P One');
-    expect(getSub('code')).toBe('Cascadia Code + M PLUS Rounded 1c');
-    expect(getSub('code-hand')).toBe('Comic Shanns + SetoJP');
+    expect(getSub('code')).toBe('UDEV Gothic LG (Subset)');
+    expect(getSub('code-hand')).toBe('Comic Shanns (1:2) + SetoJP');
 
-    // Toggle Code Ligatures OFF -> Code slot switches to Cascadia Mono + M PLUS Rounded 1c
+    // Toggle Code Ligatures OFF -> Code slot switches to UDEV Gothic (Subset)
     await act(async () => {
       panel.querySelector<HTMLButtonElement>('[data-exq-code-ligatures="off"]')?.click();
     });
-    expect(getSub('code')).toBe('Cascadia Mono + M PLUS Rounded 1c');
+    expect(getSub('code')).toBe('UDEV Gothic (Subset)');
 
     // Expand Other languages drawer -> reveals full 中国語 and 韓国語 buttons
     expect(panel.querySelector('.exq-font-other-cjk [data-exq-cjk-btn="zh"]')).toBeNull();
@@ -963,7 +968,7 @@ describe('FontSettingsPanel UI (5-slot linkage, codeLigatures, other CJK, and li
     ).toBe('同梱済み');
     expect(panel.querySelector('[data-exq-other-cjk-toggle="1"]')).toBeNull();
 
-    // Open License modal, verify all 9 fonts, close with button, reopen and close with Escape
+    // Open License modal, verify all 10 fonts, close with button, reopen and close with Escape
     await act(async () => {
       panel.querySelector<HTMLButtonElement>('[data-exq-font-licenses-btn="1"]')?.click();
     });
@@ -974,12 +979,13 @@ describe('FontSettingsPanel UI (5-slot linkage, codeLigatures, other CJK, and li
       'Excalifont',
       'SetoJP',
       'Xiaolai',
-      'M PLUS Rounded 1c',
+      'BIZ UDPGothic (Bold)',
       'Nunito',
       'Lilita One',
       'Mochiy Pop P One',
+      'SakuttoCode (subset of UDEV Gothic)',
       'Cascadia Code / Mono',
-      'Comic Shanns',
+      'Comic Shanns / Narrow500',
     ]) {
       expect(modalText).toContain(fontName);
     }
