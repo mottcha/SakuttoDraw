@@ -81,7 +81,7 @@ describe('quickAnnotator desktop DOM sync, language switcher, and layout modes',
     expect(document.querySelector('[data-exq-main-action="copy"]')?.textContent).toBe('Copy to clipboard');
   });
 
-  it('renders transparent background and padding switches as OFF by default and toggles + persists state', () => {
+  it('renders screenshot/whiteboard presets, layer-1 format switcher, and collapsible advanced settings', () => {
     applyLanguage('ja-JP');
     document.body.innerHTML = `
       <div class="dropdown-menu-container">
@@ -89,26 +89,66 @@ describe('quickAnnotator desktop DOM sync, language switcher, and layout modes',
       </div>
     `;
     expect(syncMainMenu()).toBe(true);
-    const bgSwitch = document.querySelector<HTMLButtonElement>('[data-exq-exp-opt="background"]');
-    const padSwitch = document.querySelector<HTMLButtonElement>('[data-exq-exp-opt="padding"]');
-    expect(bgSwitch).toBeTruthy();
-    expect(padSwitch).toBeTruthy();
-    expect(bgSwitch?.classList.contains('exq-on')).toBe(false);
-    expect(padSwitch?.classList.contains('exq-on')).toBe(false);
-    expect(bgSwitch?.getAttribute('role')).toBe('switch');
-    expect(bgSwitch?.getAttribute('aria-checked')).toBe('false');
-    expect(bgSwitch?.getAttribute('aria-label')).toBe('背景の透明化');
-    expect(padSwitch?.getAttribute('aria-label')).toBe('余白を追加');
 
-    bgSwitch?.click();
-    expect(runtime.prefs.exportOpts.background).toBe(false);
-    expect(bgSwitch?.classList.contains('exq-on')).toBe(true);
-    expect(bgSwitch?.getAttribute('aria-checked')).toBe('true');
+    const ssBtn = document.querySelector<HTMLButtonElement>('[data-exq-exp-preset="screenshot"]')!;
+    const wbBtn = document.querySelector<HTMLButtonElement>('[data-exq-exp-preset="whiteboard"]')!;
+    const summaryEl = document.querySelector<HTMLElement>('[data-exq-exp-summary="1"]')!;
+    const advRoot = document.querySelector<HTMLElement>('[data-exq-exp-adv="1"]')!;
+    const advToggle = document.querySelector<HTMLButtonElement>('[data-exq-exp-adv-toggle="1"]')!;
+    const bgSwitch = document.querySelector<HTMLButtonElement>('[data-exq-exp-opt="background"]')!;
+    const padSwitch = document.querySelector<HTMLButtonElement>('[data-exq-exp-opt="padding"]')!;
+    const darkSwitch = document.querySelector<HTMLButtonElement>('[data-exq-exp-opt="darkMode"]')!;
+    const svgBtn = document.querySelector<HTMLButtonElement>('[data-exq-format="svg"]')!;
 
-    padSwitch?.click();
+    expect(document.querySelector('[data-exq-scale]')).toBeNull();
+    expect(ssBtn.classList.contains('exq-active')).toBe(true);
+    expect(ssBtn.getAttribute('aria-checked')).toBe('true');
+    expect(wbBtn.classList.contains('exq-active')).toBe(false);
+    expect(summaryEl.textContent).toBe('背景透過・余白なし');
+    expect(advRoot.classList.contains('exq-open')).toBe(false);
+    expect(advToggle.getAttribute('aria-expanded')).toBe('false');
+
+    // Transparent background switch is ON by default (background: false) and padding is OFF
+    expect(bgSwitch.classList.contains('exq-on')).toBe(true);
+    expect(bgSwitch.getAttribute('aria-checked')).toBe('true');
+    expect(padSwitch.classList.contains('exq-on')).toBe(false);
+    expect(bgSwitch.getAttribute('role')).toBe('switch');
+    expect(bgSwitch.getAttribute('aria-label')).toBe('背景の透明化');
+    expect(padSwitch.getAttribute('aria-label')).toBe('余白を追加');
+
+    // Switch to Whiteboard preset
+    wbBtn.click();
+    expect(runtime.prefs.exportOpts.background).toBe(true);
     expect(runtime.prefs.exportOpts.padding).toBe(true);
-    expect(padSwitch?.classList.contains('exq-on')).toBe(true);
-    expect(loadPrefs(localStorage).exportOpts.padding).toBe(true);
+    expect(wbBtn.classList.contains('exq-active')).toBe(true);
+    expect(ssBtn.classList.contains('exq-active')).toBe(false);
+    expect(bgSwitch.classList.contains('exq-on')).toBe(false);
+    expect(padSwitch.classList.contains('exq-on')).toBe(true);
+    expect(summaryEl.textContent).toBe('背景あり・余白あり');
+
+    // Open advanced settings and customize padding -> transitions to custom (both presets inactive)
+    advToggle.click();
+    expect(advRoot.classList.contains('exq-open')).toBe(true);
+    expect(advToggle.getAttribute('aria-expanded')).toBe('true');
+
+    padSwitch.click();
+    expect(runtime.prefs.exportOpts.padding).toBe(false);
+    expect(ssBtn.classList.contains('exq-active')).toBe(false);
+    expect(wbBtn.classList.contains('exq-active')).toBe(false);
+    expect(summaryEl.textContent).toBe('カスタム設定');
+
+    // Enable dark mode -> summary appends dark tag; switch format on layer-1
+    darkSwitch.click();
+    expect(summaryEl.textContent).toBe('カスタム設定・ダーク');
+    svgBtn.click();
+    expect(loadPrefs(localStorage).exportOpts.format).toBe('svg');
+    expect(loadPrefs(localStorage).exportOpts.darkMode).toBe(true);
+
+    // Language switch updates localized labels & summary
+    applyLanguage('en');
+    syncMainMenu();
+    expect(document.querySelector('[data-exq-exp-preset="screenshot"]')?.textContent).toBe('Screenshot');
+    expect(document.querySelector('[data-exq-exp-summary="1"]')?.textContent).toBe('Custom settings · Dark');
   });
 
   it('injects top-right Copy/Save bar and unified extra tools menu in mobile layout', () => {

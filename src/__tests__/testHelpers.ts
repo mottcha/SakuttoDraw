@@ -24,6 +24,7 @@ export function resetDomAndRuntime(): void {
   runtime.isBusy = false;
   runtime.drawAssistAccOpen = false;
   runtime.expAccOpen = false;
+  runtime.expAdvAccOpen = false;
   runtime.lastCanvasBg = null;
   runtime.onLangChange = null;
   document.documentElement.lang = runtime.prefs.lang;

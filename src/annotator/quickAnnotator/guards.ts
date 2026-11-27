@@ -7,6 +7,7 @@ import {
 import { isMacPlatform, silently } from '../../utils/common';
 import { runDirectDiskSaveWithApi, runDirectFileLoadWithApi } from '../apiActions';
 import { runInstantExport, withBusyLock } from './actions';
+import { isEditableFocused } from './dom';
 import {
   focusActiveTextWysiwyg,
   isTextToolActive,
@@ -281,6 +282,18 @@ export function installFastLoadSaveInterceptor(): () => void {
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.repeat || e.isComposing || !runtime.api) return;
     const mod = e.ctrlKey || e.metaKey;
+
+    // Intercept Excalidraw's Alt+Shift+C (copyAsPng) so clipboard export uses SakuttoDraw's preset & auto-scale
+    if (!mod && e.altKey && e.shiftKey && e.code === 'KeyC' && !isEditableFocused()) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      if (!runtime.isBusy) {
+        void runInstantExport('copy');
+      }
+      return;
+    }
+
     if (!mod || e.altKey) return;
     const keyLower = e.key.toLowerCase();
 

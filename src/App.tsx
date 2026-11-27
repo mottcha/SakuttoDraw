@@ -68,6 +68,10 @@ let bootstrappedOnce = false;
 const EXCALIDRAW_UI_OPTIONS = {
   getFormFactor: sakuttoGetFormFactor,
 };
+const EXCALIDRAW_IMAGE_OPTIONS = {
+  maxWidthOrHeight: 2880,
+  maxFileSizeBytes: 10 * 1024 * 1024,
+} as const;
 
 export function App() {
   const initialBootstrap = useMemo(() => {
@@ -321,6 +325,7 @@ export function App() {
         onThemeChange={handleThemeChange}
         aiEnabled={false}
         UIOptions={EXCALIDRAW_UI_OPTIONS}
+        imageOptions={EXCALIDRAW_IMAGE_OPTIONS}
         initialData={initialBootstrap.initialDataPromise}
         onExcalidrawAPI={handleApi}
         onChange={handleChange}

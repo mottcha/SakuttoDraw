@@ -346,6 +346,36 @@ describe('event guards (textAutoResize, touch WYSIWYG, Ctrl multi-select, fast l
       expect(exportSpy).toHaveBeenCalledWith('save');
 
       exportSpy.mockClear();
+      const copyEvt = new KeyboardEvent('keydown', {
+        key: 'C',
+        code: 'KeyC',
+        altKey: true,
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      window.dispatchEvent(copyEvt);
+      expect(copyEvt.defaultPrevented).toBe(true);
+      expect(exportSpy).toHaveBeenCalledWith('copy');
+
+      // Should not hijack Alt+Shift+C when typing in an editable element
+      exportSpy.mockClear();
+      const ta = document.createElement('textarea');
+      document.body.append(ta);
+      ta.focus();
+      const taEvt = new KeyboardEvent('keydown', {
+        key: 'C',
+        code: 'KeyC',
+        altKey: true,
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      window.dispatchEvent(taEvt);
+      expect(taEvt.defaultPrevented).toBe(false);
+      expect(exportSpy).not.toHaveBeenCalled();
+
+      exportSpy.mockClear();
       window.dispatchEvent(
         new KeyboardEvent('keydown', {
           key: 'e',

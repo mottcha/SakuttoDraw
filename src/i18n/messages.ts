@@ -34,7 +34,14 @@ export interface MessageCatalog {
   exportDarkMode: string;
   exportEmbedScene: string;
   exportFormat: string;
-  exportScale: string;
+  exportPresetLabel: string;
+  exportPresetScreenshot: string;
+  exportPresetWhiteboard: string;
+  exportPresetSummaryScreenshot: string;
+  exportPresetSummaryWhiteboard: string;
+  exportPresetSummaryCustom: string;
+  exportSummaryDarkTag: string;
+  exportAdvancedSettings: string;
   drawAssist: string;
   assistSnapToObjects: string;
   assistShowGrid: string;
@@ -149,7 +156,14 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     exportDarkMode: 'Dark mode',
     exportEmbedScene: 'Embed editable scene',
     exportFormat: 'Format',
-    exportScale: 'Scale',
+    exportPresetLabel: 'Export mode',
+    exportPresetScreenshot: 'Screenshot',
+    exportPresetWhiteboard: 'Whiteboard',
+    exportPresetSummaryScreenshot: 'Transparent · No padding',
+    exportPresetSummaryWhiteboard: 'With background · Padded',
+    exportPresetSummaryCustom: 'Custom settings',
+    exportSummaryDarkTag: 'Dark',
+    exportAdvancedSettings: 'Advanced settings',
     drawAssist: 'Drawing assist',
     assistSnapToObjects: 'Snap to objects',
     assistShowGrid: 'Show grid',
@@ -269,7 +283,14 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     exportDarkMode: 'ダークモード',
     exportEmbedScene: '編集データを画像に含める',
     exportFormat: '保存形式',
-    exportScale: 'スケール',
+    exportPresetLabel: '出力モード',
+    exportPresetScreenshot: 'スクショ',
+    exportPresetWhiteboard: 'ホワイトボード',
+    exportPresetSummaryScreenshot: '背景透過・余白なし',
+    exportPresetSummaryWhiteboard: '背景あり・余白あり',
+    exportPresetSummaryCustom: 'カスタム設定',
+    exportSummaryDarkTag: 'ダーク',
+    exportAdvancedSettings: '高度な設定',
     drawAssist: '描画アシスト',
     assistSnapToObjects: 'オブジェクトにスナップ',
     assistShowGrid: 'グリッドを表示',
@@ -389,7 +410,14 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     exportDarkMode: '深色模式',
     exportEmbedScene: '在图片中嵌入可编辑数据',
     exportFormat: '保存格式',
-    exportScale: '缩放比例',
+    exportPresetLabel: '导出模式',
+    exportPresetScreenshot: '截图',
+    exportPresetWhiteboard: '白板',
+    exportPresetSummaryScreenshot: '透明背景 · 无边距',
+    exportPresetSummaryWhiteboard: '含背景 · 带边距',
+    exportPresetSummaryCustom: '自定义设置',
+    exportSummaryDarkTag: '深色',
+    exportAdvancedSettings: '高级设置',
     drawAssist: '绘图辅助',
     assistSnapToObjects: '对齐到对象',
     assistShowGrid: '显示网格',
@@ -509,7 +537,14 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     exportDarkMode: '深色模式',
     exportEmbedScene: '在圖片中嵌入可編輯資料',
     exportFormat: '儲存格式',
-    exportScale: '縮放比例',
+    exportPresetLabel: '匯出模式',
+    exportPresetScreenshot: '截圖',
+    exportPresetWhiteboard: '白板',
+    exportPresetSummaryScreenshot: '透明背景 · 無邊距',
+    exportPresetSummaryWhiteboard: '含背景 · 加邊距',
+    exportPresetSummaryCustom: '自訂設定',
+    exportSummaryDarkTag: '深色',
+    exportAdvancedSettings: '進階設定',
     drawAssist: '繪圖輔助',
     assistSnapToObjects: '對齊至物件',
     assistShowGrid: '顯示格線',
@@ -629,7 +664,14 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     exportDarkMode: '다크 모드',
     exportEmbedScene: '이미지에 편집 데이터 포함',
     exportFormat: '저장 형식',
-    exportScale: '배율',
+    exportPresetLabel: '내보내기 모드',
+    exportPresetScreenshot: '스크린샷',
+    exportPresetWhiteboard: '화이트보드',
+    exportPresetSummaryScreenshot: '투명 배경 · 여백 없음',
+    exportPresetSummaryWhiteboard: '배경 포함 · 여백 추가',
+    exportPresetSummaryCustom: '사용자 지정',
+    exportSummaryDarkTag: '다크',
+    exportAdvancedSettings: '고급 설정',
     drawAssist: '그리기 보조',
     assistSnapToObjects: '개체에 스냅',
     assistShowGrid: '그리드 표시',

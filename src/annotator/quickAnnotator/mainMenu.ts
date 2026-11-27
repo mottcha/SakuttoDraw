@@ -1,5 +1,5 @@
 // Left main-menu export block injection.
-import type { ExportFormat, ExportScale } from '../../types/annotator';
+import type { ExportFormat } from '../../types/annotator';
 import {
   EXCALIDRAW_CLASSES,
   EXCALIDRAW_SELECTORS,
@@ -7,7 +7,12 @@ import {
   testIdSelector,
 } from '../../excalidraw/domContract';
 import { getMessages } from '../../i18n/messages';
-import { normalizeFormat, savePrefs } from '../../services/storageBridge';
+import {
+  applyExportPreset,
+  normalizeFormat,
+  resolveExportPreset,
+  savePrefs,
+} from '../../services/storageBridge';
 import { runInstantExport } from './actions';
 import { EXPORT_TOGGLE_DEFS } from './constants';
 import {
@@ -46,13 +51,33 @@ function buildMainMenuExportBlock(): DocumentFragment {
   );
 
   const switchUpdaters = new Map<string, (on: boolean) => void>();
+  const presetBtnMap = new Map<'screenshot' | 'whiteboard', HTMLButtonElement>();
   const formatBtnMap = new Map<ExportFormat, HTMLButtonElement>();
-  const scaleBtnMap = new Map<ExportScale, HTMLButtonElement>();
-  let scaleRowNode: HTMLElement | null = null;
+  let summaryEl: HTMLElement | null = null;
+  let advRoot: HTMLElement | null = null;
+  let advToggleBtn: HTMLButtonElement | null = null;
   let acc: ReturnType<typeof createAccordionSection> | null = null;
 
   const refresh = () => {
     acc?.setOpen(runtime.expAccOpen);
+    const curPreset = resolveExportPreset(runtime.prefs.exportOpts);
+    for (const [preset, btn] of presetBtnMap) {
+      const active = curPreset === preset;
+      btn.classList.toggle('exq-active', active);
+      btn.setAttribute('aria-checked', String(active));
+    }
+    if (summaryEl) {
+      const baseSummary =
+        curPreset === 'screenshot'
+          ? t.exportPresetSummaryScreenshot
+          : curPreset === 'whiteboard'
+            ? t.exportPresetSummaryWhiteboard
+            : t.exportPresetSummaryCustom;
+      const darkSuffix = runtime.prefs.exportOpts.darkMode
+        ? `${runtime.prefs.lang === 'ja-JP' ? '・' : ' · '}${t.exportSummaryDarkTag}`
+        : '';
+      summaryEl.textContent = `${baseSummary}${darkSuffix}`;
+    }
     for (const [key, setChecked] of switchUpdaters) {
       const rawOn = !!runtime.prefs.exportOpts[key as keyof typeof runtime.prefs.exportOpts];
       const on = key === 'background' ? !rawOn : rawOn;
@@ -64,15 +89,9 @@ function buildMainMenuExportBlock(): DocumentFragment {
       btn.classList.toggle('exq-active', active);
       btn.setAttribute('aria-checked', String(active));
     }
-    for (const [s, btn] of scaleBtnMap) {
-      const active = runtime.prefs.exportOpts.scale === s;
-      btn.classList.toggle('exq-active', active);
-      btn.setAttribute('aria-checked', String(active));
-    }
-    if (scaleRowNode) {
-      const isSvg = curFmt === 'svg';
-      scaleRowNode.classList.toggle('exq-disabled', isSvg);
-      scaleRowNode.setAttribute('aria-disabled', String(isSvg));
+    if (advRoot && advToggleBtn) {
+      advRoot.classList.toggle('exq-open', runtime.expAdvAccOpen);
+      advToggleBtn.setAttribute('aria-expanded', String(runtime.expAdvAccOpen));
     }
   };
 
@@ -90,20 +109,39 @@ function buildMainMenuExportBlock(): DocumentFragment {
   });
   acc.root.addEventListener('click', (e) => e.stopPropagation());
 
-  for (const def of EXPORT_TOGGLE_DEFS) {
-    const { row, setChecked } = createSwitchRow({
-      label: t[def.msgKey],
-      optAttr: 'data-exq-exp-opt',
-      optValue: def.key,
-      onClick: () => {
-        runtime.prefs.exportOpts[def.key] = !runtime.prefs.exportOpts[def.key];
-        savePrefs(runtime.prefs);
-        refresh();
+  const presetSeg = el('div', {
+    class: 'exq-exp-preset-seg',
+    role: 'radiogroup',
+    'aria-label': t.exportPresetLabel,
+  });
+  for (const preset of ['screenshot', 'whiteboard'] as const) {
+    const label = preset === 'screenshot' ? t.exportPresetScreenshot : t.exportPresetWhiteboard;
+    const btn = el(
+      'button',
+      {
+        type: 'button',
+        role: 'radio',
+        'aria-checked': 'false',
+        class: 'exq-exp-preset-btn',
+        'data-exq-exp-preset': preset,
+        title: label,
       },
+      label,
+    );
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      runtime.prefs.exportOpts = applyExportPreset(runtime.prefs.exportOpts, preset);
+      savePrefs(runtime.prefs);
+      refresh();
     });
-    switchUpdaters.set(def.key, setChecked);
-    acc.nest.append(row);
+    presetBtnMap.set(preset, btn);
+    presetSeg.append(btn);
   }
+  acc.nest.append(presetSeg);
+
+  summaryEl = el('div', { class: 'exq-exp-summary', 'data-exq-exp-summary': '1' });
+  acc.nest.append(summaryEl);
 
   const fmtSeg = el('div', { class: 'exq-scale-seg exq-fmt-seg', role: 'radiogroup', 'aria-label': t.exportFormat });
   for (const fmt of ['png', 'svg'] as const) {
@@ -124,25 +162,44 @@ function buildMainMenuExportBlock(): DocumentFragment {
   }
   acc.nest.append(el('div', { class: 'exq-scale-row' }, el('span', null, t.exportFormat), fmtSeg));
 
-  const scaleSeg = el('div', { class: 'exq-scale-seg', role: 'radiogroup', 'aria-label': t.exportScale });
-  for (const s of [1, 2, 3] as const) {
-    const b = el(
-      'button',
-      { type: 'button', role: 'radio', 'aria-checked': 'false', 'data-exq-scale': String(s) },
-      `${s}×`,
-    );
-    b.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      runtime.prefs.exportOpts.scale = s;
-      savePrefs(runtime.prefs);
-      refresh();
+  advRoot = el('div', {
+    class: `exq-exp-adv-root${runtime.expAdvAccOpen ? ' exq-open' : ''}`,
+    'data-exq-exp-adv': '1',
+  });
+  advToggleBtn = el(
+    'button',
+    {
+      type: 'button',
+      class: 'exq-exp-adv-toggle',
+      'data-exq-exp-adv-toggle': '1',
+      'aria-expanded': String(runtime.expAdvAccOpen),
+    },
+    el('span', null, t.exportAdvancedSettings),
+    el('span', { class: 'exq-exp-adv-chev' }, svgIcon('caret', 11, '0 0 12 12', 1.8)),
+  );
+  advToggleBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    runtime.expAdvAccOpen = !runtime.expAdvAccOpen;
+    refresh();
+  });
+  const advNest = el('div', { class: 'exq-exp-adv-nest' });
+  for (const def of EXPORT_TOGGLE_DEFS) {
+    const { row, setChecked } = createSwitchRow({
+      label: t[def.msgKey],
+      optAttr: 'data-exq-exp-opt',
+      optValue: def.key,
+      onClick: () => {
+        runtime.prefs.exportOpts[def.key] = !runtime.prefs.exportOpts[def.key];
+        savePrefs(runtime.prefs);
+        refresh();
+      },
     });
-    scaleBtnMap.set(s, b);
-    scaleSeg.append(b);
+    switchUpdaters.set(def.key, setChecked);
+    advNest.append(row);
   }
-  scaleRowNode = el('div', { class: 'exq-scale-row' }, el('span', null, t.exportScale), scaleSeg);
-  acc.nest.append(scaleRowNode);
+  advRoot.append(advToggleBtn, advNest);
+  acc.nest.append(advRoot);
 
   refresh();
   frag.append(acc.root);

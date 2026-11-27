@@ -2,7 +2,7 @@ export type AppLang = 'en' | 'ja-JP' | 'ko-KR' | 'zh-CN' | 'zh-TW';
 export type ThemeMode = 'light' | 'dark' | 'system';
 
 export type ExportFormat = 'png' | 'svg';
-export type ExportScale = 1 | 2 | 3;
+export type ExportPreset = 'screenshot' | 'whiteboard' | 'custom';
 
 export interface ExportOpts {
   onlySelected: boolean;
@@ -11,7 +11,6 @@ export interface ExportOpts {
   embedScene: boolean;
   padding: boolean;
   format: ExportFormat;
-  scale: ExportScale;
 }
 
 export type BoxSelectionPref = 'overlap' | 'contain';

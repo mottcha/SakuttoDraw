@@ -72,6 +72,7 @@ describe('export filtering & apiActions', () => {
       } as unknown as ExcalidrawImperativeAPI;
 
       const prefs = loadPrefs(localStorage);
+      expect(prefs.exportOpts.background).toBe(false);
       expect(prefs.exportOpts.padding).toBe(false);
 
       const copyDefault = await runInstantExportWithApi(mockApi, 'copy', prefs.exportOpts, {
@@ -81,9 +82,15 @@ describe('export filtering & apiActions', () => {
       expect(copyDefault.ok).toBe(true);
       expect(clipSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          config: expect.objectContaining({ padding: 0, scale: 1 }),
+          config: expect.objectContaining({
+            canvasBackgroundColor: false,
+            padding: 0,
+            scale: expect.any(Function),
+          }),
         }),
       );
+      const copyScaleFn = clipSpy.mock.calls[0]?.[0]?.config?.scale as (w: number, h: number) => number;
+      expect(copyScaleFn(600, 400)).toBe(2);
 
       const errSpy = vi.fn();
       const saveSvgPadded = await runInstantExportWithApi(
@@ -112,16 +119,22 @@ describe('export filtering & apiActions', () => {
       const savePngPadded = await runInstantExportWithApi(
         mockApi,
         'save',
-        { ...prefs.exportOpts, format: 'png', padding: true, scale: 2 },
+        { ...prefs.exportOpts, format: 'png', padding: true, background: true },
         { lang: 'en', preferJpFont: false },
       );
       expect(savePngPadded.ok).toBe(true);
       expect(sceneSpy).toHaveBeenLastCalledWith(
         expect.objectContaining({
           type: 'png',
-          config: expect.objectContaining({ padding: 10, scale: 2 }),
+          config: expect.objectContaining({
+            padding: 10,
+            canvasBackgroundColor: '#ffffff',
+            scale: expect.any(Function),
+          }),
         }),
       );
+      const pngConfig = sceneSpy.mock.calls[1]?.[0]?.config as { scale?: (w: number, h: number) => number };
+      expect(pngConfig.scale?.(600, 400)).toBe(2);
     } finally {
       clipSpy.mockRestore();
       sceneSpy.mockRestore();

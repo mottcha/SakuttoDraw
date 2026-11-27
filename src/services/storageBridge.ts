@@ -7,7 +7,8 @@ import type {
   AppLang,
   BoxSelectionPref,
   ExportFormat,
-  ExportScale,
+  ExportOpts,
+  ExportPreset,
   InputDevicePref,
   Prefs,
   StylesPanelPref,
@@ -44,12 +45,11 @@ const DEFAULT_PREFS: Prefs = {
   codeLigatures: true,
   exportOpts: {
     onlySelected: true,
-    background: true,
+    background: false,
     darkMode: false,
     embedScene: false,
     padding: false,
     format: 'png',
-    scale: 1,
   },
   quickOpts: {
     autoResetOnOpen: true,
@@ -85,13 +85,24 @@ export function resolvePreferJpFont(prefs: Pick<Prefs, 'lang' | 'preferJpFont'>)
   return prefs.lang === 'ja-JP';
 }
 
-export function normalizeScale(value: unknown): ExportScale {
-  const num = Number(value);
-  return num === 2 || num === 3 ? num : 1;
-}
-
 export function normalizeFormat(value: unknown): ExportFormat {
   return String(value || '').toLowerCase() === 'svg' ? 'svg' : 'png';
+}
+
+export function resolveExportPreset(opts: Pick<ExportOpts, 'background' | 'padding'>): ExportPreset {
+  if (!opts.background && !opts.padding) return 'screenshot';
+  if (opts.background && opts.padding) return 'whiteboard';
+  return 'custom';
+}
+
+export function applyExportPreset(
+  opts: ExportOpts,
+  preset: 'screenshot' | 'whiteboard',
+): ExportOpts {
+  if (preset === 'screenshot') {
+    return { ...opts, background: false, padding: false };
+  }
+  return { ...opts, background: true, padding: true };
 }
 
 function normalizeThemeMode(value: unknown): ThemeMode {
@@ -203,7 +214,6 @@ export function prefsToAppStatePatch(prefs: Prefs) {
     exportBackground: Boolean(prefs.exportOpts.background),
     exportWithDarkMode: Boolean(prefs.exportOpts.darkMode),
     exportEmbedScene: Boolean(prefs.exportOpts.embedScene),
-    exportScale: normalizeScale(prefs.exportOpts.scale),
   };
 }
 
@@ -224,7 +234,6 @@ export function loadPrefs(
   if (typeof st.exportBackground === 'boolean') base.exportOpts.background = st.exportBackground;
   if (typeof st.exportWithDarkMode === 'boolean') base.exportOpts.darkMode = st.exportWithDarkMode;
   if (typeof st.exportEmbedScene === 'boolean') base.exportOpts.embedScene = st.exportEmbedScene;
-  base.exportOpts.scale = normalizeScale(st.exportScale);
 
   const rawPrefs = silently(() => storage.getItem(LS_PREFS_KEY));
   if (rawPrefs) {
@@ -258,9 +267,6 @@ export function loadPrefs(
         }
         if (saved.exportOpts.format != null) {
           base.exportOpts.format = normalizeFormat(saved.exportOpts.format);
-        }
-        if (saved.exportOpts.scale != null) {
-          base.exportOpts.scale = normalizeScale(saved.exportOpts.scale);
         }
       }
       if (saved.quickOpts && typeof saved.quickOpts === 'object' && !Array.isArray(saved.quickOpts)) {
@@ -462,10 +468,10 @@ function persistSceneSnapshot(
         inputDevice: normalizeInputDevice(
           appState.inputDevice ?? prev.inputDevice ?? DEFAULT_PREFS.inputDevice,
         ),
-        exportBackground: appState.exportBackground ?? prev.exportBackground ?? true,
+        exportBackground:
+          appState.exportBackground ?? prev.exportBackground ?? DEFAULT_PREFS.exportOpts.background,
         exportWithDarkMode: appState.exportWithDarkMode ?? prev.exportWithDarkMode ?? false,
         exportEmbedScene: appState.exportEmbedScene ?? prev.exportEmbedScene ?? false,
-        exportScale: normalizeScale(appState.exportScale ?? prev.exportScale ?? 1),
         fontTopPicks: Array.isArray(appState.fontTopPicks)
           ? appState.fontTopPicks
           : prev.fontTopPicks ?? [...DEFAULT_FONT_TOP_PICKS],

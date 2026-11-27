@@ -95,11 +95,6 @@ body,
   padding: 3px 8px;
   font-size: 12px;
   color: var(--text-primary-color, #1b1b1f);
-  transition: opacity 0.14s ease;
-}
-.exq-scale-row.exq-disabled {
-  opacity: 0.42;
-  pointer-events: none;
 }
 .exq-scale-seg {
   display: inline-flex;

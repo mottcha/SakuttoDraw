@@ -17,6 +17,7 @@ export const runtime: {
   isBusy: boolean;
   drawAssistAccOpen: boolean;
   expAccOpen: boolean;
+  expAdvAccOpen: boolean;
   lastCanvasBg: string | null;
   onLangChange: ((lang: AppLang) => void) | null;
 } = {
@@ -27,6 +28,7 @@ export const runtime: {
   isBusy: false,
   drawAssistAccOpen: false,
   expAccOpen: false,
+  expAdvAccOpen: false,
   lastCanvasBg: null,
   onLangChange: null,
 };

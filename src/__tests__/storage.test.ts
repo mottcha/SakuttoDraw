@@ -11,6 +11,7 @@ import {
   saveFilesToIndexedDb,
 } from '../services/filesDb';
 import {
+  applyExportPreset,
   bootstrapCleanCanvas,
   cancelPendingScenePersist,
   DEFAULT_PEN_COLOR,
@@ -21,8 +22,8 @@ import {
   LS_PREFS_KEY,
   LS_STATE_KEY,
   normalizeFormat,
-  normalizeScale,
   resetPersistedFilesCache,
+  resolveExportPreset,
   resolveTheme,
   savePrefs,
   scheduleScenePersist,
@@ -42,39 +43,72 @@ describe('storageBridge, filesDb & debounced persistence race prevention', () =>
     vi.useRealTimers();
   });
 
-  it('normalizes scale and format values', () => {
-    expect(normalizeScale(1)).toBe(1);
-    expect(normalizeScale(2)).toBe(2);
-    expect(normalizeScale(3)).toBe(3);
-    expect(normalizeScale(99)).toBe(1);
+  it('normalizes format values and resolves/applies export presets cleanly', () => {
     expect(normalizeFormat('SVG')).toBe('svg');
     expect(normalizeFormat('png')).toBe('png');
     expect(normalizeFormat('invalid')).toBe('png');
+
+    expect(resolveExportPreset({ background: false, padding: false })).toBe('screenshot');
+    expect(resolveExportPreset({ background: true, padding: true })).toBe('whiteboard');
+    expect(resolveExportPreset({ background: true, padding: false })).toBe('custom');
+    expect(resolveExportPreset({ background: false, padding: true })).toBe('custom');
+
+    const base = loadPrefs(localStorage).exportOpts;
+    const wb = applyExportPreset({ ...base, darkMode: true, format: 'svg' }, 'whiteboard');
+    expect(wb).toEqual({
+      onlySelected: true,
+      background: true,
+      darkMode: true,
+      embedScene: false,
+      padding: true,
+      format: 'svg',
+    });
+    const ss = applyExportPreset(wb, 'screenshot');
+    expect(ss).toEqual({
+      onlySelected: true,
+      background: false,
+      darkMode: true,
+      embedScene: false,
+      padding: false,
+      format: 'svg',
+    });
   });
 
-  it('bootstraps clean canvas and applies default pen color, padding=false, and overlap selection', () => {
+  it('bootstraps clean canvas and applies default pen color, screenshot export preset, and overlap selection', () => {
     localStorage.setItem(LS_ELEMENTS_KEY, JSON.stringify([{ id: 'old-el' }]));
     const res = bootstrapCleanCanvas({ storage: localStorage, hash: '' });
     expect(res.skipped).toBe(false);
     expect(res.autoReset).toBe(true);
     expect(res.prefs.boxSelectionMode).toBe('overlap');
     expect(res.prefs.inputDevice).toBe('trackpad');
+    expect(res.prefs.exportOpts.background).toBe(false);
     expect(res.prefs.exportOpts.padding).toBe(false);
+    expect(resolveExportPreset(res.prefs.exportOpts)).toBe('screenshot');
     expect(localStorage.getItem(LS_ELEMENTS_KEY)).toBe('[]');
     const st = JSON.parse(localStorage.getItem(LS_STATE_KEY) || '{}');
     expect(st.currentItemStrokeColor).toBe(DEFAULT_PEN_COLOR);
     expect(st.boxSelectionMode).toBe('overlap');
     expect(st.inputDevice).toBe('trackpad');
+    expect('exportScale' in st).toBe(false);
   });
 
-  it('migrates legacy defaultPink: false preference and handles corrupted storage payloads gracefully', () => {
-    localStorage.setItem(LS_PREFS_KEY, JSON.stringify({ quickOpts: { defaultPink: false } }));
+  it('migrates legacy defaultPink: false, preserves saved background/padding, and handles corrupted payloads', () => {
+    localStorage.setItem(
+      LS_PREFS_KEY,
+      JSON.stringify({
+        quickOpts: { defaultPink: false },
+        exportOpts: { background: true, padding: false },
+      }),
+    );
     const prefs = loadPrefs(localStorage);
     expect(prefs.quickOpts.defaultPenColor).toBe('#1e1e1e');
+    expect(prefs.exportOpts.background).toBe(true);
     expect(prefs.exportOpts.padding).toBe(false);
+    expect(resolveExportPreset(prefs.exportOpts)).toBe('custom');
 
     localStorage.setItem(LS_PREFS_KEY, '[]');
     expect(loadPrefs(localStorage).exportOpts.padding).toBe(false);
+    expect(loadPrefs(localStorage).exportOpts.background).toBe(false);
 
     localStorage.setItem(LS_PREFS_KEY, '{broken-json');
     expect(loadPrefs(localStorage).quickOpts.defaultPenColor).toBe(DEFAULT_PEN_COLOR);
@@ -93,7 +127,6 @@ describe('storageBridge, filesDb & debounced persistence race prevention', () =>
     prefs.boxSelectionMode = 'contain';
     prefs.inputDevice = 'mouse';
     prefs.exportOpts.format = 'svg';
-    prefs.exportOpts.scale = 3;
     prefs.quickOpts.autoResetOnOpen = false;
     prefs.quickOpts.defaultPenColor = '#1971c2';
     savePrefs(prefs, localStorage);
@@ -104,7 +137,6 @@ describe('storageBridge, filesDb & debounced persistence race prevention', () =>
     expect(reloaded.boxSelectionMode).toBe('contain');
     expect(reloaded.inputDevice).toBe('mouse');
     expect(reloaded.exportOpts.format).toBe('svg');
-    expect(reloaded.exportOpts.scale).toBe(3);
     expect(reloaded.quickOpts.autoResetOnOpen).toBe(false);
     expect(reloaded.quickOpts.defaultPenColor).toBe('#1971c2');
     expect(localStorage.getItem(LS_PREFS_KEY)).toBeTruthy();

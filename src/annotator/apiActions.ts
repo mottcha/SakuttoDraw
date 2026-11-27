@@ -16,7 +16,6 @@ import {
   DEFAULT_PEN_COLOR,
   LS_ELEMENTS_KEY,
   normalizeFormat,
-  normalizeScale,
   patchSavedAppState,
   prefsToAppStatePatch,
   resetPersistedFilesCache,
@@ -24,6 +23,7 @@ import {
 } from '../services/storageBridge';
 import { normalizeHexColor, silently } from '../utils/common';
 import { filterTargetElementsForExport } from './elementOps';
+import { createAutoExportScaleFn } from './exportScale';
 import {
   clearRedactStyleIsolationState,
   updateRedactStyleIsolationPenColor,
@@ -122,8 +122,8 @@ export async function runInstantExportWithApi(
     return { ok: false, reason: 'empty-canvas' };
   }
 
-  const scale = normalizeScale(opts.scale);
   const fmt = normalizeFormat(opts.format);
+  const autoScale = createAutoExportScaleFn(elements, files);
   const exportPadding = opts.padding ? 10 : 0;
   const canvasBackgroundColor = opts.background
     ? appState.viewBackgroundColor || '#ffffff'
@@ -139,7 +139,7 @@ export async function runInstantExportWithApi(
         config: {
           canvasBackgroundColor,
           theme,
-          scale,
+          scale: autoScale,
           padding: exportPadding,
           embedScene: opts.embedScene,
         },
@@ -180,7 +180,7 @@ export async function runInstantExportWithApi(
         config: {
           canvasBackgroundColor,
           theme,
-          scale,
+          scale: autoScale,
           padding: exportPadding,
           embedScene: opts.embedScene,
         },
