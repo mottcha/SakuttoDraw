@@ -105,12 +105,18 @@ describe('upstream contracts & architecture invariants', () => {
   it('maintains strict index.html CSP without unsafe-eval, wasm-unsafe-eval, or inline scripts', () => {
     const html = fs.readFileSync(path.join(ROOT_DIR, 'index.html'), 'utf8');
     expect(/http-equiv=["']Content-Security-Policy["']/i.test(html)).toBe(true);
+    expect(/<meta\b[^>]*name=["']color-scheme["'][^>]*content=["']light\s+dark["']/i.test(html)).toBe(true);
     expect(/unsafe-eval|wasm-unsafe-eval/i.test(html)).toBe(false);
     for (const m of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)) {
       const attrs = m[1] ?? '';
       const body = (m[2] ?? '').trim();
       expect(/\bsrc\s*=/.test(attrs) || body.length === 0, 'Inline <script> is forbidden').toBe(true);
     }
+
+    const baseCss = fs.readFileSync(path.join(SRC_ROOT, 'styles', 'base.css'), 'utf8');
+    expect(baseCss).toContain('color-scheme: light dark;');
+    expect(baseCss).toContain(':root[data-exq-theme="light"]');
+    expect(baseCss).toContain(':root[data-exq-theme="dark"]');
   });
 
   it('keeps generated manifests, domContract tool map, vite config, and ICON_DEFS consistent', () => {

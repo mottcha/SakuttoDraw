@@ -40,6 +40,7 @@ import {
   normalizeInputDevice,
   resolveDesktopUIMode,
   resolvePreferJpFont,
+  resolveTheme,
   sakuttoGetFormFactor,
   savePrefs,
   scheduleScenePersist,
@@ -76,6 +77,7 @@ export function App() {
       runtime.prefs = initResult.prefs;
       if (typeof document !== 'undefined' && document.documentElement) {
         document.documentElement.lang = initResult.prefs.lang;
+        document.documentElement.dataset.exqTheme = resolveTheme(initResult.prefs.themeMode);
       }
       applySakuttoFontOverrides({
         preferJpFont: resolvePreferJpFont(initResult.prefs),
@@ -154,6 +156,12 @@ export function App() {
 
   const resolvedTheme: 'light' | 'dark' =
     themeMode === 'system' ? (systemDark ? 'dark' : 'light') : themeMode;
+
+  useEffect(() => {
+    if (typeof document !== 'undefined' && document.documentElement) {
+      document.documentElement.dataset.exqTheme = resolvedTheme;
+    }
+  }, [resolvedTheme]);
 
   const handleThemeChange = useCallback((nextTheme: ThemeMode) => {
     setThemeMode(nextTheme);

@@ -23,6 +23,7 @@ import {
   normalizeFormat,
   normalizeScale,
   resetPersistedFilesCache,
+  resolveTheme,
   savePrefs,
   scheduleScenePersist,
   shouldSkipAutoReset,
@@ -218,5 +219,27 @@ describe('storageBridge, filesDb & debounced persistence race prevention', () =>
       saveFilesToIndexedDb({ f1: { id: 'f1', dataURL: 'data:', mimeType: 'image/png', created: 1 } as never }, fakeIdb),
     ).resolves.toBe(false);
     expect(close).toHaveBeenCalledTimes(3);
+  });
+
+  it('keeps default themeMode as light and resolves light, dark, and system themes', () => {
+    expect(loadPrefs(localStorage).themeMode).toBe('light');
+    expect(resolveTheme('light')).toBe('light');
+    expect(resolveTheme('dark')).toBe('dark');
+
+    const origMatchMedia = window.matchMedia;
+    Object.defineProperty(window, 'matchMedia', {
+      value: vi.fn().mockReturnValue({ matches: true }),
+      configurable: true,
+      writable: true,
+    });
+    try {
+      expect(resolveTheme('system')).toBe('dark');
+    } finally {
+      Object.defineProperty(window, 'matchMedia', {
+        value: origMatchMedia,
+        configurable: true,
+        writable: true,
+      });
+    }
   });
 });

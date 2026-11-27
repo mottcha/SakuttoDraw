@@ -157,7 +157,7 @@ export function syncDesktopUIMode(
   return resolved;
 }
 
-function resolveTheme(themeMode: ThemeMode): 'light' | 'dark' {
+export function resolveTheme(themeMode: ThemeMode): 'light' | 'dark' {
   if (themeMode === 'dark') return 'dark';
   if (themeMode === 'system') {
     if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
