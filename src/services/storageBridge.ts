@@ -11,6 +11,7 @@ import type {
   ExportPreset,
   InputDevicePref,
   Prefs,
+  QuickSaveModePref,
   StylesPanelPref,
   ThemeMode,
 } from '../types/annotator';
@@ -41,6 +42,7 @@ const DEFAULT_PREFS: Prefs = {
   boxSelectionMode: 'overlap',
   inputDevice: 'trackpad',
   stylesPanelMode: 'auto',
+  quickSaveMode: 'direct',
   preferJpFont: null,
   codeLigatures: true,
   exportOpts: {
@@ -70,6 +72,7 @@ export function createDefaultPrefs(lang: AppLang = DEFAULT_PREFS.lang): Prefs {
     boxSelectionMode: DEFAULT_PREFS.boxSelectionMode,
     inputDevice: DEFAULT_PREFS.inputDevice,
     stylesPanelMode: DEFAULT_PREFS.stylesPanelMode,
+    quickSaveMode: DEFAULT_PREFS.quickSaveMode,
     preferJpFont: DEFAULT_PREFS.preferJpFont,
     codeLigatures: DEFAULT_PREFS.codeLigatures,
     exportOpts: { ...DEFAULT_PREFS.exportOpts },
@@ -121,6 +124,10 @@ export function normalizeInputDevice(value: unknown): InputDevicePref {
 function normalizeStylesPanelMode(value: unknown): StylesPanelPref {
   if (value === 'compact' || value === 'full') return value;
   return 'auto';
+}
+
+export function normalizeQuickSaveMode(value: unknown): QuickSaveModePref {
+  return value === 'dialog' ? 'dialog' : 'direct';
 }
 
 export function sakuttoGetFormFactor(width: number, height: number): 'phone' | 'desktop' {
@@ -254,6 +261,9 @@ export function loadPrefs(
       }
       if (saved.stylesPanelMode != null) {
         base.stylesPanelMode = normalizeStylesPanelMode(saved.stylesPanelMode);
+      }
+      if (saved.quickSaveMode != null) {
+        base.quickSaveMode = normalizeQuickSaveMode(saved.quickSaveMode);
       }
       if (typeof saved.preferJpFont === 'boolean' || saved.preferJpFont === null) {
         base.preferJpFont = saved.preferJpFont;

@@ -7,6 +7,7 @@ import { syncMainMenu } from '../annotator/quickAnnotator/mainMenu';
 import { applyLanguage, attachExcalidrawAPI, runtime } from '../annotator/quickAnnotator/runtime';
 import { syncToolbar } from '../annotator/quickAnnotator/toolbar';
 import { syncTopRightBar } from '../annotator/quickAnnotator/topRightBar';
+import * as actions from '../annotator/quickAnnotator/actions';
 import * as apiActions from '../annotator/apiActions';
 import { EXCALIDRAW_LS_KEYS } from '../excalidraw/domContract';
 import {
@@ -72,12 +73,27 @@ describe('quickAnnotator desktop DOM sync, language switcher, and layout modes',
     expect(document.querySelector('[data-exq-lang-select="1"]')).toBeNull();
     expect(document.querySelector('[data-exq-cjk-btn]')).toBeNull();
     expect(document.querySelector('.exq-toolbar-reset')?.getAttribute('title')).toBe('キャンバスをクリア');
+    expect(document.querySelector('[data-exq-main-action="png"]')?.textContent).toBe('名前を付けて画像を保存...');
     expect(document.querySelector('[data-exq-main-action="copy"]')?.textContent).toBe('クリップボードにコピー');
+    expect(document.querySelector('[data-exq-action="png"]')?.getAttribute('title')).toBe('画像として保存');
+
+    runtime.prefs.quickSaveMode = 'dialog';
+    expect(syncTopRightBar()).toBe(false);
+    expect(document.querySelector('[data-exq-action="png"]')?.getAttribute('title')).toBe('名前を付けて画像を保存...');
+    runtime.prefs.quickSaveMode = 'direct';
+
+    const runExportSpy = vi
+      .spyOn(actions, 'runInstantExport')
+      .mockResolvedValue({ ok: true, mode: 'save', format: 'png' });
+    document.querySelector<HTMLButtonElement>('[data-exq-main-action="png"]')?.click();
+    expect(runExportSpy).toHaveBeenCalledWith('save', null, { showSaveDialog: true });
+    runExportSpy.mockRestore();
 
     applyLanguage('en');
     syncToolbar();
     syncMainMenu();
     expect(document.querySelector('.exq-toolbar-reset')?.getAttribute('title')).toBe('Clear canvas');
+    expect(document.querySelector('[data-exq-main-action="png"]')?.textContent).toBe('Save image as...');
     expect(document.querySelector('[data-exq-main-action="copy"]')?.textContent).toBe('Copy to clipboard');
   });
 

@@ -119,6 +119,7 @@ describe('components & CJK font store interactions', () => {
     } as unknown as ExcalidrawImperativeAPI);
 
     const onModeChange = vi.fn();
+    const onQuickSaveModeChange = vi.fn();
     const host = document.createElement('div');
     document.body.append(host);
     const root = createRoot(host);
@@ -130,10 +131,12 @@ describe('components & CJK font store interactions', () => {
             boxSelectionMode: 'overlap',
             inputDevice: 'trackpad',
             stylesPanelMode: 'auto',
+            quickSaveMode: 'direct',
             zenModeEnabled: false,
             viewModeEnabled: false,
           },
           onStylesPanelModeChange: onModeChange,
+          onQuickSaveModeChange,
         }),
       );
     });
@@ -149,6 +152,27 @@ describe('components & CJK font store interactions', () => {
     expect(document.activeElement).toBe(
       host.querySelector('[data-exq-pref-styles-panel="compact"]'),
     );
+
+    const quickSaveDirectBtn = host.querySelector<HTMLButtonElement>(
+      '[data-exq-pref-quick-save="direct"]',
+    )!;
+    const quickSaveDialogBtn = host.querySelector<HTMLButtonElement>(
+      '[data-exq-pref-quick-save="dialog"]',
+    )!;
+    expect(quickSaveDirectBtn.getAttribute('aria-checked')).toBe('true');
+    expect(quickSaveDialogBtn.getAttribute('aria-checked')).toBe('false');
+    quickSaveDirectBtn.focus();
+    await act(async () => {
+      quickSaveDirectBtn.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }),
+      );
+    });
+    expect(onQuickSaveModeChange).toHaveBeenCalledWith('dialog');
+    expect(document.activeElement).toBe(quickSaveDialogBtn);
+
+    onQuickSaveModeChange.mockClear();
+    quickSaveDialogBtn.click();
+    expect(onQuickSaveModeChange).toHaveBeenCalledWith('dialog');
 
     const containBtn = host.querySelector<HTMLButtonElement>('[data-exq-pref-box="contain"]')!;
     containBtn.click();

@@ -1,5 +1,6 @@
 import { MainMenu } from '@excalidraw/excalidraw';
-import type { AppLang, StylesPanelPref, ThemeMode } from '../types/annotator';
+import type { AppLang, QuickSaveModePref, StylesPanelPref, ThemeMode } from '../types/annotator';
+import { runDirectDiskSave } from '../annotator/quickAnnotator/actions';
 import { applyLanguage } from '../annotator/quickAnnotator/runtime';
 import { getMessages, SUPPORTED_LANGS } from '../i18n/messages';
 import { CustomSettingsVisualPanel } from './CustomSettingsPanel';
@@ -15,6 +16,7 @@ export interface SakuttoMainMenuProps {
   themeMode: ThemeMode;
   prefState: PreferencesLiveState;
   onStylesPanelModeChange: (mode: StylesPanelPref) => void;
+  onQuickSaveModeChange: (mode: QuickSaveModePref) => void;
 }
 
 export function SakuttoMainMenu({
@@ -22,6 +24,7 @@ export function SakuttoMainMenu({
   themeMode,
   prefState,
   onStylesPanelModeChange,
+  onQuickSaveModeChange,
 }: SakuttoMainMenuProps) {
   const t = getMessages(lang);
 
@@ -29,7 +32,15 @@ export function SakuttoMainMenu({
     <MainMenu>
       <MainMenu.DefaultItems.LoadScene />
       <MainMenu.DefaultItems.SaveToActiveFile />
-      <MainMenu.DefaultItems.Export />
+      <MainMenu.Item
+        icon={<Icon name="download" size={16} strokeWidth={1.5} />}
+        data-exq-main-action="save-project"
+        onSelect={() => {
+          void runDirectDiskSave();
+        }}
+      >
+        {t.saveProjectAs}
+      </MainMenu.Item>
       <MainMenu.DefaultItems.SaveAsImage />
       <MainMenu.Separator />
       <MainMenu.DefaultItems.Preferences>
@@ -37,6 +48,7 @@ export function SakuttoMainMenu({
           lang={lang}
           prefState={prefState}
           onStylesPanelModeChange={onStylesPanelModeChange}
+          onQuickSaveModeChange={onQuickSaveModeChange}
         />
       </MainMenu.DefaultItems.Preferences>
       <MainMenu.Sub>

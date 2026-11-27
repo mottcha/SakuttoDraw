@@ -27,6 +27,8 @@ export interface MessageCatalog {
   resetCanvasTitle: string;
   copyToClipboard: string;
   saveAsImage: string;
+  saveProjectAs: string;
+  saveImageAs: string;
   exportSettings: string;
   exportOnlySelected: string;
   exportBackground: string;
@@ -69,6 +71,9 @@ export interface MessageCatalog {
   prefStylesPanelAuto: string;
   prefStylesPanelCompact: string;
   prefStylesPanelFull: string;
+  prefQuickSaveTitle: string;
+  prefQuickSaveDirect: string;
+  prefQuickSaveDialog: string;
   languageLabel: string;
   fontSettings: string;
   prefPreferJpFont: string;
@@ -149,6 +154,8 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     resetCanvasTitle: 'Clear canvas',
     copyToClipboard: 'Copy to clipboard',
     saveAsImage: 'Save as image',
+    saveProjectAs: 'Save editable data...',
+    saveImageAs: 'Save image as...',
     exportSettings: 'Export settings',
     exportOnlySelected: 'Only selected',
     exportBackground: 'Transparent background',
@@ -173,7 +180,7 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     customBehaviorTitle: 'Behavior',
     optAutoResetOnOpen: 'Reset canvas on open',
     optTextAutoResize: 'No fixed width on new text',
-    optFastLoadSave: 'Skip load/save prompts',
+    optFastLoadSave: 'Skip prompt when opening files',
     optModernContextMenu: 'Modern context menu',
     penColor: 'Default pen color',
     canvasBackground: 'Canvas background',
@@ -191,6 +198,9 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     prefStylesPanelAuto: 'Auto',
     prefStylesPanelCompact: 'Slim',
     prefStylesPanelFull: 'Expanded',
+    prefQuickSaveTitle: 'Top-right save button',
+    prefQuickSaveDirect: 'Save now',
+    prefQuickSaveDialog: 'Choose location',
     languageLabel: 'Language',
     fontSettings: 'Font settings',
     prefPreferJpFont: 'Preferred fonts',
@@ -276,6 +286,8 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     resetCanvasTitle: 'キャンバスをクリア',
     copyToClipboard: 'クリップボードにコピー',
     saveAsImage: '画像として保存',
+    saveProjectAs: '編集データを保存...',
+    saveImageAs: '名前を付けて画像を保存...',
     exportSettings: 'エクスポート設定',
     exportOnlySelected: '選択した図形のみ',
     exportBackground: '背景の透明化',
@@ -300,7 +312,7 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     customBehaviorTitle: '動作設定',
     optAutoResetOnOpen: '起動時にキャンバスをリセット',
     optTextAutoResize: 'テキスト挿入時に固定幅にしない',
-    optFastLoadSave: '開く/保存の確認スキップ',
+    optFastLoadSave: 'ファイルを開く時の確認をスキップ',
     optModernContextMenu: 'コンテキストメニューのモダン化',
     penColor: 'デフォルトのペンの色',
     canvasBackground: 'キャンバスの背景',
@@ -318,6 +330,9 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     prefStylesPanelAuto: '自動',
     prefStylesPanelCompact: 'スリム固定',
     prefStylesPanelFull: '常に展開',
+    prefQuickSaveTitle: '右上の保存ボタン',
+    prefQuickSaveDirect: 'すぐ保存',
+    prefQuickSaveDialog: '保存先を選ぶ',
     languageLabel: '言語',
     fontSettings: 'フォント設定',
     prefPreferJpFont: '優先フォント',
@@ -403,6 +418,8 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     resetCanvasTitle: '清空画布',
     copyToClipboard: '复制到剪贴板',
     saveAsImage: '保存为图片',
+    saveProjectAs: '保存可编辑数据...',
+    saveImageAs: '将图片另存为...',
     exportSettings: '导出设置',
     exportOnlySelected: '仅导出选中项',
     exportBackground: '透明背景',
@@ -427,7 +444,7 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     customBehaviorTitle: '行为设置',
     optAutoResetOnOpen: '打开时重置画布',
     optTextAutoResize: '插入文本时不固定宽度',
-    optFastLoadSave: '跳过打开/保存确认',
+    optFastLoadSave: '跳过打开文件时的确认',
     optModernContextMenu: '现代右键菜单',
     penColor: '默认画笔颜色',
     canvasBackground: '画布背景',
@@ -445,6 +462,9 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     prefStylesPanelAuto: '自动',
     prefStylesPanelCompact: '精简固定',
     prefStylesPanelFull: '始终展开',
+    prefQuickSaveTitle: '右上角保存按钮',
+    prefQuickSaveDirect: '立即保存',
+    prefQuickSaveDialog: '选择保存位置',
     languageLabel: '语言',
     fontSettings: '字体设置',
     prefPreferJpFont: '优先字体',
@@ -530,6 +550,8 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     resetCanvasTitle: '清除畫布',
     copyToClipboard: '複製到剪貼簿',
     saveAsImage: '儲存為圖片',
+    saveProjectAs: '儲存可編輯資料...',
+    saveImageAs: '另存圖片...',
     exportSettings: '匯出設定',
     exportOnlySelected: '僅匯出選取項目',
     exportBackground: '透明背景',
@@ -554,7 +576,7 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     customBehaviorTitle: '行為設定',
     optAutoResetOnOpen: '開啟時重設畫布',
     optTextAutoResize: '插入文字時不固定寬度',
-    optFastLoadSave: '略過開啟/儲存確認',
+    optFastLoadSave: '略過開啟檔案時的確認',
     optModernContextMenu: '現代化右鍵選單',
     penColor: '預設畫筆顏色',
     canvasBackground: '畫布背景',
@@ -572,6 +594,9 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     prefStylesPanelAuto: '自動',
     prefStylesPanelCompact: '精簡固定',
     prefStylesPanelFull: '始終展開',
+    prefQuickSaveTitle: '右上角儲存按鈕',
+    prefQuickSaveDirect: '立即儲存',
+    prefQuickSaveDialog: '選擇儲存位置',
     languageLabel: '語言',
     fontSettings: '字型設定',
     prefPreferJpFont: '優先字型',
@@ -657,6 +682,8 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     resetCanvasTitle: '캔버스 지우기',
     copyToClipboard: '클립보드에 복사',
     saveAsImage: '이미지로 저장',
+    saveProjectAs: '편집 데이터 저장...',
+    saveImageAs: '다른 이름으로 이미지 저장...',
     exportSettings: '내보내기 설정',
     exportOnlySelected: '선택한 도형만',
     exportBackground: '배경 투명화',
@@ -681,7 +708,7 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     customBehaviorTitle: '동작 설정',
     optAutoResetOnOpen: '시작 시 캔버스 초기화',
     optTextAutoResize: '텍스트 삽입 시 너비 고정 안 함',
-    optFastLoadSave: '열기/저장 확인 건너뛰기',
+    optFastLoadSave: '파일 열기 확인 건너뛰기',
     optModernContextMenu: '모던 컨텍스트 메뉴',
     penColor: '기본 펜 색상',
     canvasBackground: '캔버스 배경',
@@ -699,6 +726,9 @@ const MESSAGES: Record<AppLang, MessageCatalog> = {
     prefStylesPanelAuto: '자동',
     prefStylesPanelCompact: '슬림 고정',
     prefStylesPanelFull: '항상 펼침',
+    prefQuickSaveTitle: '오른쪽 상단 저장 버튼',
+    prefQuickSaveDirect: '바로 저장',
+    prefQuickSaveDialog: '저장 위치 선택',
     languageLabel: '언어',
     fontSettings: '글꼴 설정',
     prefPreferJpFont: '우선 글꼴',

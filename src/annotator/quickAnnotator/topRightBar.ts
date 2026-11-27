@@ -5,7 +5,14 @@ import { runInstantExport } from './actions';
 import { createMountedSlot, el, svgIcon } from './dom';
 import { runtime } from './runtime';
 
-const rightBarSlot = createMountedSlot<Record<string, never>>();
+const rightBarSlot = createMountedSlot<{ saveBtn: HTMLButtonElement }>();
+
+function applySaveBtnLabels(saveBtn: HTMLButtonElement): void {
+  const t = getMessages(runtime.prefs.lang);
+  const label = runtime.prefs.quickSaveMode === 'dialog' ? t.saveImageAs : t.saveAsImage;
+  saveBtn.title = label;
+  saveBtn.setAttribute('aria-label', label);
+}
 
 function buildRightBarWidget() {
   const t = getMessages(runtime.prefs.lang);
@@ -29,11 +36,10 @@ function buildRightBarWidget() {
       type: 'button',
       class: 'exq-action-btn',
       'data-exq-action': 'png',
-      title: t.saveAsImage,
-      'aria-label': t.saveAsImage,
     },
     svgIcon('download', 15),
   );
+  applySaveBtnLabels(saveBtn);
 
   let copyDoneTimer: ReturnType<typeof setTimeout> | null = null;
   copyBtn.addEventListener('click', async () => {
@@ -54,13 +60,15 @@ function buildRightBarWidget() {
   });
 
   saveBtn.addEventListener('click', () => {
-    void runInstantExport('save', saveBtn);
+    void runInstantExport('save', saveBtn, {
+      showSaveDialog: runtime.prefs.quickSaveMode === 'dialog',
+    });
   });
 
   const bar = el('div', { class: 'exq-right-bar' }, copyBtn, saveBtn);
   wrap.append(bar);
 
-  return { wrap };
+  return { wrap, saveBtn };
 }
 
 export function syncTopRightBar(root: ParentNode = document): boolean {
@@ -69,11 +77,12 @@ export function syncTopRightBar(root: ParentNode = document): boolean {
 
   const mounted = rightBarSlot.get(container);
   if (mounted && mounted.lang === runtime.prefs.lang && mounted.nodes.every((n) => n.isConnected)) {
+    applySaveBtnLabels(mounted.state.saveBtn);
     return false;
   }
 
   const widget = buildRightBarWidget();
-  rightBarSlot.mount(container, runtime.prefs.lang, [widget.wrap], {});
+  rightBarSlot.mount(container, runtime.prefs.lang, [widget.wrap], { saveBtn: widget.saveBtn });
   container.append(widget.wrap);
   return true;
 }

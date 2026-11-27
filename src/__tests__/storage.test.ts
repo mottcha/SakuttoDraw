@@ -120,12 +120,14 @@ describe('storageBridge, filesDb & debounced persistence race prevention', () =>
     expect(shouldSkipAutoReset('')).toBe(false);
   });
 
-  it('saves and reloads preferences including language, themeMode, boxSelectionMode, inputDevice, and pen color', () => {
+  it('saves and reloads preferences including language, themeMode, boxSelectionMode, inputDevice, quickSaveMode, and pen color', () => {
     const prefs = loadPrefs(localStorage);
+    expect(prefs.quickSaveMode).toBe('direct');
     prefs.lang = 'zh-TW';
     prefs.themeMode = 'system';
     prefs.boxSelectionMode = 'contain';
     prefs.inputDevice = 'mouse';
+    prefs.quickSaveMode = 'dialog';
     prefs.exportOpts.format = 'svg';
     prefs.quickOpts.autoResetOnOpen = false;
     prefs.quickOpts.defaultPenColor = '#1971c2';
@@ -136,10 +138,14 @@ describe('storageBridge, filesDb & debounced persistence race prevention', () =>
     expect(reloaded.themeMode).toBe('system');
     expect(reloaded.boxSelectionMode).toBe('contain');
     expect(reloaded.inputDevice).toBe('mouse');
+    expect(reloaded.quickSaveMode).toBe('dialog');
     expect(reloaded.exportOpts.format).toBe('svg');
     expect(reloaded.quickOpts.autoResetOnOpen).toBe(false);
     expect(reloaded.quickOpts.defaultPenColor).toBe('#1971c2');
     expect(localStorage.getItem(LS_PREFS_KEY)).toBeTruthy();
+
+    localStorage.setItem(LS_PREFS_KEY, JSON.stringify({ quickSaveMode: 'invalid-mode' }));
+    expect(loadPrefs(localStorage).quickSaveMode).toBe('direct');
   });
 
   it('cancels pending debounced scene persist when instant reset runs within 250ms', async () => {

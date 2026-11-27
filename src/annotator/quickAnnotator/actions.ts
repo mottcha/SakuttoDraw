@@ -11,6 +11,7 @@ import { normalizeHexColor, silently } from '../../utils/common';
 import {
   applyCanvasBackgroundWithApi,
   applyPenColorWithApi,
+  runDirectDiskSaveWithApi,
   runInstantExportWithApi,
   runInstantResetWithApi,
 } from '../apiActions';
@@ -42,6 +43,7 @@ export async function withBusyLock<T>(
 export async function runInstantExport(
   mode: 'copy' | 'save',
   triggerBtn?: HTMLButtonElement | null,
+  options?: { showSaveDialog?: boolean },
 ) {
   return withBusyLock(
     triggerBtn,
@@ -50,8 +52,21 @@ export async function runInstantExport(
         lang: runtime.prefs.lang,
         preferJpFont: resolvePreferJpFont(runtime.prefs),
         showToast,
+        showSaveDialog: options?.showSaveDialog ?? runtime.prefs.quickSaveMode === 'dialog',
       }),
     { ok: false, reason: 'busy' } as const,
+  );
+}
+
+export async function runDirectDiskSave(triggerBtn?: HTMLButtonElement | null) {
+  return withBusyLock(
+    triggerBtn,
+    () =>
+      runDirectDiskSaveWithApi(runtime.api, {
+        lang: runtime.prefs.lang,
+        showToast,
+      }),
+    false,
   );
 }
 

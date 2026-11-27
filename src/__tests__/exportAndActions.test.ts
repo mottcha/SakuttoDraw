@@ -3,6 +3,10 @@ import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 import * as excalidraw from '@excalidraw/excalidraw';
 import {
   applyCanvasBackgroundWithApi,
+  formatLocalTimestamp,
+  isUntitledExcalidrawName,
+  resolveExportFilename,
+  resolveProjectFilename,
   runDirectDiskSaveWithApi,
   runDirectFileLoadWithApi,
   runInstantExportWithApi,
@@ -244,6 +248,188 @@ describe('export filtering & apiActions', () => {
       expect(toastErr).toHaveBeenCalledTimes(1);
     } finally {
       loadSpy.mockRestore();
+    }
+  });
+
+  it('resolves sakutto-YYYY-MM-DD-HHmmss filenames for untitled canvases and preserves named document bases without double timestamps', () => {
+    const fixedDate = new Date(2026, 10, 28, 1, 23, 45);
+    expect(formatLocalTimestamp(fixedDate)).toBe('2026-11-28-012345');
+
+    expect(isUntitledExcalidrawName('')).toBe(true);
+    expect(isUntitledExcalidrawName('Untitled-2026-11-28-0100')).toBe(true);
+    expect(isUntitledExcalidrawName('無題-2026-11-28-0100')).toBe(true);
+    expect(isUntitledExcalidrawName('未命名-2026-11-28-0100')).toBe(true);
+    expect(isUntitledExcalidrawName('제목 없음-2026-11-28-0100')).toBe(true);
+    expect(isUntitledExcalidrawName('memo')).toBe(false);
+
+    const makeNamedApi = (name: string) =>
+      ({ getName: () => name }) as unknown as ExcalidrawImperativeAPI;
+
+    for (const untitled of ['', '無題-2026-11-28-0100', 'Untitled-2026-11-28-0100']) {
+      const api = makeNamedApi(untitled);
+      expect(resolveProjectFilename(api, fixedDate)).toBe('sakutto-2026-11-28-012345.excalidraw');
+      expect(resolveExportFilename(api, 'png', fixedDate)).toBe('sakutto-2026-11-28-012345.png');
+    }
+
+    const memoApi = makeNamedApi('memo');
+    expect(resolveProjectFilename(memoApi, fixedDate)).toBe('memo.excalidraw');
+    expect(resolveExportFilename(memoApi, 'png', fixedDate)).toBe('memo-2026-11-28-012345.png');
+
+    const prevTimestampApi = makeNamedApi('sakutto-2026-11-28-010000');
+    expect(resolveProjectFilename(prevTimestampApi, fixedDate)).toBe('sakutto-2026-11-28-010000.excalidraw');
+    expect(resolveExportFilename(prevTimestampApi, 'svg', fixedDate)).toBe('sakutto-2026-11-28-012345.svg');
+  });
+
+  it('handles OS save dialog for image export (PNG/SVG switch, cancel, write error, fallback) and syncs document name on load/save', async () => {
+    const updateScene = vi.fn();
+    let elements: Array<Record<string, unknown>> = [];
+    const mockApi = {
+      getSceneElements: () => elements,
+      getAppState: () => ({ viewBackgroundColor: '#ffffff', selectedElementIds: {} }),
+      getFiles: () => ({}),
+      getName: () => '無題-2026-11-28-0100',
+      updateScene,
+      addFiles: vi.fn(),
+    } as unknown as ExcalidrawImperativeAPI;
+
+    const sceneSpy = vi
+      .spyOn(excalidraw, 'exportScene')
+      .mockImplementation(async ({ type }) => {
+        if (type === 'svg') {
+          return document.createElementNS('http://www.w3.org/2000/svg', 'svg') as unknown as SVGSVGElement;
+        }
+        return new Blob(['png'], { type: 'image/png' });
+      });
+
+    const write = vi.fn(async () => {});
+    const close = vi.fn(async () => {});
+    const abort = vi.fn(async () => {});
+    const showSaveFilePicker = vi.fn(async () => ({
+      name: 'picked-diagram.svg',
+      createWritable: async () => ({ write, close, abort }),
+    }));
+    const toastFn = vi.fn();
+    const origCreateObjectURL = URL.createObjectURL;
+    const origRevokeObjectURL = URL.revokeObjectURL;
+    URL.createObjectURL = vi.fn(() => 'blob:mock-fallback');
+    URL.revokeObjectURL = vi.fn();
+
+    Object.defineProperty(globalThis, 'showSaveFilePicker', {
+      value: showSaveFilePicker,
+      configurable: true,
+      writable: true,
+    });
+
+    try {
+      const prefs = loadPrefs(localStorage);
+
+      // Empty canvas skips showSaveFilePicker
+      const emptyRes = await runInstantExportWithApi(mockApi, 'save', prefs.exportOpts, {
+        lang: 'ja-JP',
+        showToast: toastFn,
+        showSaveDialog: true,
+      });
+      expect(emptyRes).toMatchObject({ ok: false, reason: 'empty-canvas' });
+      expect(showSaveFilePicker).not.toHaveBeenCalled();
+
+      elements = [{ id: 'r1', type: 'rectangle', isDeleted: false }];
+
+      // Selecting .svg in OS picker when opts.format === 'png' switches output to SVG with skipInliningFonts: true
+      toastFn.mockClear();
+      const svgRes = await runInstantExportWithApi(mockApi, 'save', prefs.exportOpts, {
+        lang: 'ja-JP',
+        preferJpFont: true,
+        showToast: toastFn,
+        showSaveDialog: true,
+      });
+      expect(svgRes).toMatchObject({ ok: true, mode: 'save', format: 'svg' });
+      expect(showSaveFilePicker).toHaveBeenCalledWith(
+        expect.objectContaining({
+          suggestedName: expect.stringMatching(/^sakutto-\d{4}-\d{2}-\d{2}-\d{6}\.png$/),
+          types: [
+            { description: 'PNG', accept: { 'image/png': ['.png'] } },
+            { description: 'SVG', accept: { 'image/svg+xml': ['.svg'] } },
+          ],
+        }),
+      );
+      expect(sceneSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'svg',
+          config: expect.objectContaining({ skipInliningFonts: true }),
+        }),
+      );
+      expect(write).toHaveBeenCalledTimes(1);
+      expect(close).toHaveBeenCalledTimes(1);
+      expect(toastFn).toHaveBeenCalledWith('キャンバス全体を保存しました');
+
+      // AbortError cancels silently with zero toast calls
+      const abortErr = Object.assign(new Error('Cancelled'), { name: 'AbortError' });
+      showSaveFilePicker.mockRejectedValueOnce(abortErr);
+      toastFn.mockClear();
+      const cancelRes = await runInstantExportWithApi(mockApi, 'save', prefs.exportOpts, {
+        lang: 'ja-JP',
+        showToast: toastFn,
+        showSaveDialog: true,
+      });
+      expect(cancelRes).toEqual({ ok: false, reason: 'cancelled' });
+      expect(toastFn).not.toHaveBeenCalled();
+
+      // Write error aborts writable and notifies failure
+      write.mockRejectedValueOnce(new Error('Disk full'));
+      toastFn.mockClear();
+      const writeErrRes = await runInstantExportWithApi(mockApi, 'save', prefs.exportOpts, {
+        lang: 'ja-JP',
+        showToast: toastFn,
+        showSaveDialog: true,
+      });
+      expect(writeErrRes).toEqual({ ok: false, reason: 'export-failed' });
+      expect(abort).toHaveBeenCalledTimes(1);
+      expect(toastFn).toHaveBeenCalledWith('保存に失敗しました');
+
+      // Project save updates appState.name from handle.name
+      updateScene.mockClear();
+      showSaveFilePicker.mockResolvedValueOnce({
+        name: 'architecture-notes.excalidraw',
+        createWritable: async () => ({ write, close, abort }),
+      });
+      expect(await runDirectDiskSaveWithApi(mockApi, { lang: 'ja-JP', showToast: toastFn })).toBe(true);
+      expect(updateScene).toHaveBeenCalledWith(
+        expect.objectContaining({
+          appState: { name: 'architecture-notes' },
+        }),
+      );
+
+      // Missing showSaveFilePicker falls back to blob download
+      delete (globalThis as { showSaveFilePicker?: unknown }).showSaveFilePicker;
+      sceneSpy.mockClear();
+      const fallbackRes = await runInstantExportWithApi(mockApi, 'save', prefs.exportOpts, {
+        lang: 'en',
+        showToast: toastFn,
+        showSaveDialog: true,
+      });
+      expect(fallbackRes).toMatchObject({ ok: true, mode: 'save', format: 'png' });
+      expect(URL.createObjectURL).toHaveBeenCalled();
+
+      // File load sets nextAppState.name from File.name
+      const loadSpy = vi.spyOn(excalidraw, 'loadFromBlob').mockResolvedValueOnce({
+        elements: [],
+        appState: {},
+        files: {},
+      } as never);
+      updateScene.mockClear();
+      const file = new File(['{}'], 'roadmap.excalidraw', { type: 'application/json' });
+      expect(await runDirectFileLoadWithApi(mockApi, file, { lang: 'en', showToast: toastFn })).toBe(true);
+      expect(updateScene).toHaveBeenCalledWith(
+        expect.objectContaining({
+          appState: expect.objectContaining({ name: 'roadmap' }),
+        }),
+      );
+      loadSpy.mockRestore();
+    } finally {
+      delete (globalThis as { showSaveFilePicker?: unknown }).showSaveFilePicker;
+      sceneSpy.mockRestore();
+      URL.createObjectURL = origCreateObjectURL;
+      URL.revokeObjectURL = origRevokeObjectURL;
     }
   });
 });

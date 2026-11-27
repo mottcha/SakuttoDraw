@@ -39,14 +39,20 @@ function buildMainMenuExportBlock(): DocumentFragment {
       icon: svgIcon(iconName, 15),
       label,
       onClick: () => {
-        sendEscape();
-        void runInstantExport(actionMode);
+        if (actionMode === 'save') {
+          // Invoke OS save picker in the synchronous user-gesture tick before dismissing menu
+          void runInstantExport('save', null, { showSaveDialog: true });
+          sendEscape();
+        } else {
+          sendEscape();
+          void runInstantExport('copy');
+        }
       },
     });
 
   frag.append(
     el('div', { class: 'exq-extra-sep', 'aria-hidden': 'true' }),
-    makeExportAction('imgSave', t.saveAsImage, 'save'),
+    makeExportAction('imgSave', t.saveImageAs, 'save'),
     makeExportAction('copy', t.copyToClipboard, 'copy'),
   );
 

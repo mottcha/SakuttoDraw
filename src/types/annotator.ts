@@ -16,6 +16,7 @@ export interface ExportOpts {
 export type BoxSelectionPref = 'overlap' | 'contain';
 export type InputDevicePref = 'trackpad' | 'mouse';
 export type StylesPanelPref = 'auto' | 'compact' | 'full';
+export type QuickSaveModePref = 'direct' | 'dialog';
 
 export interface RedactOpts {
   color: string;
@@ -35,6 +36,7 @@ export interface Prefs {
   boxSelectionMode: BoxSelectionPref;
   inputDevice: InputDevicePref;
   stylesPanelMode: StylesPanelPref;
+  quickSaveMode: QuickSaveModePref;
   preferJpFont: boolean | null;
   codeLigatures: boolean;
   exportOpts: ExportOpts;

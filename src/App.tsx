@@ -8,6 +8,7 @@ import type {
   AppLang,
   BoxSelectionPref,
   InputDevicePref,
+  QuickSaveModePref,
   StylesPanelPref,
   ThemeMode,
 } from './types/annotator';
@@ -95,6 +96,7 @@ export function App() {
       boxSelectionMode: runtime.prefs.boxSelectionMode,
       inputDevice: runtime.prefs.inputDevice,
       stylesPanelMode: runtime.prefs.stylesPanelMode,
+      quickSaveMode: runtime.prefs.quickSaveMode,
       initialDataPromise: loadInitialSceneData(undefined, undefined, runtime.prefs),
     };
   }, []);
@@ -105,6 +107,7 @@ export function App() {
     boxSelectionMode: initialBootstrap.boxSelectionMode,
     inputDevice: initialBootstrap.inputDevice,
     stylesPanelMode: initialBootstrap.stylesPanelMode,
+    quickSaveMode: initialBootstrap.quickSaveMode,
     zenModeEnabled: false,
     viewModeEnabled: false,
   }));
@@ -184,6 +187,15 @@ export function App() {
       prev.uiLayout === nextLayout ? prev : { ...prev, uiLayout: nextLayout },
     );
     syncDesktopUIMode(nextMode, { triggerResize: true });
+  }, []);
+
+  const handleQuickSaveModeChange = useCallback((nextMode: QuickSaveModePref) => {
+    runtime.prefs.quickSaveMode = nextMode;
+    savePrefs(runtime.prefs);
+    setPrefState((prev) =>
+      prev.quickSaveMode === nextMode ? prev : { ...prev, quickSaveMode: nextMode },
+    );
+    scheduleSync();
   }, []);
 
   const applyRedactColor = useCallback((nextColor: string) => {
@@ -335,6 +347,7 @@ export function App() {
           themeMode={themeMode}
           prefState={prefState}
           onStylesPanelModeChange={handleStylesPanelModeChange}
+          onQuickSaveModeChange={handleQuickSaveModeChange}
         />
       </Excalidraw>
       <SakuttoRedactPanel

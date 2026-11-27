@@ -22,7 +22,6 @@ export const EXCALIDRAW_TESTIDS = {
   laser: 'toolbar-laser',
   imageExport: 'image-export-button',
   loadButton: 'load-button',
-  jsonExport: 'json-export-button',
 } as const;
 
 export const EXCALIDRAW_LS_KEYS = {

@@ -7,7 +7,7 @@ import {
   installPrimaryToolRestoreGuard,
   installTextAutoResizeGuard,
 } from '../annotator/quickAnnotator/guards';
-import { attachExcalidrawAPI } from '../annotator/quickAnnotator/runtime';
+import { attachExcalidrawAPI, runtime } from '../annotator/quickAnnotator/runtime';
 import { resetDomAndRuntime } from './testHelpers';
 
 describe('event guards (textAutoResize, touch WYSIWYG, Ctrl multi-select, fast load/save)', () => {
@@ -343,7 +343,21 @@ describe('event guards (textAutoResize, touch WYSIWYG, Ctrl multi-select, fast l
       });
       window.dispatchEvent(evt);
       expect(evt.defaultPrevented).toBe(true);
-      expect(exportSpy).toHaveBeenCalledWith('save');
+      expect(exportSpy).toHaveBeenCalledWith('save', null, { showSaveDialog: false });
+
+      exportSpy.mockClear();
+      runtime.prefs.quickSaveMode = 'dialog';
+      const dialogEvt = new KeyboardEvent('keydown', {
+        key: 'E',
+        ctrlKey: true,
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      window.dispatchEvent(dialogEvt);
+      expect(dialogEvt.defaultPrevented).toBe(true);
+      expect(exportSpy).toHaveBeenCalledWith('save', null, { showSaveDialog: true });
+      runtime.prefs.quickSaveMode = 'direct';
 
       exportSpy.mockClear();
       const copyEvt = new KeyboardEvent('keydown', {

@@ -5,7 +5,7 @@ import {
   testIdSelector,
 } from '../../excalidraw/domContract';
 import { isMacPlatform, silently } from '../../utils/common';
-import { runDirectDiskSaveWithApi, runDirectFileLoadWithApi } from '../apiActions';
+import { runDirectFileLoadWithApi } from '../apiActions';
 import { runInstantExport, withBusyLock } from './actions';
 import { isEditableFocused } from './dom';
 import {
@@ -253,7 +253,6 @@ function openFilePickerForFastLoad(): void {
 
 export function installFastLoadSaveInterceptor(): () => void {
   const loadSel = testIdSelector(EXCALIDRAW_TESTIDS.loadButton);
-  const saveSel = testIdSelector(EXCALIDRAW_TESTIDS.jsonExport);
 
   const onClick = (e: MouseEvent) => {
     if (!runtime.prefs.quickOpts.fastLoadSave || runtime.isBusy || !runtime.api) return;
@@ -264,18 +263,6 @@ export function installFastLoadSaveInterceptor(): () => void {
       e.stopImmediatePropagation();
       sendEscape();
       openFilePickerForFastLoad();
-    } else if (e.target.closest(saveSel)) {
-      e.preventDefault();
-      e.stopPropagation();
-      e.stopImmediatePropagation();
-      const api = runtime.api;
-      // Invoke File System Access save picker in the synchronous user-gesture tick before dismissing menu
-      void withBusyLock(
-        null,
-        () => runDirectDiskSaveWithApi(api, { lang: runtime.prefs.lang, showToast }),
-        false,
-      );
-      sendEscape();
     }
   };
 
@@ -303,7 +290,9 @@ export function installFastLoadSaveInterceptor(): () => void {
       e.stopPropagation();
       e.stopImmediatePropagation();
       if (!runtime.isBusy) {
-        void runInstantExport('save');
+        void runInstantExport('save', null, {
+          showSaveDialog: runtime.prefs.quickSaveMode === 'dialog',
+        });
       }
       return;
     }

@@ -3,6 +3,7 @@ import type {
   AppLang,
   BoxSelectionPref,
   InputDevicePref,
+  QuickSaveModePref,
   StylesPanelPref,
 } from '../types/annotator';
 import { runtime } from '../annotator/quickAnnotator/runtime';
@@ -17,6 +18,7 @@ export interface PreferencesLiveState {
   boxSelectionMode: BoxSelectionPref;
   inputDevice: InputDevicePref;
   stylesPanelMode: StylesPanelPref;
+  quickSaveMode: QuickSaveModePref;
   zenModeEnabled: boolean;
   viewModeEnabled: boolean;
 }
@@ -25,10 +27,12 @@ export function PreferencesVisualPanel({
   lang,
   prefState,
   onStylesPanelModeChange,
+  onQuickSaveModeChange,
 }: {
   lang: AppLang;
   prefState: PreferencesLiveState;
   onStylesPanelModeChange: (mode: StylesPanelPref) => void;
+  onQuickSaveModeChange: (mode: QuickSaveModePref) => void;
 }) {
   const t = getMessages(lang);
   const isMac = isMacPlatform();
@@ -202,6 +206,39 @@ export function PreferencesVisualPanel({
             <Icon name="view" size={14} strokeWidth={2} />
             <span>{t.prefViewMode}</span>
             <span className="exq-pref-shortcut">{isMac ? '⌥R' : 'Alt+R'}</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="exq-pref-group">
+        <div className="exq-pref-group-title">{t.prefQuickSaveTitle}</div>
+        <div
+          className="exq-pref-card-grid"
+          role="radiogroup"
+          aria-label={t.prefQuickSaveTitle}
+          onKeyDown={handleRadioGroupKeyDown}
+        >
+          <button
+            type="button"
+            role="radio"
+            aria-checked={prefState.quickSaveMode === 'direct'}
+            className={`exq-pref-card${prefState.quickSaveMode === 'direct' ? ' exq-active' : ''}`}
+            data-exq-pref-quick-save="direct"
+            onClick={() => onQuickSaveModeChange('direct')}
+          >
+            <Icon name="download" size={14} strokeWidth={1.8} />
+            <span>{t.prefQuickSaveDirect}</span>
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={prefState.quickSaveMode === 'dialog'}
+            className={`exq-pref-card${prefState.quickSaveMode === 'dialog' ? ' exq-active' : ''}`}
+            data-exq-pref-quick-save="dialog"
+            onClick={() => onQuickSaveModeChange('dialog')}
+          >
+            <Icon name="folderSave" size={14} strokeWidth={1.8} />
+            <span>{t.prefQuickSaveDialog}</span>
           </button>
         </div>
       </div>
