@@ -35,7 +35,7 @@ SakuttoDraw を保守・改修する際の設計方針と不変条件（Invarian
 ## 2. 依存固定
 
 - `@excalidraw/excalidraw` は `0.18.0-dabd83c` に厳密固定する（`^`/`~` なし）。別バージョンへ移行する際は `src/excalidraw/`（`domContract.ts`, `fontsAdapter.ts`）、`src/styles/excalidraw-overrides.css`、`scripts/sync-excalidraw-assets.mjs` を起点に再検証する。
-- `package.json` の `"overrides": { "nanoid@3.3.3": "^3.3.20" }` はピンポイント指定を維持する（グローバル指定にすると `@excalidraw/mermaid-to-excalidraw` の `nanoid@4` 依存と競合する）。
+- `package.json` の `overrides` はピンポイント指定を維持する（`nanoid@3.3.3` → `^3.3.20`、`nanoid@4.0.2` → `^5.1.16`、`workbox-build.glob` → `^14.0.6`）。グローバル指定にすると各メジャーツリーの互換性を壊す恐れがある。
 
 ## 3. CSP と外部通信ゼロ
 
