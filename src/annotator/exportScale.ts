@@ -371,10 +371,9 @@ export function computeAutoExportScale(
   const areaCap = Math.sqrt(budget.maxOutputPixels / (widthAt1x * heightAt1x));
   const cap = Math.min(dimCap, areaCap);
   const clamped = Math.max(0.25, Math.min(desired, cap));
-  if (desired > cap) {
-    return Math.max(0.25, Math.floor(clamped * 1000) / 1000);
-  }
-  return Math.round(clamped * 1000) / 1000;
+  const rounded = Math.round(clamped * 1000) / 1000;
+  const maxAllowed = Math.max(0.25, Math.floor(cap * 1000) / 1000);
+  return Math.min(rounded, maxAllowed);
 }
 
 export function createAutoExportScaleFn(

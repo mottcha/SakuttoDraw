@@ -420,6 +420,24 @@ describe('export filtering & apiActions', () => {
       expect(mockCanvas.height).toBe(0);
       expect(toastFn).toHaveBeenCalledWith('保存に失敗しました');
 
+      showSaveFilePicker.mockResolvedValueOnce({
+        name: 'null-blob-shot.webp',
+        createWritable: async () => ({ write, close, abort }),
+      });
+      mockCanvas.toBlob.mockImplementationOnce((cb: BlobCallback) => {
+        cb(null);
+      });
+      toastFn.mockClear();
+      const webpNullRes = await runInstantExportWithApi(mockApi, 'save', prefs.exportOpts, {
+        lang: 'ja-JP',
+        showToast: toastFn,
+        showSaveDialog: true,
+      });
+      expect(webpNullRes).toEqual({ ok: false, reason: 'export-failed' });
+      expect(mockCanvas.width).toBe(0);
+      expect(mockCanvas.height).toBe(0);
+      expect(toastFn).toHaveBeenCalledWith('保存に失敗しました');
+
       // AbortError cancels silently with zero toast calls
       const abortErr = Object.assign(new Error('Cancelled'), { name: 'AbortError' });
       showSaveFilePicker.mockRejectedValueOnce(abortErr);

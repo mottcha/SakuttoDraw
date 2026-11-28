@@ -215,12 +215,23 @@ describe('exportScale: synchronous binary dimension parsing & scale-invariant qu
     const stripScale = computeAutoExportScale(400, 25000, { requiredImageScale: 1, minTextFontSize: null });
     expect(stripScale).toBe(0.491);
     expect(Math.floor(25000 * stripScale)).toBeLessThanOrEqual(12288);
+
+    // Even when desired <= cap (e.g. 0.4915 <= 0.49152), Math.round must never push output above maxOutputDimension
+    const nearCapScale = computeAutoExportScale(400, 25000, {
+      requiredImageScale: 0.4915,
+      minTextFontSize: null,
+    });
+    expect(nearCapScale).toBe(0.491);
+    expect(25000 * nearCapScale).toBeLessThanOrEqual(12288);
   });
 
   it('preserves full-page tall screenshot resolution within pixel-area budget while capping normal thumbnails', () => {
     const files = {
       tall: { id: 'tall', mimeType: 'image/png', dataURL: makePngDataUrl(1440, 8000), created: 1 },
+      wide: { id: 'wide', mimeType: 'image/png', dataURL: makePngDataUrl(8000, 1440), created: 1 },
       ultraTall: { id: 'ultraTall', mimeType: 'image/png', dataURL: makePngDataUrl(1440, 14000), created: 1 },
+      nearElongated: { id: 'nearElongated', mimeType: 'image/png', dataURL: makePngDataUrl(2490, 1000), created: 1 },
+      exactElongated: { id: 'exactElongated', mimeType: 'image/png', dataURL: makePngDataUrl(2500, 1000), created: 1 },
       photo: { id: 'photo', mimeType: 'image/png', dataURL: makePngDataUrl(4000, 3000), created: 1 },
     } as unknown as BinaryFiles;
 
@@ -230,11 +241,19 @@ describe('exportScale: synchronous binary dimension parsing & scale-invariant qu
     expect(Math.round(90 * tallScale)).toBe(1440);
     expect(Math.round(500 * tallScale)).toBe(8000);
 
+    // Wide panorama (8000x1440, aspect 5.56 >= 2.5) gets the same 16x allowance
+    const wideScale = createAutoExportScaleFn([imgEl('w1', 'wide', 500, 90)], files)(500, 90);
+    expect(wideScale).toBe(16);
+
     // 1440x14000 (20.16M px > 16.77M px) placed at 1440x14000 -> clamped by maxOutputDimension (12288) & area budget
     const ultraScale = createAutoExportScaleFn([imgEl('t2', 'ultraTall', 1440, 14000)], files)(1440, 14000);
     expect(Math.round(14000 * ultraScale)).toBeLessThanOrEqual(12288);
     expect(1440 * ultraScale * (14000 * ultraScale)).toBeLessThanOrEqual(16_777_216);
     expect(Math.round(1440 * ultraScale)).toBeGreaterThanOrEqual(1200);
+
+    // Boundary around elongatedAspectRatio (2.5): 2.49 caps at 6x, 2.5 allows up to 16x
+    expect(measureExportSceneMetrics([imgEl('e1', 'nearElongated', 124.5, 50)], files).requiredImageScale).toBe(6);
+    expect(measureExportSceneMetrics([imgEl('e2', 'exactElongated', 125, 50)], files).requiredImageScale).toBe(16);
 
     // Normal 4000x3000 photo intentionally shrunk to 200x150 thumbnail (aspect 1.33 < 2.5) stays capped at 6x
     const thumbMetrics = measureExportSceneMetrics([imgEl('p1', 'photo', 200, 150)], files);
