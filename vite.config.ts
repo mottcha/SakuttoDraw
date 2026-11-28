@@ -18,14 +18,14 @@ const CJK_RUNTIME_DIR_PATTERN = CJK_RUNTIME_FONT_DIRS.join('|');
 const CJK_FONT_CACHE_NAME = 'sakuttodraw-cjk-fonts';
 const CJK_FONT_URL_RE = new RegExp(`/fonts/(${CJK_RUNTIME_DIR_PATTERN})/.*\\.woff2$`, 'i');
 
-function stripExcalidrawCdn(code: string): string {
+function stripExcalidrawCdn(code: string): string | null {
   const cleaned = code
     .replace(/`https:\/\/esm\.sh\/[\s\S]*?\/dist\/prod\/`/g, LOCAL_ASSET_BASE_EXPR)
     .replace(/`https:\/\/esm\.sh\/[\s\S]*?\/dist\/dev\/`/g, LOCAL_ASSET_BASE_EXPR);
   if (/esm\.sh\//i.test(cleaned)) {
     throw new Error('[sakuttodraw] Failed to strip all esm.sh CDN references from @excalidraw/excalidraw bundle');
   }
-  return cleaned;
+  return cleaned === code ? null : cleaned;
 }
 
 // Keep only the supported non-English UI locale bundles (en is built-in) in SW precache
@@ -114,9 +114,10 @@ export default defineConfig({
           setup(build) {
             build.onLoad({ filter: /@excalidraw[\\/]excalidraw[\\/]dist[\\/].*\.js$/ }, async (args) => {
               const contents = await fs.promises.readFile(args.path, 'utf8');
-              if (!contents.includes('https://esm.sh/')) return null;
+              const stripped = stripExcalidrawCdn(contents);
+              if (stripped === null) return null;
               return {
-                contents: stripExcalidrawCdn(contents),
+                contents: stripped,
                 loader: 'js',
               };
             });
@@ -129,11 +130,14 @@ export default defineConfig({
     {
       name: 'sakuttodraw-local-fonts-only',
       transform(code, id) {
-        if (id.includes('@excalidraw/excalidraw') && code.includes('https://esm.sh/')) {
-          return {
-            code: stripExcalidrawCdn(code),
-            map: null,
-          };
+        if (id.includes('@excalidraw/excalidraw')) {
+          const stripped = stripExcalidrawCdn(code);
+          if (stripped !== null) {
+            return {
+              code: stripped,
+              map: null,
+            };
+          }
         }
         return null;
       },

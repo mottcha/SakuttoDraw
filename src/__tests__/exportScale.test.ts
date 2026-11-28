@@ -129,6 +129,7 @@ describe('exportScale: synchronous binary dimension parsing & scale-invariant qu
 
     expect(readImageDimensionsFromDataUrl('data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=')).toBeNull();
     expect(readImageDimensionsFromDataUrl('data:image/png;base64,not-valid-base64!!!')).toBeNull();
+    expect(readImageDimensionsFromDataUrl(`data:image/png;${';'.repeat(5000)}`)).toBeNull();
     expect(readImageDimensionsFromDataUrl('')).toBeNull();
   });
 

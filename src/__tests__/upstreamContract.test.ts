@@ -107,7 +107,7 @@ describe('upstream contracts & architecture invariants', () => {
     expect(/http-equiv=["']Content-Security-Policy["']/i.test(html)).toBe(true);
     expect(/<meta\b[^>]*name=["']color-scheme["'][^>]*content=["']light\s+dark["']/i.test(html)).toBe(true);
     expect(/unsafe-eval|wasm-unsafe-eval/i.test(html)).toBe(false);
-    for (const m of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)) {
+    for (const m of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\b[^>]*>/gi)) {
       const attrs = m[1] ?? '';
       const body = (m[2] ?? '').trim();
       expect(/\bsrc\s*=/.test(attrs) || body.length === 0, 'Inline <script> is forbidden').toBe(true);
