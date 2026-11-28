@@ -27,7 +27,7 @@ export interface ExportSceneMetrics {
   minTextFontSize: number | null;
 }
 
-const DATA_URL_BASE64_RE = /^data:image\/([^;,]+)(?:;[^,]*)*;base64,(.*)$/i;
+const DATA_URL_BASE64_RE = /^data:image\/([^;,]+)(?:;[^;,]*)*;base64,(.*)$/i;
 const MAX_IMAGE_DIM_CACHE_ENTRIES = 256;
 const JPEG_MAX_HEADER_B64_CHARS = 87_380; // ~64 KiB, multiple of 4
 

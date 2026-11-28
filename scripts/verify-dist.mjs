@@ -40,7 +40,7 @@ if (!/http-equiv=["']Content-Security-Policy["']/i.test(indexHtml)) {
 if (/unsafe-eval|wasm-unsafe-eval/i.test(indexHtml)) {
   fail('dist/index.html CSP must not contain unsafe-eval or wasm-unsafe-eval');
 }
-for (const match of indexHtml.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)) {
+for (const match of indexHtml.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\b[^>]*>/gi)) {
   const attrs = match[1] ?? '';
   const body = (match[2] ?? '').trim();
   if (!/\bsrc\s*=/.test(attrs) && body.length > 0) {
