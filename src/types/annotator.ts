@@ -2,6 +2,7 @@ export type AppLang = 'en' | 'ja-JP' | 'ko-KR' | 'zh-CN' | 'zh-TW';
 export type ThemeMode = 'light' | 'dark' | 'system';
 
 export type ExportFormat = 'png' | 'svg';
+export type ExportImageFormat = ExportFormat | 'webp';
 export type ExportPreset = 'screenshot' | 'whiteboard' | 'custom';
 
 export interface ExportOpts {

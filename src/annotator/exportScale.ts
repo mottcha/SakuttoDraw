@@ -10,8 +10,10 @@ export const AUTO_EXPORT_SCALE_BUDGET = {
   minImageLongEdgePx: 1200,
   maxSmallImageUpscale: 2,
   maxImageScale: 6,
+  elongatedAspectRatio: 2.5,
+  maxElongatedImageScale: 16,
   dominantImageAreaRatio: 0.15,
-  maxOutputDimension: 4096,
+  maxOutputDimension: 12288,
   maxOutputPixels: 16_777_216,
 } as const;
 
@@ -286,8 +288,14 @@ export function measureExportSceneMetrics(
       if (!(el.width > 0 && el.height > 0)) continue;
       const srcDims = resolveImageSourceDimensions(el, files);
       if (!srcDims) continue;
-      const ratio = Math.max(srcDims.width / el.width, srcDims.height / el.height);
-      if (!Number.isFinite(ratio) || ratio <= 0) continue;
+      const rawRatio = Math.max(srcDims.width / el.width, srcDims.height / el.height);
+      if (!Number.isFinite(rawRatio) || rawRatio <= 0) continue;
+      const aspect = Math.max(srcDims.width / srcDims.height, srcDims.height / srcDims.width);
+      const scaleCap =
+        aspect >= budget.elongatedAspectRatio
+          ? budget.maxElongatedImageScale
+          : budget.maxImageScale;
+      const ratio = Math.min(scaleCap, rawRatio);
       const area = el.width * el.height;
       imageEntries.push({ ratio, area });
       if (area > maxImageArea) {
@@ -310,7 +318,7 @@ export function measureExportSceneMetrics(
         maxRatio = entry.ratio;
       }
     }
-    requiredImageScale = Math.min(budget.maxImageScale, maxRatio);
+    requiredImageScale = maxRatio;
   }
 
   return {
@@ -361,7 +369,11 @@ export function computeAutoExportScale(
 
   const dimCap = budget.maxOutputDimension / longEdge;
   const areaCap = Math.sqrt(budget.maxOutputPixels / (widthAt1x * heightAt1x));
-  const clamped = Math.max(0.25, Math.min(desired, dimCap, areaCap));
+  const cap = Math.min(dimCap, areaCap);
+  const clamped = Math.max(0.25, Math.min(desired, cap));
+  if (desired > cap) {
+    return Math.max(0.25, Math.floor(clamped * 1000) / 1000);
+  }
   return Math.round(clamped * 1000) / 1000;
 }
 

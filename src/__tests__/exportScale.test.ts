@@ -205,10 +205,39 @@ describe('exportScale: synchronous binary dimension parsing & scale-invariant qu
     expect(computeAutoExportScale(1000, 700, { requiredImageScale: 0, minTextFontSize: 20 })).toBe(2);
     expect(computeAutoExportScale(300, 180, { requiredImageScale: 0, minTextFontSize: 20 })).toBe(3);
 
-    // Huge 4000x3000 canvas: dimCap = 4096/4000 = 1.024, areaCap = sqrt(16777216/12000000) ~ 1.182
+    // Huge 4000x3000 canvas: areaCap = sqrt(16777216/12000000) ~ 1.182, dimCap = 12288/4000 = 3.072
     const clamped = computeAutoExportScale(4000, 3000, { requiredImageScale: 0, minTextFontSize: null });
-    expect(clamped).toBe(1.024);
-    expect(4000 * clamped).toBeLessThanOrEqual(4096);
+    expect(clamped).toBe(1.182);
+    expect(4000 * clamped).toBeLessThanOrEqual(12288);
     expect(4000 * clamped * (3000 * clamped)).toBeLessThanOrEqual(16_777_216);
+
+    // Extreme narrow strip (400x25000 = 10M px <= 16.77M px) is still safely capped by maxOutputDimension (12288)
+    const stripScale = computeAutoExportScale(400, 25000, { requiredImageScale: 1, minTextFontSize: null });
+    expect(stripScale).toBe(0.491);
+    expect(Math.floor(25000 * stripScale)).toBeLessThanOrEqual(12288);
+  });
+
+  it('preserves full-page tall screenshot resolution within pixel-area budget while capping normal thumbnails', () => {
+    const files = {
+      tall: { id: 'tall', mimeType: 'image/png', dataURL: makePngDataUrl(1440, 8000), created: 1 },
+      ultraTall: { id: 'ultraTall', mimeType: 'image/png', dataURL: makePngDataUrl(1440, 14000), created: 1 },
+      photo: { id: 'photo', mimeType: 'image/png', dataURL: makePngDataUrl(4000, 3000), created: 1 },
+    } as unknown as BinaryFiles;
+
+    // 1440x8000 (11.52M px <= 16.77M px) placed at 90x500 by Excalidraw (16x ratio, aspect 5.56 >= 2.5) -> full 1440x8000
+    const tallScale = createAutoExportScaleFn([imgEl('t1', 'tall', 90, 500)], files)(90, 500);
+    expect(tallScale).toBe(16);
+    expect(Math.round(90 * tallScale)).toBe(1440);
+    expect(Math.round(500 * tallScale)).toBe(8000);
+
+    // 1440x14000 (20.16M px > 16.77M px) placed at 1440x14000 -> clamped by maxOutputDimension (12288) & area budget
+    const ultraScale = createAutoExportScaleFn([imgEl('t2', 'ultraTall', 1440, 14000)], files)(1440, 14000);
+    expect(Math.round(14000 * ultraScale)).toBeLessThanOrEqual(12288);
+    expect(1440 * ultraScale * (14000 * ultraScale)).toBeLessThanOrEqual(16_777_216);
+    expect(Math.round(1440 * ultraScale)).toBeGreaterThanOrEqual(1200);
+
+    // Normal 4000x3000 photo intentionally shrunk to 200x150 thumbnail (aspect 1.33 < 2.5) stays capped at 6x
+    const thumbMetrics = measureExportSceneMetrics([imgEl('p1', 'photo', 200, 150)], files);
+    expect(thumbMetrics.requiredImageScale).toBe(6);
   });
 });

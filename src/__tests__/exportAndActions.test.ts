@@ -11,6 +11,7 @@ import {
   runDirectFileLoadWithApi,
   runInstantExportWithApi,
   runInstantResetWithApi,
+  sanitizeFileBaseName,
 } from '../annotator/apiActions';
 import { filterTargetElementsForExport } from '../annotator/elementOps';
 import { DEFAULT_PEN_COLOR, loadPrefs, prefsToAppStatePatch } from '../services/storageBridge';
@@ -292,11 +293,23 @@ describe('export filtering & apiActions', () => {
       addFiles: vi.fn(),
     } as unknown as ExcalidrawImperativeAPI;
 
+    const mockCanvas = {
+      width: 640,
+      height: 480,
+      toBlob: vi.fn((cb: BlobCallback, mimeType?: string) => {
+        cb(new Blob(['webp-bytes'], { type: mimeType || 'image/webp' }));
+      }),
+    };
     const sceneSpy = vi
       .spyOn(excalidraw, 'exportScene')
       .mockImplementation(async ({ type }) => {
         if (type === 'svg') {
           return document.createElementNS('http://www.w3.org/2000/svg', 'svg') as unknown as SVGSVGElement;
+        }
+        if (type === 'canvas') {
+          mockCanvas.width = 640;
+          mockCanvas.height = 480;
+          return mockCanvas as unknown as HTMLCanvasElement;
         }
         return new Blob(['png'], { type: 'image/png' });
       });
@@ -349,6 +362,7 @@ describe('export filtering & apiActions', () => {
           types: [
             { description: 'PNG', accept: { 'image/png': ['.png'] } },
             { description: 'SVG', accept: { 'image/svg+xml': ['.svg'] } },
+            { description: 'WebP', accept: { 'image/webp': ['.webp'] } },
           ],
         }),
       );
@@ -361,6 +375,50 @@ describe('export filtering & apiActions', () => {
       expect(write).toHaveBeenCalledTimes(1);
       expect(close).toHaveBeenCalledTimes(1);
       expect(toastFn).toHaveBeenCalledWith('キャンバス全体を保存しました');
+
+      // Selecting .webp in OS picker encodes via canvas.toBlob('image/webp', 0.92) and releases canvas backing store
+      expect(sanitizeFileBaseName('capture.webp')).toBe('capture');
+      showSaveFilePicker.mockResolvedValueOnce({
+        name: 'picked-shot.webp',
+        createWritable: async () => ({ write, close, abort }),
+      });
+      sceneSpy.mockClear();
+      mockCanvas.toBlob.mockClear();
+      write.mockClear();
+      const webpRes = await runInstantExportWithApi(mockApi, 'save', prefs.exportOpts, {
+        lang: 'ja-JP',
+        showToast: toastFn,
+        showSaveDialog: true,
+      });
+      expect(webpRes).toMatchObject({ ok: true, mode: 'save', format: 'webp' });
+      expect(sceneSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'canvas',
+        }),
+      );
+      expect(mockCanvas.toBlob).toHaveBeenCalledWith(expect.any(Function), 'image/webp', 0.92);
+      expect(mockCanvas.width).toBe(0);
+      expect(mockCanvas.height).toBe(0);
+      expect(write).toHaveBeenCalledWith(expect.any(Blob));
+
+      // Silent PNG fallback or null blob from canvas.toBlob rejects WebP export cleanly
+      showSaveFilePicker.mockResolvedValueOnce({
+        name: 'unsupported-shot.webp',
+        createWritable: async () => ({ write, close, abort }),
+      });
+      mockCanvas.toBlob.mockImplementationOnce((cb: BlobCallback) => {
+        cb(new Blob(['png-fallback'], { type: 'image/png' }));
+      });
+      toastFn.mockClear();
+      const webpFailRes = await runInstantExportWithApi(mockApi, 'save', prefs.exportOpts, {
+        lang: 'ja-JP',
+        showToast: toastFn,
+        showSaveDialog: true,
+      });
+      expect(webpFailRes).toEqual({ ok: false, reason: 'export-failed' });
+      expect(mockCanvas.width).toBe(0);
+      expect(mockCanvas.height).toBe(0);
+      expect(toastFn).toHaveBeenCalledWith('保存に失敗しました');
 
       // AbortError cancels silently with zero toast calls
       const abortErr = Object.assign(new Error('Cancelled'), { name: 'AbortError' });

@@ -70,8 +70,8 @@ const EXCALIDRAW_UI_OPTIONS = {
   getFormFactor: sakuttoGetFormFactor,
 };
 const EXCALIDRAW_IMAGE_OPTIONS = {
-  maxWidthOrHeight: 2880,
-  maxFileSizeBytes: 10 * 1024 * 1024,
+  maxWidthOrHeight: 12288,
+  maxFileSizeBytes: 15 * 1024 * 1024,
 } as const;
 
 export function App() {

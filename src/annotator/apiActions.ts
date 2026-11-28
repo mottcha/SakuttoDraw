@@ -8,7 +8,7 @@ import {
 } from '@excalidraw/excalidraw';
 import type { AppState, BinaryFiles, ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 import type { NonDeletedExcalidrawElement } from '@excalidraw/excalidraw/element/types';
-import type { AppLang, ExportFormat, ExportOpts, Prefs } from '../types/annotator';
+import type { AppLang, ExportFormat, ExportImageFormat, ExportOpts, Prefs } from '../types/annotator';
 import { getMessages } from '../i18n/messages';
 import { clearIndexedDbFiles } from '../services/filesDb';
 import {
@@ -63,7 +63,7 @@ export function formatLocalTimestamp(date: Date = new Date()): string {
 export function sanitizeFileBaseName(raw: string): string {
   return raw
     .trim()
-    .replace(/\.(?:excalidraw|json|png|svg)$/i, '')
+    .replace(/\.(?:excalidraw|json|png|webp|svg)$/i, '')
     .replace(/[\\/:*?"<>|]+/g, '_')
     .trim();
 }
@@ -184,6 +184,8 @@ async function writeBlobToFileHandle(handle: SaveFilePickerHandle, blob: Blob): 
   }
 }
 
+const WEBP_EXPORT_QUALITY = 0.92;
+
 function buildImagePickerTypes(initialFmt: ExportFormat): SaveFilePickerType[] {
   const pngType: SaveFilePickerType = {
     description: 'PNG',
@@ -193,18 +195,42 @@ function buildImagePickerTypes(initialFmt: ExportFormat): SaveFilePickerType[] {
     description: 'SVG',
     accept: { 'image/svg+xml': ['.svg'] },
   };
-  return initialFmt === 'svg' ? [svgType, pngType] : [pngType, svgType];
+  const webpType: SaveFilePickerType = {
+    description: 'WebP',
+    accept: { 'image/webp': ['.webp'] },
+  };
+  return initialFmt === 'svg' ? [svgType, pngType, webpType] : [pngType, svgType, webpType];
 }
 
-function resolvePickedImageFormat(handleName: string | undefined, fallback: ExportFormat): ExportFormat {
+function resolvePickedImageFormat(
+  handleName: string | undefined,
+  fallback: ExportFormat,
+): ExportImageFormat {
   const lower = (handleName ?? '').trim().toLowerCase();
   if (lower.endsWith('.svg')) return 'svg';
+  if (lower.endsWith('.webp')) return 'webp';
   if (lower.endsWith('.png')) return 'png';
   return fallback;
 }
 
+function canvasToWebpBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (blob?.type === 'image/webp') {
+          resolve(blob);
+          return;
+        }
+        reject(new Error('WebP encoding is not supported or returned an unexpected MIME type'));
+      },
+      'image/webp',
+      quality,
+    );
+  });
+}
+
 async function renderExportBlob(
-  targetFmt: ExportFormat,
+  targetFmt: ExportImageFormat,
   {
     sceneData,
     elements,
@@ -244,6 +270,24 @@ async function renderExportBlob(
     await inlinePreSplitFontsIntoSvg(svgNode, elements);
     return new Blob([svgNode.outerHTML], { type: MIME_TYPES.svg });
   }
+  if (targetFmt === 'webp') {
+    const canvas = await exportScene({
+      type: 'canvas',
+      data: sceneData,
+      config: {
+        canvasBackgroundColor,
+        theme,
+        scale: autoScale,
+        padding: exportPadding,
+      },
+    });
+    try {
+      return await canvasToWebpBlob(canvas, WEBP_EXPORT_QUALITY);
+    } finally {
+      canvas.width = 0;
+      canvas.height = 0;
+    }
+  }
   return exportScene({
     type: 'png',
     data: sceneData,
@@ -276,7 +320,7 @@ export async function runInstantExportWithApi(
   ok: boolean;
   reason?: string;
   mode?: 'copy' | 'save';
-  format?: ExportFormat;
+  format?: ExportImageFormat;
   onlySelected?: boolean;
   message?: string;
   opts?: ExportOpts;
@@ -347,7 +391,7 @@ export async function runInstantExportWithApi(
     };
     const suggestedName = resolveExportFilename(api, fmt);
 
-    let targetFmt: ExportFormat = fmt;
+    let targetFmt: ExportImageFormat = fmt;
     let savedToHandle = false;
 
     if (showSaveDialog) {
